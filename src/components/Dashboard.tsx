@@ -121,7 +121,7 @@ export function Dashboard() {
 
   const handleCambiarNombre = (valor: string) => {
     setNombreCliente(valor);
-    setClienteIdAsociado(null); // si edita el texto libremente, ya no es el cliente seleccionado
+    setClienteIdAsociado(null);
     setSugerenciasVisibles(true);
   };
 
@@ -165,8 +165,6 @@ export function Dashboard() {
       return;
     }
 
-    // Si no hay cliente ya seleccionado por autocompletado, buscar coincidencia exacta
-    // antes de crear uno nuevo (evita duplicados como el caso de "Carlos" x2).
     if (!clienteId) {
       const existente = clientesList.find(
         (c) => c.nombre.trim().toLowerCase() === nombreCliente.trim().toLowerCase()
@@ -246,14 +244,11 @@ export function Dashboard() {
   const limpiarNumero = (tel: string) => tel.replace(/\D/g, '');
 
   const handleToggleEstado = async (id: string, estadoActual: string) => {
-    if (estadoActual === 'NO REALIZADO') return; // se reactiva con su propio botón
+    if (estadoActual === 'NO REALIZADO') return; 
     const estados = ['PENDIENTE', 'EN PROCESO', 'COMPLETADO', 'ENTREGADO'];
     const idx = estados.indexOf(estadoActual);
     const siguienteEstado = estados[(idx === -1 ? 0 : idx + 1) % estados.length];
 
-    // Si va a quedar Completado y el cliente tiene WhatsApp, reservamos la ventana
-    // ANTES del await: los navegadores bloquean window.open si se llama después de
-    // esperar una respuesta (ya no lo consideran una acción directa del click).
     const servicioActual = servicios.find((s) => s.id === id);
     const tieneWhatsApp = !!servicioActual?.clientes?.telefono;
     let ventanaWhatsApp: Window | null = null;
@@ -344,7 +339,6 @@ export function Dashboard() {
     await supabase.auth.signOut();
   };
 
-  // Filtrado general por buscador y selector de periodo (en hora local de Chile)
   const serviciosFiltrados = servicios.filter((s) => {
     const textoMatch =
       s.modelo_equipo.toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -375,7 +369,6 @@ export function Dashboard() {
     return diffDays <= 7;
   };
 
-  // Total Caja: SOLO lo entregado (efectivamente cobrado)
   const cajaHoy = servicios
     .filter((s) => getFechaLocal(s.created_at) === hoyStr && s.estado === 'ENTREGADO')
     .reduce((acc, c) => acc + (c.monto || 0), 0);
@@ -386,7 +379,6 @@ export function Dashboard() {
     .filter((s) => getFechaLocal(s.created_at).slice(0, 7) === mesActualStr && s.estado === 'ENTREGADO')
     .reduce((acc, c) => acc + (c.monto || 0), 0);
 
-  // Por Cobrar / En Taller: PENDIENTE, EN PROCESO y COMPLETADO (completado ≠ pagado)
   const enTallerEstados = ['PENDIENTE', 'EN PROCESO', 'COMPLETADO'];
   const porCobrarHoy = servicios
     .filter((s) => getFechaLocal(s.created_at) === hoyStr && enTallerEstados.includes(s.estado))
@@ -430,11 +422,11 @@ export function Dashboard() {
   const getBadgeColor = (estado: string, createdAt?: string) => {
     if (estado === 'PENDIENTE' && createdAt) {
       const horas = (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60);
-      if (horas < 1) return 'bg-yellow-500/10 text-yellow-300 border-yellow-500/20'; // recién entró
-      if (horas < 2) return 'bg-yellow-500/40 text-yellow-100 border-yellow-500/60'; // 1-2h, normal
-      if (horas < 6) return 'bg-orange-500/60 text-orange-50 border-orange-500/70'; // 2-6h, se está atrasando
-      if (horas < 24) return 'bg-orange-600 text-white border-orange-400 shadow-[0_0_8px_rgba(234,88,12,0.5)]'; // 6-24h, atrasado
-      return 'bg-red-600 text-white border-red-400 shadow-[0_0_10px_rgba(220,38,38,0.6)]'; // +24h, urgente
+      if (horas < 1) return 'bg-yellow-500/10 text-yellow-300 border-yellow-500/20';
+      if (horas < 2) return 'bg-yellow-500/40 text-yellow-100 border-yellow-500/60';
+      if (horas < 6) return 'bg-orange-500/60 text-orange-50 border-orange-500/70';
+      if (horas < 24) return 'bg-orange-600 text-white border-orange-400 shadow-[0_0_8px_rgba(234,88,12,0.5)]';
+      return 'bg-red-600 text-white border-red-400 shadow-[0_0_10px_rgba(220,38,38,0.6)]';
     }
     switch (estado) {
       case 'PENDIENTE': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30';
@@ -449,32 +441,32 @@ export function Dashboard() {
   const fmt = (valor: number) => (mostrarMontos ? `$${valor.toFixed(2)}` : '••••••');
 
   return (
-    <div className="min-h-screen bg-[#070B19] text-slate-100 p-6 relative overflow-hidden">
+    // Se añadió p-4 en móvil y padding-bottom especial para el Safe Area del iPhone
+    <div className="min-h-screen bg-[#070B19] text-slate-100 p-4 md:p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] relative overflow-hidden">
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
       <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none"></div>
 
       <div className="max-w-7xl mx-auto relative z-10">
         {/* Cabecera */}
-        <div className="flex justify-between items-center mb-8 border-b border-cyan-900/40 pb-5">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 border-b border-cyan-900/40 pb-5">
           <div>
-            <h1 className="text-3xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-indigo-400 drop-shadow-[0_0_15px_rgba(6,182,212,0.3)]">
+            <h1 className="text-2xl md:text-3xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-indigo-400 drop-shadow-[0_0_15px_rgba(6,182,212,0.3)]">
               MEGA UNLOCK MANAGER
             </h1>
             <p className="text-xs uppercase tracking-widest text-cyan-400/70 font-semibold mt-1">
               // Neural Software & Hardware Terminal
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
             <button
               onClick={() => setMostrarMontos((v) => !v)}
-              title={mostrarMontos ? 'Ocultar montos' : 'Mostrar montos'}
-              className="bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wider transition-all"
+              className="flex-1 sm:flex-none bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wider transition-all"
             >
               {mostrarMontos ? '🙈 Ocultar' : '👁 Ver montos'}
             </button>
             <button
               onClick={handleLogout}
-              className="bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wider transition-all shadow-[0_0_10px_rgba(244,63,94,0.1)]"
+              className="flex-1 sm:flex-none bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wider transition-all shadow-[0_0_10px_rgba(244,63,94,0.1)]"
             >
               Cerrar Sesión
             </button>
@@ -482,11 +474,11 @@ export function Dashboard() {
         </div>
 
         {/* Tarjetas Financieras Clave */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-gradient-to-br from-slate-900/90 to-emerald-950/40 border border-emerald-500/30 p-6 rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.07)] backdrop-blur-md relative overflow-hidden flex flex-col justify-between">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8">
+          <div className="bg-gradient-to-br from-slate-900/90 to-emerald-950/40 border border-emerald-500/30 p-5 md:p-6 rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.07)] backdrop-blur-md relative overflow-hidden flex flex-col justify-between">
             <div>
               <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-1">Total Caja (Cobrado)</p>
-              <p className="text-[10px] text-slate-400 mb-3">Solo trabajos ENTREGADOS (efectivamente pagados)</p>
+              <p className="text-[10px] text-slate-400 mb-3">Solo trabajos ENTREGADOS (pagados)</p>
             </div>
             <div className="space-y-2 border-t border-emerald-500/20 pt-3">
               <div className="flex justify-between items-center text-xs">
@@ -494,20 +486,20 @@ export function Dashboard() {
                 <span className="font-black text-emerald-300 text-sm">{fmt(cajaHoy)}</span>
               </div>
               <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-400 font-medium">Esta Semana:</span>
+                <span className="text-slate-400 font-medium">Semana:</span>
                 <span className="font-black text-emerald-300 text-sm">{fmt(cajaSemana)}</span>
               </div>
               <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-400 font-medium">Este Mes:</span>
+                <span className="text-slate-400 font-medium">Mes:</span>
                 <span className="font-black text-emerald-300 text-sm">{fmt(cajaMes)}</span>
               </div>
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-slate-900/90 to-amber-950/40 border border-amber-500/30 p-6 rounded-2xl shadow-[0_0_20px_rgba(245,158,11,0.07)] backdrop-blur-md relative overflow-hidden flex flex-col justify-between">
+          <div className="bg-gradient-to-br from-slate-900/90 to-amber-950/40 border border-amber-500/30 p-5 md:p-6 rounded-2xl shadow-[0_0_20px_rgba(245,158,11,0.07)] backdrop-blur-md relative overflow-hidden flex flex-col justify-between">
             <div>
               <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-1">Por Cobrar / En Taller</p>
-              <p className="text-[10px] text-slate-400 mb-3">Pendiente, en proceso o completado (aún no pagado)</p>
+              <p className="text-[10px] text-slate-400 mb-3">Pendiente, en proceso o completado</p>
             </div>
             <div className="space-y-2 border-t border-amber-500/20 pt-3">
               <div className="flex justify-between items-center text-xs">
@@ -515,38 +507,37 @@ export function Dashboard() {
                 <span className="font-black text-amber-300 text-sm">{fmt(porCobrarHoy)}</span>
               </div>
               <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-400 font-medium">Esta Semana:</span>
+                <span className="text-slate-400 font-medium">Semana:</span>
                 <span className="font-black text-amber-300 text-sm">{fmt(porCobrarSemana)}</span>
               </div>
               <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-400 font-medium">Este Mes:</span>
+                <span className="text-slate-400 font-medium">Mes:</span>
                 <span className="font-black text-amber-300 text-sm">{fmt(porCobrarMes)}</span>
               </div>
             </div>
           </div>
 
-          <div className="bg-slate-900/80 border border-cyan-500/20 p-6 rounded-2xl shadow-xl backdrop-blur-md flex flex-col justify-between">
+          <div className="bg-slate-900/80 border border-cyan-500/20 p-5 md:p-6 rounded-2xl shadow-xl backdrop-blur-md flex flex-col justify-between">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Filtrar Rankings / Tabla</p>
             <div className="grid grid-cols-3 gap-2">
-              <button onClick={() => setFiltroFecha('todos')} className={`py-2 text-xs font-bold rounded-xl transition-all ${filtroFecha === 'todos' ? 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.4)]' : 'bg-slate-950/80 text-slate-400 border border-slate-800'}`}>Todos</button>
-              <button onClick={() => setFiltroFecha('hoy')} className={`py-2 text-xs font-bold rounded-xl transition-all ${filtroFecha === 'hoy' ? 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.4)]' : 'bg-slate-950/80 text-slate-400 border border-slate-800'}`}>Hoy</button>
-              <button onClick={() => setFiltroFecha('mes')} className={`py-2 text-xs font-bold rounded-xl transition-all ${filtroFecha === 'mes' ? 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.4)]' : 'bg-slate-950/80 text-slate-400 border border-slate-800'}`}>Este Mes</button>
+              <button onClick={() => setFiltroFecha('todos')} className={`py-2 text-[10px] sm:text-xs font-bold rounded-xl transition-all ${filtroFecha === 'todos' ? 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.4)]' : 'bg-slate-950/80 text-slate-400 border border-slate-800'}`}>Todos</button>
+              <button onClick={() => setFiltroFecha('hoy')} className={`py-2 text-[10px] sm:text-xs font-bold rounded-xl transition-all ${filtroFecha === 'hoy' ? 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.4)]' : 'bg-slate-950/80 text-slate-400 border border-slate-800'}`}>Hoy</button>
+              <button onClick={() => setFiltroFecha('mes')} className={`py-2 text-[10px] sm:text-xs font-bold rounded-xl transition-all ${filtroFecha === 'mes' ? 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.4)]' : 'bg-slate-950/80 text-slate-400 border border-slate-800'}`}>Este Mes</button>
             </div>
-            <p className="text-[10px] text-slate-500 mt-3 text-center">Aplica para los rankings de abajo y el historial</p>
           </div>
         </div>
 
         {/* Rankings */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-8">
           <div className="bg-slate-900/80 border border-cyan-500/20 p-5 rounded-2xl shadow-xl backdrop-blur-md">
-            <h3 className="text-xs font-bold text-cyan-300 uppercase tracking-widest mb-3">💎 Top Clientes (Más Ingresos)</h3>
+            <h3 className="text-xs font-bold text-cyan-300 uppercase tracking-widest mb-3">💎 Top Clientes</h3>
             <div className="space-y-2">
               {rankingClientesPorDinero.length === 0 ? (
                 <p className="text-xs text-slate-500 py-2">No hay datos en este periodo.</p>
               ) : (
                 rankingClientesPorDinero.map((data, idx) => (
                   <div key={data.nombre} className="flex justify-between items-center bg-slate-950/60 border border-slate-800/80 px-4 py-2 rounded-xl text-xs">
-                    <span className="font-semibold text-slate-300">#{idx + 1} {data.nombre} <span className="text-[10px] text-slate-500">({data.visitas} trabajos)</span></span>
+                    <span className="font-semibold text-slate-300">#{idx + 1} {data.nombre} <span className="text-[10px] text-slate-500">({data.visitas} t.)</span></span>
                     <span className="font-black text-cyan-400">{fmt(data.dinero)}</span>
                   </div>
                 ))
@@ -555,7 +546,7 @@ export function Dashboard() {
           </div>
 
           <div className="bg-slate-900/80 border border-blue-500/20 p-5 rounded-2xl shadow-xl backdrop-blur-md">
-            <h3 className="text-xs font-bold text-blue-300 uppercase tracking-widest mb-3">🔧 Qué es lo que más hacemos</h3>
+            <h3 className="text-xs font-bold text-blue-300 uppercase tracking-widest mb-3">🔧 Qué más hacemos</h3>
             <div className="space-y-2">
               {rankingServiciosByVolumen.length === 0 ? (
                 <p className="text-xs text-slate-500 py-2">No hay datos en este periodo.</p>
@@ -563,7 +554,7 @@ export function Dashboard() {
                 rankingServiciosByVolumen.map(([tipo, data], idx) => (
                   <div key={tipo} className="flex justify-between items-center bg-slate-950/60 border border-slate-800/80 px-4 py-2 rounded-xl text-xs">
                     <span className="font-semibold text-slate-300">#{idx + 1} {tipo}</span>
-                    <span className="font-black text-blue-400">{data.trabajos} equipos ({fmt(data.dinero)})</span>
+                    <span className="font-black text-blue-400">{data.trabajos} eq. ({fmt(data.dinero)})</span>
                   </div>
                 ))
               )}
@@ -572,13 +563,13 @@ export function Dashboard() {
         </div>
 
         {/* Contenido Principal */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
           {/* Formulario */}
-          <div className="bg-slate-900/80 border border-cyan-500/20 p-6 rounded-2xl shadow-xl backdrop-blur-md h-fit">
+          <div className="bg-slate-900/80 border border-cyan-500/20 p-5 md:p-6 rounded-2xl shadow-xl backdrop-blur-md h-fit">
             <div className="flex justify-between items-center mb-5">
               <h2 className="text-base font-bold text-cyan-300 uppercase tracking-wider flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]"></span>
-                {editandoId ? 'Modificar Registro' : 'Registrar Nuevo Trabajo'}
+                {editandoId ? 'Modificar Registro' : 'Registrar Trabajo'}
               </h2>
               {editandoId && (
                 <button onClick={limpiarFormulario} className="text-[10px] bg-slate-800 text-slate-300 px-2.5 py-1 rounded-lg uppercase tracking-wider hover:bg-slate-700 transition-colors">Cancelar</button>
@@ -589,8 +580,8 @@ export function Dashboard() {
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tipo de contacto</label>
                 <div className="grid grid-cols-2 gap-2">
-                  <button type="button" onClick={() => setTipoContacto('tecnico')} className={`py-2 text-xs font-bold rounded-xl transition-all ${tipoContacto === 'tecnico' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-950/80 text-slate-400 border border-slate-800'}`}>Técnico</button>
-                  <button type="button" onClick={() => setTipoContacto('cliente')} className={`py-2 text-xs font-bold rounded-xl transition-all ${tipoContacto === 'cliente' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-950/80 text-slate-400 border border-slate-800'}`}>Cliente normal</button>
+                  <button type="button" onClick={() => setTipoContacto('tecnico')} className={`py-2.5 text-xs font-bold rounded-xl transition-all ${tipoContacto === 'tecnico' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-950/80 text-slate-400 border border-slate-800'}`}>Técnico</button>
+                  <button type="button" onClick={() => setTipoContacto('cliente')} className={`py-2.5 text-xs font-bold rounded-xl transition-all ${tipoContacto === 'cliente' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-950/80 text-slate-400 border border-slate-800'}`}>Cliente normal</button>
                 </div>
               </div>
 
@@ -605,7 +596,8 @@ export function Dashboard() {
                   required
                   autoComplete="off"
                   placeholder="Ej. Carlos / Willy"
-                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-400 transition-all"
+                  // iOS Safari zoom fix: text-base en móviles
+                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none focus:border-cyan-400 transition-all"
                 />
                 {sugerenciasVisibles && sugerencias.length > 0 && (
                   <div className="absolute z-20 mt-1 w-full bg-slate-950 border border-cyan-500/30 rounded-xl overflow-hidden shadow-xl">
@@ -614,10 +606,10 @@ export function Dashboard() {
                         type="button"
                         key={c.id}
                         onClick={() => handleSeleccionarCliente(c)}
-                        className="w-full text-left px-4 py-2 text-xs text-slate-200 hover:bg-cyan-500/10 transition-colors flex justify-between"
+                        className="w-full text-left px-4 py-3 text-sm text-slate-200 hover:bg-cyan-500/10 transition-colors flex justify-between items-center"
                       >
                         <span>{c.nombre}</span>
-                        <span className="text-slate-500">{c.tipo_contacto === 'cliente' ? 'Cliente' : 'Técnico'}</span>
+                        <span className="text-xs text-slate-500">{c.tipo_contacto === 'cliente' ? 'Cliente' : 'Técnico'}</span>
                       </button>
                     ))}
                   </div>
@@ -629,19 +621,42 @@ export function Dashboard() {
 
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">WhatsApp (Opcional)</label>
-                <input type="text" value={telefonoCliente} onChange={(e) => setTelefonoCliente(e.target.value)} placeholder="Ej. +56912345678" className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-400 transition-all" />
+                <input 
+                  type="tel" // iOS teclado numérico
+                  value={telefonoCliente} 
+                  onChange={(e) => setTelefonoCliente(e.target.value)} 
+                  placeholder="Ej. +56912345678" 
+                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none focus:border-cyan-400 transition-all" 
+                />
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Modelo del Equipo</label>
-                <input type="text" value={modelo} onChange={(e) => setModelo(e.target.value)} required placeholder="Ej. Xiaomi Redmi Note 12" className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-400 transition-all" />
+                <input 
+                  type="text" 
+                  value={modelo} 
+                  onChange={(e) => setModelo(e.target.value)} 
+                  required 
+                  placeholder="Ej. Xiaomi Redmi Note 12" 
+                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none focus:border-cyan-400 transition-all" 
+                />
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">IMEI o N° de Serie (S/N)</label>
-                <input type="text" value={imeiSerie} onChange={(e) => setImeiSerie(e.target.value)} placeholder="Ej. 864521049382101" className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-400 transition-all font-mono" />
+                <input 
+                  type="text" 
+                  value={imeiSerie} 
+                  onChange={(e) => setImeiSerie(e.target.value)} 
+                  placeholder="Ej. 864521049382101" 
+                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none focus:border-cyan-400 transition-all font-mono" 
+                />
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tipo de Servicio</label>
-                <select value={tipoTrabajo} onChange={(e) => setTipoTrabajo(e.target.value)} className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-400 transition-all">
+                <select 
+                  value={tipoTrabajo} 
+                  onChange={(e) => setTipoTrabajo(e.target.value)} 
+                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none focus:border-cyan-400 transition-all"
+                >
                   <option value="Cuenta Mi">Cuenta Mi</option>
                   <option value="Reparación IMEI">Reparación IMEI</option>
                   <option value="FRP">FRP</option>
@@ -656,37 +671,56 @@ export function Dashboard() {
                     value={tipoTrabajoOtro}
                     onChange={(e) => setTipoTrabajoOtro(e.target.value)}
                     placeholder="Escribe el tipo de servicio"
-                    className="w-full mt-2 bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-400 transition-all"
+                    className="w-full mt-2 bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none focus:border-cyan-400 transition-all"
                   />
                 )}
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Monto ($)</label>
-                <input type="number" step="0.01" min="0" value={monto} onChange={(e) => setMonto(e.target.value)} required placeholder="0.00" className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-400 transition-all" />
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  min="0" 
+                  value={monto} 
+                  onChange={(e) => setMonto(e.target.value)} 
+                  required 
+                  placeholder="0.00" 
+                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none focus:border-cyan-400 transition-all" 
+                />
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Método de Pago</label>
-                <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-400 transition-all">
+                <select 
+                  value={metodoPago} 
+                  onChange={(e) => setMetodoPago(e.target.value)} 
+                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none focus:border-cyan-400 transition-all"
+                >
                   <option value="Efectivo">Efectivo</option>
                   <option value="Transferencia">Transferencia</option>
                   <option value="Tarjeta">Tarjeta</option>
                 </select>
               </div>
-              <button type="submit" className={`w-full py-3 rounded-xl text-xs uppercase tracking-wider font-black transition-all mt-2 ${editandoId ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-[0_0_15px_rgba(251,191,36,0.3)]' : 'bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-slate-950 shadow-[0_0_15px_rgba(34,211,238,0.3)]'}`}>
+              <button type="submit" className={`w-full py-3.5 md:py-3 rounded-xl text-xs md:text-sm uppercase tracking-wider font-black transition-all mt-2 ${editandoId ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-[0_0_15px_rgba(251,191,36,0.3)]' : 'bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-slate-950 shadow-[0_0_15px_rgba(34,211,238,0.3)]'}`}>
                 {editandoId ? 'Actualizar Cambios' : 'Guardar Servicio'}
               </button>
             </form>
           </div>
 
-          {/* Tabla de Registros y Buscador */}
-          <div className="lg:col-span-2 bg-slate-900/80 border border-cyan-500/20 p-6 rounded-2xl shadow-xl backdrop-blur-md">
+          {/* Tabla / Lista de Registros */}
+          <div className="lg:col-span-2 bg-slate-900/80 border border-cyan-500/20 p-5 md:p-6 rounded-2xl shadow-xl backdrop-blur-md">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-5 gap-4">
               <h2 className="text-base font-bold text-cyan-300 uppercase tracking-wider flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6]"></span>
                 Historial de Trabajos
               </h2>
               <div className="w-full md:w-72">
-                <input type="text" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="🔍 Buscar folio, cliente, IMEI, modelo..." className="w-full bg-slate-950/90 border border-cyan-500/30 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 transition-all" />
+                <input 
+                  type="text" 
+                  value={busqueda} 
+                  onChange={(e) => setBusqueda(e.target.value)} 
+                  placeholder="🔍 Buscar folio, cliente, IMEI..." 
+                  className="w-full bg-slate-950/90 border border-cyan-500/30 rounded-xl px-4 py-2.5 text-base md:text-sm text-white focus:outline-none focus:border-cyan-400 transition-all" 
+                />
               </div>
             </div>
 
@@ -695,61 +729,113 @@ export function Dashboard() {
             ) : serviciosFiltrados.length === 0 ? (
               <p className="text-sm text-slate-400 py-8 text-center">No se encontraron registros que coincidan con la búsqueda.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider">
-                      <th className="py-3 px-3">Cliente / Fecha</th>
-                      <th className="py-3 px-3">Equipo / IMEI</th>
-                      <th className="py-3 px-3">Servicio</th>
-                      <th className="py-3 px-3">Estado</th>
-                      <th className="py-3 px-3 text-right">Monto</th>
-                      <th className="py-3 px-3 text-center">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60">
-                    {serviciosFiltrados.map((s) => (
-                      <tr key={s.id} className={`hover:bg-slate-950/40 transition-colors ${editandoId === s.id ? 'bg-cyan-950/20 border border-cyan-500/30' : ''}`}>
-                        <td className="py-3.5 px-3 font-medium">
-                          <span className="text-white">
-                            {s.folio && <span className="text-cyan-400/70 font-mono text-[10px] mr-1.5">{s.folio}</span>}
+              <div className="w-full">
+                
+                {/* VISTA MÓVIL (Tarjetas - Optimizadas para iPhone) */}
+                <div className="grid grid-cols-1 gap-4 md:hidden">
+                  {serviciosFiltrados.map((s) => (
+                    <div key={s.id} className={`p-4 rounded-2xl bg-slate-950/60 border ${editandoId === s.id ? 'border-cyan-500 shadow-[0_0_15px_rgba(34,211,238,0.2)]' : 'border-slate-800'} flex flex-col gap-3 relative`}>
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <div className="font-bold text-white text-base">
+                            {s.folio && <span className="text-cyan-400/70 font-mono text-xs mr-2">{s.folio}</span>}
                             {s.clientes?.nombre || 'General'}
-                          </span>
-                          <span className="block text-[9px] uppercase text-cyan-500/70">{s.clientes?.tipo_contacto === 'cliente' ? 'Cliente' : 'Técnico'}</span>
-                          <span className="block text-[10px] text-slate-400">{getFechaLocal(s.created_at)}</span>
-                        </td>
-                        <td className="py-3.5 px-3">
-                          <span className="text-slate-200 block font-semibold">{s.modelo_equipo}</span>
-                          <span className="text-[10px] text-cyan-400/80 font-mono tracking-tight block">{s.imei_serie ? `IMEI/SN: ${s.imei_serie}` : 'Sin IMEI registrado'}</span>
-                        </td>
-                        <td className="py-3.5 px-3 text-cyan-300 font-medium">
-                          {s.tipo_trabajo}
-                          {s.metodo_pago && <span className="block text-[10px] text-slate-500">{s.metodo_pago}</span>}
-                        </td>
-                        <td className="py-3.5 px-3">
-                          <button onClick={() => handleToggleEstado(s.id, s.estado)} title="Haz clic para cambiar el estado" className={`border px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all shadow-sm hover:opacity-80 ${getBadgeColor(s.estado, s.created_at)}`}>
+                          </div>
+                          <div className="text-[11px] text-slate-400 mt-1">{getFechaLocal(s.created_at)}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-black text-cyan-400 text-lg">{fmt(s.monto)}</div>
+                          <div className="text-[10px] uppercase text-cyan-500/70 mt-1">{s.clientes?.tipo_contacto === 'cliente' ? 'Cliente' : 'Técnico'}</div>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800/50">
+                        <span className="text-slate-200 block font-semibold text-sm">{s.modelo_equipo}</span>
+                        <span className="text-[11px] text-cyan-400/80 font-mono tracking-tight block mb-3">{s.imei_serie ? `IMEI/SN: ${s.imei_serie}` : 'Sin IMEI registrado'}</span>
+                        <div className="text-cyan-300 font-medium text-sm flex items-center justify-between">
+                          <div className="flex flex-col">
+                            <span>{s.tipo_trabajo}</span>
+                            {s.metodo_pago && <span className="text-[10px] text-slate-500">{s.metodo_pago}</span>}
+                          </div>
+                          <button onClick={() => handleToggleEstado(s.id, s.estado)} className={`border px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all shadow-sm ${getBadgeColor(s.estado, s.created_at)}`}>
                             {s.estado} {s.estado !== 'NO REALIZADO' && '🔄'}
                           </button>
-                        </td>
-                        <td className="py-3.5 px-3 text-right font-black text-cyan-400">{fmt(s.monto)}</td>
-                        <td className="py-3.5 px-3 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button onClick={() => handleIniciarEdicion(s)} title="Editar registro" className="text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors">✏️</button>
-                            {s.folio && (
-                              <button onClick={() => handleImprimirFolio(s)} title="Imprimir folio" className="text-slate-300 hover:text-white bg-slate-700/30 hover:bg-slate-700/50 px-2 py-1 rounded-lg text-xs font-semibold transition-colors">🖨️</button>
-                            )}
-                            {s.estado === 'NO REALIZADO' ? (
-                              <button onClick={() => handleReactivar(s.id)} title="Reactivar trabajo" className="text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors">↺</button>
-                            ) : (
-                              <button onClick={() => handleMarcarNoRealizado(s.id)} title="Marcar como no realizado" className="text-orange-400 hover:text-orange-300 bg-orange-500/10 hover:bg-orange-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors">✕</button>
-                            )}
-                            <button onClick={() => handleDeleteServicio(s.id)} title="Eliminar registro" className="text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors">Borrar</button>
-                          </div>
-                        </td>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800/60 mt-1">
+                        <button onClick={() => handleIniciarEdicion(s)} className="flex-1 text-cyan-400 bg-cyan-500/10 py-2.5 rounded-xl text-xs font-semibold">✏️ Editar</button>
+                        {s.folio && (
+                          <button onClick={() => handleImprimirFolio(s)} className="flex-1 text-slate-300 bg-slate-700/30 py-2.5 rounded-xl text-xs font-semibold">🖨️ Ticket</button>
+                        )}
+                        {s.estado === 'NO REALIZADO' ? (
+                          <button onClick={() => handleReactivar(s.id)} className="flex-1 text-amber-400 bg-amber-500/10 py-2.5 rounded-xl text-xs font-semibold">↺ Activar</button>
+                        ) : (
+                          <button onClick={() => handleMarcarNoRealizado(s.id)} className="flex-1 text-orange-400 bg-orange-500/10 py-2.5 rounded-xl text-xs font-semibold">✕ Canc</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* VISTA ESCRITORIO (Tabla Original - Mac/PC) */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider">
+                        <th className="py-3 px-3">Cliente / Fecha</th>
+                        <th className="py-3 px-3">Equipo / IMEI</th>
+                        <th className="py-3 px-3">Servicio</th>
+                        <th className="py-3 px-3">Estado</th>
+                        <th className="py-3 px-3 text-right">Monto</th>
+                        <th className="py-3 px-3 text-center">Acciones</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {serviciosFiltrados.map((s) => (
+                        <tr key={s.id} className={`hover:bg-slate-950/40 transition-colors ${editandoId === s.id ? 'bg-cyan-950/20 border border-cyan-500/30' : ''}`}>
+                          <td className="py-3.5 px-3 font-medium">
+                            <span className="text-white">
+                              {s.folio && <span className="text-cyan-400/70 font-mono text-[10px] mr-1.5">{s.folio}</span>}
+                              {s.clientes?.nombre || 'General'}
+                            </span>
+                            <span className="block text-[9px] uppercase text-cyan-500/70">{s.clientes?.tipo_contacto === 'cliente' ? 'Cliente' : 'Técnico'}</span>
+                            <span className="block text-[10px] text-slate-400">{getFechaLocal(s.created_at)}</span>
+                          </td>
+                          <td className="py-3.5 px-3">
+                            <span className="text-slate-200 block font-semibold">{s.modelo_equipo}</span>
+                            <span className="text-[10px] text-cyan-400/80 font-mono tracking-tight block">{s.imei_serie ? `IMEI/SN: ${s.imei_serie}` : 'Sin IMEI registrado'}</span>
+                          </td>
+                          <td className="py-3.5 px-3 text-cyan-300 font-medium">
+                            {s.tipo_trabajo}
+                            {s.metodo_pago && <span className="block text-[10px] text-slate-500">{s.metodo_pago}</span>}
+                          </td>
+                          <td className="py-3.5 px-3">
+                            <button onClick={() => handleToggleEstado(s.id, s.estado)} title="Haz clic para cambiar el estado" className={`border px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all shadow-sm hover:opacity-80 ${getBadgeColor(s.estado, s.created_at)}`}>
+                              {s.estado} {s.estado !== 'NO REALIZADO' && '🔄'}
+                            </button>
+                          </td>
+                          <td className="py-3.5 px-3 text-right font-black text-cyan-400">{fmt(s.monto)}</td>
+                          <td className="py-3.5 px-3 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button onClick={() => handleIniciarEdicion(s)} title="Editar registro" className="text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors">✏️</button>
+                              {s.folio && (
+                                <button onClick={() => handleImprimirFolio(s)} title="Imprimir folio" className="text-slate-300 hover:text-white bg-slate-700/30 hover:bg-slate-700/50 px-2 py-1 rounded-lg text-xs font-semibold transition-colors">🖨️</button>
+                              )}
+                              {s.estado === 'NO REALIZADO' ? (
+                                <button onClick={() => handleReactivar(s.id)} title="Reactivar trabajo" className="text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors">↺</button>
+                              ) : (
+                                <button onClick={() => handleMarcarNoRealizado(s.id)} title="Marcar como no realizado" className="text-orange-400 hover:text-orange-300 bg-orange-500/10 hover:bg-orange-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors">✕</button>
+                              )}
+                              <button onClick={() => handleDeleteServicio(s.id)} title="Eliminar registro" className="text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors">Borrar</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
               </div>
             )}
           </div>
