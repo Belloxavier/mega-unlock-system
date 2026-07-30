@@ -12,7 +12,9 @@ import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
 
 const ZONA_HORARIA = 'America/Santiago';
 const DEFAULT_RECIPIENTS = ['belloxavier22@gmail.com', 'moratinosandrea@gmail.com'];
-const HORAS_LIMITE = 48;
+// Configurable con el secreto HORAS_LIMITE_ALERTA sin necesidad de redesplegar.
+const horasEnv = Number(Deno.env.get('HORAS_LIMITE_ALERTA'));
+const HORAS_LIMITE = Number.isFinite(horasEnv) && horasEnv >= 0 ? horasEnv : 48;
 
 const fmtFecha = (d: Date) => new Intl.DateTimeFormat('es-CL', { timeZone: ZONA_HORARIA, dateStyle: 'long' }).format(d);
 
