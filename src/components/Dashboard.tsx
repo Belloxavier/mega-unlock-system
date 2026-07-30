@@ -401,6 +401,7 @@ export function Dashboard() {
     }
 
     let clienteId = clienteIdAsociado;
+    let clienteEsNuevo = false;
     if (!clienteId) {
       const existente = clientesList.find(
         (c) => c.nombre.trim().toLowerCase() === nombreCliente.trim().toLowerCase()
@@ -419,7 +420,18 @@ export function Dashboard() {
           return;
         }
         clienteId = clienteData.id;
+        clienteEsNuevo = true;
       }
+    }
+
+    // Si se reutiliza un cliente ya existente (autocompletado o por nombre),
+    // sincroniza teléfono/tipo de contacto por si se agregó o corrigió algo
+    // en este formulario — si no, un teléfono recién escrito se perdía.
+    if (clienteId && !clienteEsNuevo) {
+      await supabase
+        .from('clientes')
+        .update({ nombre: nombreCliente, telefono: telefonoCliente || null, tipo_contacto: tipoContacto })
+        .eq('id', clienteId);
     }
 
     // Genera folios en secuencia dentro del mismo lote (dos equipos del mismo
@@ -1474,7 +1486,7 @@ export function Dashboard() {
                     <input
                       type="tel" // iOS teclado numérico
                       value={telefonoCliente}
-                      onChange={(e) => setTelefonoCliente(e.target.value)}
+                      onChange={(e) => setTelefonoCliente(e.target.value.replace(/\s+/g, ''))}
                       placeholder="Ej. +56912345678"
                       className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
                     />
