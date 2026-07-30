@@ -50,12 +50,14 @@ interface Garantia {
   created_at: string;
   resuelta: boolean;
   resuelta_at?: string | null;
+  nota_resolucion?: string | null;
+  monto_devuelto?: number | null;
   servicios?: {
     id: string;
     modelo_equipo: string;
     tipo_trabajo: string;
     cliente_id?: string;
-    clientes?: { id: string; nombre: string };
+    clientes?: { id: string; nombre: string; telefono?: string };
   } | null;
 }
 
@@ -190,7 +192,7 @@ export function Dashboard() {
   const fetchGarantias = async () => {
     const { data, error } = await supabase
       .from('garantias')
-      .select('id, folio, descripcion, created_at, resuelta, resuelta_at, servicios ( id, modelo_equipo, tipo_trabajo, cliente_id, clientes ( id, nombre ) )')
+      .select('id, folio, descripcion, created_at, resuelta, resuelta_at, nota_resolucion, monto_devuelto, servicios ( id, modelo_equipo, tipo_trabajo, cliente_id, clientes ( id, nombre, telefono ) )')
       .order('created_at', { ascending: false });
     if (!error && data) setGarantiasList(data as unknown as Garantia[]);
   };
@@ -562,15 +564,55 @@ export function Dashboard() {
     if (!error) fetchGarantias();
   };
 
-  const handleToggleResueltaGarantia = async (id: string, resueltaActual: boolean) => {
-    const cambios = resueltaActual
-      ? { resuelta: false, resuelta_at: null }
-      : { resuelta: true, resuelta_at: new Date().toISOString() };
-    const { error } = await supabase.from('garantias').update(cambios).eq('id', id);
-    if (!error) {
-      fetchGarantias();
-    } else {
+  const handleResolverGarantia = async (g: Garantia) => {
+    if (g.resuelta) {
+      // Reabrir: se deja la nota/monto anteriores por si se vuelve a resolver.
+      const { error } = await supabase.from('garantias').update({ resuelta: false, resuelta_at: null }).eq('id', g.id);
+      if (!error) fetchGarantias();
+      else alert(`No se pudo actualizar la garantía: ${error.message}`);
+      return;
+    }
+
+    const nota = window.prompt('¿Qué se hizo para resolverla? (ej. reparado sin costo, se cambió pieza, se devolvió dinero)');
+    if (nota === null) return; // canceló
+
+    let montoDevuelto: number | null = null;
+    if (window.confirm('¿Hubo que devolver dinero al cliente?')) {
+      const montoTexto = window.prompt('¿Cuánto se devolvió? ($)');
+      const parsed = montoTexto ? parseFloat(montoTexto) : NaN;
+      if (!isNaN(parsed) && parsed > 0) montoDevuelto = parsed;
+    }
+
+    const telefono = g.servicios?.clientes?.telefono;
+    let avisarWhatsApp = false;
+    let ventanaWhatsApp: Window | null = null;
+    if (telefono) {
+      avisarWhatsApp = window.confirm('¿Enviar WhatsApp al cliente avisando que su garantía quedó resuelta?');
+      if (avisarWhatsApp) ventanaWhatsApp = window.open('', '_blank');
+    }
+
+    const cambios = {
+      resuelta: true,
+      resuelta_at: new Date().toISOString(),
+      nota_resolucion: nota.trim() || null,
+      monto_devuelto: montoDevuelto,
+    };
+    const { error } = await supabase.from('garantias').update(cambios).eq('id', g.id);
+
+    if (error) {
+      ventanaWhatsApp?.close();
       alert(`No se pudo actualizar la garantía: ${error.message}`);
+      return;
+    }
+
+    fetchGarantias();
+
+    if (avisarWhatsApp && ventanaWhatsApp) {
+      const numero = limpiarNumero(telefono || '');
+      const mensaje = `Hola ${g.servicios?.clientes?.nombre || ''}, tu garantía del folio ${g.folio} quedó resuelta. Cualquier cosa, avísanos.`;
+      ventanaWhatsApp.location.href = `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
+    } else {
+      ventanaWhatsApp?.close();
     }
   };
 
@@ -809,6 +851,11 @@ export function Dashboard() {
     });
     return Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, 5);
   }, [garantiasList, hoyStr]);
+
+  const totalDevueltoGarantias = useMemo(
+    () => garantiasList.reduce((acc, g) => acc + (g.monto_devuelto || 0), 0),
+    [garantiasList]
+  );
 
   const getBadgeColor = (estado: string, createdAt?: string) => {
     if (estado === 'PENDIENTE' && createdAt) {
@@ -1626,9 +1673,15 @@ export function Dashboard() {
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-slate-900/90 to-amber-950/40 border border-amber-500/30 p-5 md:p-6 rounded-2xl shadow-[0_0_20px_rgba(245,158,11,0.07)] backdrop-blur-md flex justify-between items-center">
-              <p className="text-xs font-bold text-amber-400 uppercase tracking-widest">Por Cobrar (Total)</p>
-              <span className="font-black text-amber-300 text-2xl">{fmt(porCobrarTotal)}</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+              <div className="bg-gradient-to-br from-slate-900/90 to-amber-950/40 border border-amber-500/30 p-5 md:p-6 rounded-2xl shadow-[0_0_20px_rgba(245,158,11,0.07)] backdrop-blur-md flex justify-between items-center">
+                <p className="text-xs font-bold text-amber-400 uppercase tracking-widest">Por Cobrar (Total)</p>
+                <span className="font-black text-amber-300 text-2xl">{fmt(porCobrarTotal)}</span>
+              </div>
+              <div className="bg-gradient-to-br from-slate-900/90 to-rose-950/40 border border-rose-500/30 p-5 md:p-6 rounded-2xl shadow-[0_0_20px_rgba(244,63,94,0.07)] backdrop-blur-md flex justify-between items-center">
+                <p className="text-xs font-bold text-rose-400 uppercase tracking-widest">Devuelto por Garantías</p>
+                <span className="font-black text-rose-300 text-2xl">{fmt(totalDevueltoGarantias)}</span>
+              </div>
             </div>
 
             <div className={`bg-slate-900/80 border ${T.borde} p-5 md:p-6 rounded-2xl shadow-xl backdrop-blur-md transition-colors`}>
@@ -1756,7 +1809,7 @@ export function Dashboard() {
                         <div className="text-right flex flex-col items-end gap-1.5">
                           <span className="text-[10px] font-bold uppercase tracking-wider">{g.ordinal}ª este mes</span>
                           <button
-                            onClick={() => handleToggleResueltaGarantia(g.id, g.resuelta)}
+                            onClick={() => handleResolverGarantia(g)}
                             className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-all ${g.resuelta ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800/60 text-slate-300 border-slate-700'}`}
                           >
                             {g.resuelta ? '✓ Resuelta' : 'Pendiente'}
@@ -1765,6 +1818,14 @@ export function Dashboard() {
                         </div>
                       </div>
                       <p className="text-sm text-slate-200 mt-2">{g.descripcion}</p>
+                      {g.resuelta && g.nota_resolucion && (
+                        <div className="mt-2 pt-2 border-t border-white/10 text-xs">
+                          <span className="text-slate-400">✓ {g.nota_resolucion}</span>
+                          {g.monto_devuelto ? (
+                            <span className="block font-bold text-rose-300 mt-0.5">Devuelto: {fmt(g.monto_devuelto)}</span>
+                          ) : null}
+                        </div>
+                      )}
                       <p className="text-[10px] text-slate-500 mt-2">{getFechaLocal(g.created_at)}</p>
                     </div>
                   ))}
