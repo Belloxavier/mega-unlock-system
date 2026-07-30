@@ -18,6 +18,16 @@ const HORAS_LIMITE = Number.isFinite(horasEnv) && horasEnv >= 0 ? horasEnv : 48;
 
 const fmtFecha = (d: Date) => new Intl.DateTimeFormat('es-CL', { timeZone: ZONA_HORARIA, dateStyle: 'long' }).format(d);
 
+// Nombre de cliente, folio, modelo y descripción de garantía son texto
+// libre — se escapan antes de interpolarlos en el HTML del correo.
+const escapeHtml = (valor: unknown) =>
+  String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
 const fmtTranscurrido = (desde: string, ahora: Date) => {
   const horas = (ahora.getTime() - new Date(desde).getTime()) / (1000 * 60 * 60);
   const dias = Math.floor(horas / 24);
@@ -48,13 +58,13 @@ function construirHtml(stats: {
   const { ahora } = stats;
 
   const filaCompletado = (s: ServicioAlerta) =>
-    `<li style="margin-bottom:6px;"><b>${s.clientes?.nombre || 'Cliente desconocido'}</b> lleva ${fmtTranscurrido(s.completado_at || s.created_at, ahora)} con <span style="font-family:monospace;">${s.folio}</span> (${s.modelo_equipo}) listo, sin pagar ni retirar.</li>`;
+    `<li style="margin-bottom:6px;"><b>${escapeHtml(s.clientes?.nombre || 'Cliente desconocido')}</b> lleva ${fmtTranscurrido(s.completado_at || s.created_at, ahora)} con <span style="font-family:monospace;">${escapeHtml(s.folio)}</span> (${escapeHtml(s.modelo_equipo)}) listo, sin pagar ni retirar.</li>`;
 
   const filaPendiente = (s: ServicioAlerta) =>
-    `<li style="margin-bottom:6px;"><b>${s.clientes?.nombre || 'Cliente desconocido'}</b> lleva ${fmtTranscurrido(s.created_at, ahora)} con <span style="font-family:monospace;">${s.folio}</span> (${s.modelo_equipo}) sin ni siquiera empezar.</li>`;
+    `<li style="margin-bottom:6px;"><b>${escapeHtml(s.clientes?.nombre || 'Cliente desconocido')}</b> lleva ${fmtTranscurrido(s.created_at, ahora)} con <span style="font-family:monospace;">${escapeHtml(s.folio)}</span> (${escapeHtml(s.modelo_equipo)}) sin ni siquiera empezar.</li>`;
 
   const filaGarantia = (g: GarantiaAlerta) =>
-    `<li style="margin-bottom:6px;"><b>${g.servicios?.clientes?.nombre || 'Cliente desconocido'}</b> tiene una garantía sin resolver hace ${fmtTranscurrido(g.created_at, ahora)}: <span style="font-family:monospace;">${g.folio}</span> — ${g.descripcion}</li>`;
+    `<li style="margin-bottom:6px;"><b>${escapeHtml(g.servicios?.clientes?.nombre || 'Cliente desconocido')}</b> tiene una garantía sin resolver hace ${fmtTranscurrido(g.created_at, ahora)}: <span style="font-family:monospace;">${escapeHtml(g.folio)}</span> — ${escapeHtml(g.descripcion)}</li>`;
 
   return `
   <div style="font-family:Arial,sans-serif;background:#070B19;color:#e2e8f0;padding:24px;max-width:640px;margin:0 auto;">

@@ -20,6 +20,16 @@ const ENTALLER_ESTADOS = ['PENDIENTE', 'EN PROCESO', 'COMPLETADO'];
 const fmtMoney = (n: number) => `$${n.toFixed(2)}`;
 const fmtFecha = (d: Date) => new Intl.DateTimeFormat('es-CL', { timeZone: ZONA_HORARIA, dateStyle: 'long' }).format(d);
 
+// Nombres de cliente/tipo de trabajo son texto libre — se escapan antes de
+// interpolarlos en el HTML del correo (mismo motivo que en el ticket impreso).
+const escapeHtml = (valor: unknown) =>
+  String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
 interface Servicio {
   id: string;
   modelo_equipo: string;
@@ -43,10 +53,10 @@ function construirHtml(stats: {
   atascados: number;
 }) {
   const filaRanking = (r: { nombre: string; dinero: number; visitas: number }, idx: number) =>
-    `<tr><td style="padding:6px 10px;border-bottom:1px solid #223;">#${idx + 1} ${r.nombre}</td><td style="padding:6px 10px;border-bottom:1px solid #223;text-align:right;">${r.visitas} trab.</td><td style="padding:6px 10px;border-bottom:1px solid #223;text-align:right;font-weight:bold;color:#22d3ee;">${fmtMoney(r.dinero)}</td></tr>`;
+    `<tr><td style="padding:6px 10px;border-bottom:1px solid #223;">#${idx + 1} ${escapeHtml(r.nombre)}</td><td style="padding:6px 10px;border-bottom:1px solid #223;text-align:right;">${r.visitas} trab.</td><td style="padding:6px 10px;border-bottom:1px solid #223;text-align:right;font-weight:bold;color:#22d3ee;">${fmtMoney(r.dinero)}</td></tr>`;
 
   const filaTipo = (t: { tipo: string; trabajos: number; dinero: number }, idx: number) =>
-    `<tr><td style="padding:6px 10px;border-bottom:1px solid #223;">#${idx + 1} ${t.tipo}</td><td style="padding:6px 10px;border-bottom:1px solid #223;text-align:right;">${t.trabajos} eq.</td><td style="padding:6px 10px;border-bottom:1px solid #223;text-align:right;font-weight:bold;color:#818cf8;">${fmtMoney(t.dinero)}</td></tr>`;
+    `<tr><td style="padding:6px 10px;border-bottom:1px solid #223;">#${idx + 1} ${escapeHtml(t.tipo)}</td><td style="padding:6px 10px;border-bottom:1px solid #223;text-align:right;">${t.trabajos} eq.</td><td style="padding:6px 10px;border-bottom:1px solid #223;text-align:right;font-weight:bold;color:#818cf8;">${fmtMoney(t.dinero)}</td></tr>`;
 
   const mejorTecnico = stats.topTecnicos[0];
   const mejorCliente = stats.topClientes[0];
@@ -70,8 +80,8 @@ function construirHtml(stats: {
     ${mejorTecnico || mejorCliente ? `
     <div style="background:#1c1408;border:1px solid #92400e;border-radius:12px;padding:14px;margin-bottom:20px;">
       <p style="font-size:11px;color:#fbbf24;text-transform:uppercase;margin:0 0 8px;">🏆 Incentivos de la semana</p>
-      ${mejorTecnico ? `<p style="margin:2px 0;font-size:13px;">Mejor técnico: <b>${mejorTecnico.nombre}</b> (${fmtMoney(mejorTecnico.dinero)}, ${mejorTecnico.visitas} trabajos)</p>` : ''}
-      ${mejorCliente ? `<p style="margin:2px 0;font-size:13px;">Mejor cliente: <b>${mejorCliente.nombre}</b> (${fmtMoney(mejorCliente.dinero)}, ${mejorCliente.visitas} trabajos)</p>` : ''}
+      ${mejorTecnico ? `<p style="margin:2px 0;font-size:13px;">Mejor técnico: <b>${escapeHtml(mejorTecnico.nombre)}</b> (${fmtMoney(mejorTecnico.dinero)}, ${mejorTecnico.visitas} trabajos)</p>` : ''}
+      ${mejorCliente ? `<p style="margin:2px 0;font-size:13px;">Mejor cliente: <b>${escapeHtml(mejorCliente.nombre)}</b> (${fmtMoney(mejorCliente.dinero)}, ${mejorCliente.visitas} trabajos)</p>` : ''}
     </div>` : ''}
 
     <h3 style="color:#22d3ee;font-size:13px;text-transform:uppercase;">💎 Top Técnicos</h3>

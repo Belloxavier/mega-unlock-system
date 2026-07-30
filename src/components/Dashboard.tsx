@@ -1,190 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase';
+import type { Cliente, Servicio, EquipoForm, Garantia, CuentaBancaria } from '../types';
+import { equipoVacio, cuentaVacia } from '../types';
+import { DIAS_SEMANA, getFechaLocal, getDiaSemana, sumarMeses } from '../lib/date';
+import { TIPOS_ESTANDAR, getPrefijo, generarFolio } from '../lib/folio';
+import { OPERADORAS_IMEI, pareceImei, getImeiWarning } from '../lib/imei';
+import { ESTADOS_PROGRESO, getDotColor, getBadgeColor } from '../lib/estado';
+import { escaparCSV } from '../lib/csv';
+import { escapeHtml } from '../lib/html';
+import { limpiarNumero } from '../lib/phone';
+import { useServicios } from '../hooks/useServicios';
+import { useClientes } from '../hooks/useClientes';
+import { useGarantias } from '../hooks/useGarantias';
+import { useCuentasBancarias } from '../hooks/useCuentasBancarias';
 
-interface Cliente {
-  id: string;
-  nombre: string;
-  telefono?: string;
-  tipo_contacto?: string; // 'tecnico' | 'cliente'
-}
-
-interface Servicio {
-  id: string;
-  modelo_equipo: string;
-  imei_serie?: string;
-  tipo_trabajo: string;
-  folio?: string;
-  monto: number;
-  estado: string;
-  metodo_pago?: string;
-  created_at: string;
-  completado_at?: string | null;
-  entregado_at?: string | null;
-  pagado: boolean;
-  pagado_at?: string | null;
-  imei_estado?: string;
-  clientes?: Cliente;
-}
-
-interface EquipoForm {
-  modelo: string;
-  imeiSerie: string;
-  tipoTrabajo: string;
-  tipoTrabajoOtro: string;
-  monto: string;
-  metodoPago: string;
-}
-
-const equipoVacio = (): EquipoForm => ({
-  modelo: '',
-  imeiSerie: '',
-  tipoTrabajo: 'Cuenta Mi',
-  tipoTrabajoOtro: '',
-  monto: '',
-  metodoPago: 'Efectivo',
-});
-
-interface Garantia {
-  id: string;
-  folio: string;
-  descripcion: string;
-  created_at: string;
-  resuelta: boolean;
-  resuelta_at?: string | null;
-  nota_resolucion?: string | null;
-  monto_devuelto?: number | null;
-  servicios?: {
-    id: string;
-    modelo_equipo: string;
-    tipo_trabajo: string;
-    cliente_id?: string;
-    clientes?: { id: string; nombre: string; telefono?: string };
-  } | null;
-}
-
-interface CuentaBancaria {
-  id: string;
-  banco: string;
-  tipo_cuenta: string;
-  numero_cuenta: string;
-  titular: string;
-  rut?: string;
-  email?: string;
-  orden: number;
-}
-
-const cuentaVacia = () => ({
-  banco: '',
-  tipoCuenta: 'Cuenta Corriente',
-  numeroCuenta: '',
-  titular: '',
-  rut: '',
-  email: '',
-});
-
-const ZONA_HORARIA = 'America/Santiago';
 const PAGE_SIZE = 10;
-const DIAS_SEMANA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-
-// Estados de progreso de un trabajo. Siempre editable libremente (elegir de
-// este menú, sin ciclos automáticos ni orden forzado).
-const ESTADOS_PROGRESO = ['PENDIENTE', 'EN PROCESO', 'PAUSADO', 'COMPLETADO', 'ENTREGADO'];
-
-const getDotColor = (estado: string) => {
-  switch (estado) {
-    case 'PENDIENTE': return 'bg-yellow-400';
-    case 'EN PROCESO': return 'bg-cyan-400';
-    case 'PAUSADO': return 'bg-violet-400';
-    case 'COMPLETADO': return 'bg-blue-400';
-    case 'ENTREGADO': return 'bg-emerald-400';
-    case 'NO REALIZADO': return 'bg-rose-400';
-    default: return 'bg-slate-400';
-  }
-};
-
-// URLs oficiales de cada operadora para consultar el estado de un IMEI
-// (Base de Datos Centralizada de Subtel / Multibanda-SAE). No hay API
-// pública: son formularios pensados para uso manual, uno por uno.
-// Verificadas contra el directorio oficial multibanda.cl (jul. 2026).
-const OPERADORAS_IMEI = [
-  { nombre: 'Movistar', url: 'https://ww2.movistar.cl/terminos-regulaciones/multibanda-sae/', hex: '#019df4' },
-  { nombre: 'Entel', url: 'https://www.entel.cl/nueva-normativa', hex: '#00b2a9' },
-  { nombre: 'WOM', url: 'https://www.wom.cl/sello-multibandas/', hex: '#7b2ff7' },
-  { nombre: 'Claro', url: 'https://www.clarochile.cl/personas/equipos/consulta-imei/', hex: '#e2001a' },
-];
-
-// El campo "IMEI o N° de Serie (S/N)" acepta cualquier texto (a veces hasta
-// un teléfono, por error). Un IMEI real son 14-15 dígitos numéricos, así
-// que solo eso entra a la lista de pendientes de verificar.
-const pareceImei = (valor?: string) => {
-  if (!valor) return false;
-  const digitos = valor.replace(/\D/g, '');
-  return digitos.length === 14 || digitos.length === 15;
-};
-
-const getImeiWarning = (estado?: string) => {
-  switch (estado) {
-    case 'reportado': return { icono: '⚠️', clase: 'text-red-400', texto: 'IMEI reportado' };
-    case 'bloqueado': return { icono: '⚠️', clase: 'text-orange-400', texto: 'IMEI bloqueado' };
-    case 'limpio': return { icono: '✅', clase: 'text-emerald-400', texto: 'IMEI limpio' };
-    default: return null;
-  }
-};
-
-// Devuelve la fecha en formato YYYY-MM-DD según la hora LOCAL de Chile,
-// en vez de usar toISOString() que trabaja en UTC y desfasa el "Hoy".
-const getFechaLocal = (fecha: Date | string) => {
-  const d = typeof fecha === 'string' ? new Date(fecha) : fecha;
-  return new Intl.DateTimeFormat('en-CA', { timeZone: ZONA_HORARIA }).format(d);
-};
-
-// Nombre del día de la semana (Lunes, Martes...) según la hora LOCAL de Chile.
-const getDiaSemana = (fecha: Date | string) => {
-  const d = typeof fecha === 'string' ? new Date(fecha) : fecha;
-  const nombre = new Intl.DateTimeFormat('es-CL', { timeZone: ZONA_HORARIA, weekday: 'long' }).format(d);
-  return nombre.charAt(0).toUpperCase() + nombre.slice(1);
-};
-
-// Desplaza un string "YYYY-MM" por `offset` meses (puede ser negativo).
-const sumarMeses = (mesStr: string, offset: number) => {
-  const [y, m] = mesStr.split('-').map(Number);
-  const d = new Date(y, m - 1 + offset, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-};
-
-const TIPOS_ESTANDAR = ['Cuenta Mi', 'Reparación IMEI', 'FRP', 'Desbloqueo Red', 'iCloud', 'Software General'];
-
-const PREFIJOS_FOLIO: { [tipo: string]: string } = {
-  'FRP': 'F',
-  'Reparación IMEI': 'I',
-  'Cuenta Mi': 'M',
-  'Desbloqueo Red': 'R',
-  'iCloud': 'IC',
-  'Software General': 'S',
-};
-
-const getPrefijo = (tipo: string) => PREFIJOS_FOLIO[tipo] || 'O';
-
-// Genera el siguiente folio (F1, F2, I1...) mirando los folios ya usados
-// para ese mismo prefijo entre los servicios ya cargados.
-const generarFolio = (tipo: string, serviciosActuales: Servicio[]) => {
-  const prefijo = getPrefijo(tipo);
-  const regex = new RegExp(`^${prefijo}(\\d+)$`);
-  let max = 0;
-  serviciosActuales.forEach((s) => {
-    const m = s.folio?.match(regex);
-    if (m) {
-      const n = parseInt(m[1], 10);
-      if (n > max) max = n;
-    }
-  });
-  return `${prefijo}${max + 1}`;
-};
 
 export function Dashboard() {
-  const [servicios, setServicios] = useState<Servicio[]>([]);
-  const [clientesList, setClientesList] = useState<Cliente[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { servicios, loading, fetchServicios } = useServicios();
+  const { clientesList, fetchClientes } = useClientes();
+  const { garantiasList, fetchGarantias } = useGarantias();
+  const { cuentasList, fetchCuentas } = useCuentasBancarias();
 
   // Navegación por pestañas
   const [vista, setVista] = useState<'inicio' | 'clientes' | 'finanzas' | 'garantias' | 'imei' | 'cuentas'>('inicio');
@@ -216,14 +52,12 @@ export function Dashboard() {
   const [escaneandoImei, setEscaneandoImei] = useState<number | null>(null);
 
   // Pestaña Garantías
-  const [garantiasList, setGarantiasList] = useState<Garantia[]>([]);
   const [folioGarantia, setFolioGarantia] = useState('');
   const [servicioIdGarantia, setServicioIdGarantia] = useState<string | null>(null);
   const [descripcionGarantia, setDescripcionGarantia] = useState('');
   const [sugerenciasFolioVisibles, setSugerenciasFolioVisibles] = useState(false);
 
   // Pestaña Cuentas (datos bancarios públicos en /pago)
-  const [cuentasList, setCuentasList] = useState<CuentaBancaria[]>([]);
   const [formCuenta, setFormCuenta] = useState(cuentaVacia());
   const [editandoCuentaId, setEditandoCuentaId] = useState<string | null>(null);
 
@@ -232,46 +66,11 @@ export function Dashboard() {
     fetchClientes();
     fetchGarantias();
     fetchCuentas();
-  }, []);
+  }, [fetchServicios, fetchClientes, fetchGarantias, fetchCuentas]);
 
   useEffect(() => {
     setPaginaActual(1);
   }, [busqueda, filtroFecha, filtroEstado]);
-
-  const fetchServicios = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('servicios')
-      .select(`*, clientes ( id, nombre, telefono, tipo_contacto )`)
-      .order('created_at', { ascending: false });
-
-    if (!error && data) setServicios(data);
-    setLoading(false);
-  };
-
-  const fetchGarantias = async () => {
-    const { data, error } = await supabase
-      .from('garantias')
-      .select('id, folio, descripcion, created_at, resuelta, resuelta_at, nota_resolucion, monto_devuelto, servicios ( id, modelo_equipo, tipo_trabajo, cliente_id, clientes ( id, nombre, telefono ) )')
-      .order('created_at', { ascending: false });
-    if (!error && data) setGarantiasList(data as unknown as Garantia[]);
-  };
-
-  const fetchCuentas = async () => {
-    const { data, error } = await supabase
-      .from('cuentas_bancarias')
-      .select('id, banco, tipo_cuenta, numero_cuenta, titular, rut, email, orden')
-      .order('orden', { ascending: true });
-    if (!error && data) setCuentasList(data);
-  };
-
-  const fetchClientes = async () => {
-    const { data, error } = await supabase
-      .from('clientes')
-      .select('id, nombre, telefono, tipo_contacto')
-      .order('nombre');
-    if (!error && data) setClientesList(data);
-  };
 
   // ---- Autocompletado ----
   const sugerencias = nombreCliente.trim()
@@ -499,8 +298,6 @@ export function Dashboard() {
     setEquipos([equipoVacio()]);
   };
 
-  const limpiarNumero = (tel: string) => tel.replace(/\D/g, '');
-
   const handleRecordarWhatsApp = (s: Servicio) => {
     const telefono = s.clientes?.telefono;
     if (!telefono) return;
@@ -630,7 +427,7 @@ export function Dashboard() {
     ventana.document.write(`
       <html>
         <head>
-          <title>${s.folio}</title>
+          <title>${escapeHtml(s.folio)}</title>
           <style>
             @page { size: 58mm auto; margin: 0; }
             * { box-sizing: border-box; }
@@ -649,12 +446,12 @@ export function Dashboard() {
           </style>
         </head>
         <body>
-          <div class="folio">${s.folio}</div>
+          <div class="folio">${escapeHtml(s.folio)}</div>
           <div class="linea"></div>
-          <div class="dato"><b>Cliente:</b> ${s.clientes?.nombre || ''}</div>
-          <div class="dato"><b>Equipo:</b> ${s.modelo_equipo}</div>
-          <div class="dato"><b>Servicio:</b> ${s.tipo_trabajo}</div>
-          <div class="dato"><b>Fecha:</b> ${fecha}</div>
+          <div class="dato"><b>Cliente:</b> ${escapeHtml(s.clientes?.nombre)}</div>
+          <div class="dato"><b>Equipo:</b> ${escapeHtml(s.modelo_equipo)}</div>
+          <div class="dato"><b>Servicio:</b> ${escapeHtml(s.tipo_trabajo)}</div>
+          <div class="dato"><b>Fecha:</b> ${escapeHtml(fecha)}</div>
           <div class="linea"></div>
           <div class="monto">$${s.monto.toFixed(2)}</div>
           <script>window.print(); window.onafterprint = () => window.close();</script>
@@ -1084,26 +881,6 @@ export function Dashboard() {
     [garantiasList]
   );
 
-  const getBadgeColor = (estado: string, createdAt?: string) => {
-    if (estado === 'PENDIENTE' && createdAt) {
-      const horas = (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60);
-      if (horas < 1) return 'bg-yellow-500/10 text-yellow-300 border-yellow-500/20';
-      if (horas < 2) return 'bg-yellow-500/40 text-yellow-100 border-yellow-500/60';
-      if (horas < 6) return 'bg-orange-500/60 text-orange-50 border-orange-500/70';
-      if (horas < 24) return 'bg-orange-600 text-white border-orange-400 shadow-[0_0_8px_rgba(234,88,12,0.5)]';
-      return 'bg-red-600 text-white border-red-400 shadow-[0_0_10px_rgba(220,38,38,0.6)]';
-    }
-    switch (estado) {
-      case 'PENDIENTE': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30';
-      case 'EN PROCESO': return 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30';
-      case 'PAUSADO': return 'bg-violet-500/10 text-violet-400 border-violet-500/30';
-      case 'COMPLETADO': return 'bg-blue-500/10 text-blue-400 border-blue-500/30';
-      case 'ENTREGADO': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
-      case 'NO REALIZADO': return 'bg-rose-500/10 text-rose-400 border-rose-500/30';
-      default: return 'bg-slate-500/10 text-slate-400 border-slate-500/30';
-    }
-  };
-
   // Menú de estado hecho a mano en vez de un <select> nativo: en iPhone un
   // <select> abre el picker de rueda del sistema, que ignora por completo
   // el diseño de la app. Esto se ve igual (y se controla igual) en iOS y en
@@ -1276,10 +1053,6 @@ export function Dashboard() {
   const botonFiltro = (activo: boolean) =>
     `py-2 text-[10px] sm:text-xs font-bold rounded-xl transition-all ${activo ? T.filtroActivo : 'bg-slate-950/80 text-slate-400 border border-slate-800'}`;
 
-  const escaparCSV = (valor: string | number | undefined | null) => {
-    const texto = String(valor ?? '');
-    return /[",\n]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
-  };
 
   const handleExportarCSV = () => {
     const columnas = ['Folio', 'Cliente', 'Tipo Contacto', 'Equipo', 'IMEI/Serie', 'Servicio', 'Estado', 'Pagado', 'Metodo Pago', 'Monto', 'Fecha'];
@@ -1314,14 +1087,14 @@ export function Dashboard() {
       .map(
         (s) => `
         <tr>
-          <td>${s.folio || ''}</td>
-          <td>${s.clientes?.nombre || 'General'}</td>
-          <td>${s.modelo_equipo}</td>
-          <td>${s.tipo_trabajo}</td>
-          <td>${s.estado}</td>
+          <td>${escapeHtml(s.folio)}</td>
+          <td>${escapeHtml(s.clientes?.nombre || 'General')}</td>
+          <td>${escapeHtml(s.modelo_equipo)}</td>
+          <td>${escapeHtml(s.tipo_trabajo)}</td>
+          <td>${escapeHtml(s.estado)}</td>
           <td>${s.pagado ? 'Pagado' : 'Sin pagar'}</td>
           <td style="text-align:right">$${s.monto.toFixed(2)}</td>
-          <td>${getFechaLocal(s.created_at)}</td>
+          <td>${escapeHtml(getFechaLocal(s.created_at))}</td>
         </tr>`
       )
       .join('');
