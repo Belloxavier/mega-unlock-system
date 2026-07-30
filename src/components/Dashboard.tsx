@@ -48,6 +48,8 @@ interface Garantia {
   folio: string;
   descripcion: string;
   created_at: string;
+  resuelta: boolean;
+  resuelta_at?: string | null;
   servicios?: {
     id: string;
     modelo_equipo: string;
@@ -188,7 +190,7 @@ export function Dashboard() {
   const fetchGarantias = async () => {
     const { data, error } = await supabase
       .from('garantias')
-      .select('id, folio, descripcion, created_at, servicios ( id, modelo_equipo, tipo_trabajo, cliente_id, clientes ( id, nombre ) )')
+      .select('id, folio, descripcion, created_at, resuelta, resuelta_at, servicios ( id, modelo_equipo, tipo_trabajo, cliente_id, clientes ( id, nombre ) )')
       .order('created_at', { ascending: false });
     if (!error && data) setGarantiasList(data as unknown as Garantia[]);
   };
@@ -558,6 +560,18 @@ export function Dashboard() {
     if (!window.confirm('¿Eliminar este registro de garantía?')) return;
     const { error } = await supabase.from('garantias').delete().eq('id', id);
     if (!error) fetchGarantias();
+  };
+
+  const handleToggleResueltaGarantia = async (id: string, resueltaActual: boolean) => {
+    const cambios = resueltaActual
+      ? { resuelta: false, resuelta_at: null }
+      : { resuelta: true, resuelta_at: new Date().toISOString() };
+    const { error } = await supabase.from('garantias').update(cambios).eq('id', id);
+    if (!error) {
+      fetchGarantias();
+    } else {
+      alert(`No se pudo actualizar la garantía: ${error.message}`);
+    }
   };
 
   // Todo lo derivado de `servicios` recorre listas potencialmente largas con
@@ -1739,8 +1753,14 @@ export function Dashboard() {
                             {g.servicios?.clientes?.nombre || 'Cliente desconocido'} · {g.servicios?.modelo_equipo} ({g.servicios?.tipo_trabajo})
                           </div>
                         </div>
-                        <div className="text-right flex flex-col items-end gap-1">
+                        <div className="text-right flex flex-col items-end gap-1.5">
                           <span className="text-[10px] font-bold uppercase tracking-wider">{g.ordinal}ª este mes</span>
+                          <button
+                            onClick={() => handleToggleResueltaGarantia(g.id, g.resuelta)}
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-all ${g.resuelta ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800/60 text-slate-300 border-slate-700'}`}
+                          >
+                            {g.resuelta ? '✓ Resuelta' : 'Pendiente'}
+                          </button>
                           <button onClick={() => handleEliminarGarantia(g.id)} className="text-[10px] text-slate-400 hover:text-rose-400 transition-colors">Eliminar</button>
                         </div>
                       </div>
