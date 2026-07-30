@@ -4,11 +4,14 @@ import type { Cliente, Servicio, EquipoForm, Garantia, CuentaBancaria } from '..
 import { equipoVacio, cuentaVacia } from '../types';
 import { DIAS_SEMANA, getFechaLocal, getDiaSemana, sumarMeses } from '../lib/date';
 import { TIPOS_ESTANDAR, getPrefijo, generarFolio } from '../lib/folio';
-import { OPERADORAS_IMEI, pareceImei, getImeiWarning } from '../lib/imei';
+import { pareceImei, getImeiWarning } from '../lib/imei';
 import { ESTADOS_PROGRESO, getDotColor, getBadgeColor } from '../lib/estado';
 import { escaparCSV } from '../lib/csv';
 import { escapeHtml } from '../lib/html';
 import { limpiarNumero } from '../lib/phone';
+import { getTema } from '../lib/theme';
+import { CuentasTab } from './dashboard/CuentasTab';
+import { ImeiTab } from './dashboard/ImeiTab';
 import { useServicios } from '../hooks/useServicios';
 import { useClientes } from '../hooks/useClientes';
 import { useGarantias } from '../hooks/useGarantias';
@@ -978,77 +981,7 @@ export function Dashboard() {
   // Paleta de marca: "frío" (cian/azul, el look por defecto) vs "cálido"
   // (ámbar/rosa/fucsia sobre negro tibio). Los colores semánticos (verde=caja,
   // ámbar=por cobrar, rosa=peligro, badges de estado) NO cambian con el tema.
-  const T = temaCalido
-    ? {
-        bgPage: 'bg-[#170B08]',
-        blob1: 'bg-orange-500/10',
-        blob2: 'bg-rose-600/10',
-        headerBorder: 'border-amber-900/40',
-        titulo: 'from-amber-400 via-orange-400 to-rose-400',
-        tituloGlow: 'drop-shadow-[0_0_15px_rgba(251,146,60,0.3)]',
-        subtitulo: 'text-amber-400/70',
-        navBg: 'bg-[#1f130a]/95',
-        tabActivo: 'bg-gradient-to-r from-amber-400 to-rose-500 text-slate-950 shadow-[0_0_15px_rgba(251,146,60,0.4)]',
-        borde: 'border-amber-500/20',
-        borde2: 'border-rose-500/20',
-        borde3: 'border-fuchsia-500/20',
-        texto: 'text-amber-300',
-        texto2: 'text-rose-300',
-        texto3: 'text-fuchsia-300',
-        fuerte: 'text-amber-400',
-        fuerte2: 'text-rose-400',
-        fuerte3: 'text-fuchsia-400',
-        dot: 'bg-amber-400 shadow-[0_0_8px_#fbbf24]',
-        dot2: 'bg-rose-500 shadow-[0_0_8px_#f43f5e]',
-        focoInput: 'focus:border-amber-400',
-        toggleActivo: 'bg-amber-500 text-slate-950',
-        filtroActivo: 'bg-amber-500 text-slate-950 shadow-[0_0_10px_rgba(245,158,11,0.4)]',
-        submit: 'bg-gradient-to-r from-amber-400 to-rose-500 hover:from-amber-300 hover:to-rose-400 text-slate-950 shadow-[0_0_15px_rgba(245,158,11,0.3)]',
-        sugerenciaBorde: 'border-amber-500/30',
-        sugerenciaHover: 'hover:bg-amber-500/10',
-        filaMovilResaltada: 'border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)]',
-        filaEscritorioResaltada: 'bg-amber-950/20 border border-amber-500/30',
-        accionEditar: 'text-amber-400 bg-amber-500/10',
-        accionEditarHover: 'hover:text-amber-300 hover:bg-amber-500/20',
-        barraGradiente: 'from-amber-500 to-rose-500',
-        searchBorde: 'border-amber-500/30',
-        financeCard2: 'bg-gradient-to-br from-slate-900/90 to-rose-950/40 border border-rose-500/30 shadow-[0_0_20px_rgba(244,63,94,0.07)]',
-      }
-    : {
-        bgPage: 'bg-[#070B19]',
-        blob1: 'bg-cyan-500/10',
-        blob2: 'bg-blue-600/10',
-        headerBorder: 'border-cyan-900/40',
-        titulo: 'from-cyan-400 via-blue-400 to-indigo-400',
-        tituloGlow: 'drop-shadow-[0_0_15px_rgba(6,182,212,0.3)]',
-        subtitulo: 'text-cyan-400/70',
-        navBg: 'bg-[#0b1024]/95',
-        tabActivo: 'bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-[0_0_15px_rgba(34,211,238,0.3)]',
-        borde: 'border-cyan-500/20',
-        borde2: 'border-blue-500/20',
-        borde3: 'border-indigo-500/20',
-        texto: 'text-cyan-300',
-        texto2: 'text-blue-300',
-        texto3: 'text-indigo-300',
-        fuerte: 'text-cyan-400',
-        fuerte2: 'text-blue-400',
-        fuerte3: 'text-indigo-400',
-        dot: 'bg-cyan-400 shadow-[0_0_8px_#22d3ee]',
-        dot2: 'bg-blue-500 shadow-[0_0_8px_#3b82f6]',
-        focoInput: 'focus:border-cyan-400',
-        toggleActivo: 'bg-cyan-500 text-slate-950',
-        filtroActivo: 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.4)]',
-        submit: 'bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-slate-950 shadow-[0_0_15px_rgba(34,211,238,0.3)]',
-        sugerenciaBorde: 'border-cyan-500/30',
-        sugerenciaHover: 'hover:bg-cyan-500/10',
-        filaMovilResaltada: 'border-cyan-500 shadow-[0_0_15px_rgba(34,211,238,0.2)]',
-        filaEscritorioResaltada: 'bg-cyan-950/20 border border-cyan-500/30',
-        accionEditar: 'text-cyan-400 bg-cyan-500/10',
-        accionEditarHover: 'hover:text-cyan-300 hover:bg-cyan-500/20',
-        barraGradiente: 'from-cyan-500 to-blue-500',
-        searchBorde: 'border-cyan-500/30',
-        financeCard2: 'bg-gradient-to-br from-slate-900/90 to-blue-950/40 border border-blue-500/30 shadow-[0_0_20px_rgba(59,130,246,0.07)]',
-      };
+  const T = getTema(temaCalido);
 
   const botonFiltro = (activo: boolean) =>
     `py-2 text-[10px] sm:text-xs font-bold rounded-xl transition-all ${activo ? T.filtroActivo : 'bg-slate-950/80 text-slate-400 border border-slate-800'}`;
@@ -1934,237 +1867,29 @@ export function Dashboard() {
 
         {/* ===================== PESTAÑA: VERIFICADOR IMEI ===================== */}
         {vista === 'imei' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
-            <div className="space-y-6 lg:col-span-1">
-              <div className={`bg-slate-900/80 border ${T.borde} p-5 md:p-6 rounded-2xl shadow-xl backdrop-blur-md transition-colors`}>
-                <h2 className={`text-base font-bold ${T.texto} uppercase tracking-wider flex items-center gap-2 mb-3`}>
-                  <span className={`w-2 h-2 rounded-full ${T.dot}`}></span>
-                  Verificador IMEI
-                </h2>
-                <p className="text-xs text-slate-400 mb-5 leading-relaxed">
-                  No existe una API pública en Chile para esto — cada operadora tiene su propio formulario manual. Abre el sitio, copia el IMEI de la lista y pégalo allá.
-                </p>
-                <div className="space-y-2.5">
-                  {OPERADORAS_IMEI.map((op) => (
-                    <button
-                      key={op.nombre}
-                      type="button"
-                      onClick={() => handleAbrirVerificadorImei(op.url)}
-                      className="group w-full flex items-center gap-3 bg-slate-950/60 border border-slate-800 hover:border-slate-600 p-3 rounded-xl transition-all active:scale-[0.98] hover:bg-slate-950"
-                    >
-                      <span
-                        className="w-9 h-9 rounded-full flex items-center justify-center font-black text-white text-sm flex-shrink-0"
-                        style={{ backgroundColor: op.hex, boxShadow: `0 0 12px ${op.hex}66` }}
-                      >
-                        {op.nombre[0]}
-                      </span>
-                      <span className="flex-1 text-left">
-                        <span className="block text-sm font-bold text-slate-100">{op.nombre}</span>
-                        <span className="block text-[10px] text-slate-500">Consultar IMEI</span>
-                      </span>
-                      <span className="text-slate-600 group-hover:text-slate-300 transition-colors text-base flex-shrink-0">↗</span>
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[10px] text-slate-500 mt-4 leading-relaxed">
-                  En computador se abren a un lado de la pantalla. En el celular se abren en una pestaña nueva — la barra de direcciones no se puede ni se debe ocultar (por seguridad del navegador).
-                </p>
-              </div>
-            </div>
-
-            <div className={`lg:col-span-2 bg-slate-900/80 border ${T.borde} p-5 md:p-6 rounded-2xl shadow-xl backdrop-blur-md transition-colors`}>
-              <h2 className={`text-base font-bold ${T.texto} uppercase tracking-wider flex items-center gap-2 mb-5`}>
-                <span className={`w-2 h-2 rounded-full ${T.dot2}`}></span>
-                Pendientes de Verificar ({imeisPendientes.length})
-              </h2>
-
-              {imeisPendientes.length === 0 ? (
-                <p className="text-sm text-slate-400 py-8 text-center">No hay IMEI pendientes de verificar. 🎉</p>
-              ) : (
-                <div className="space-y-3">
-                  {imeisPendientes.map((s) => (
-                    <div key={s.id} className="border border-slate-800 bg-slate-950/60 rounded-xl p-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-xs text-slate-400">
-                            {s.folio && <span className={`${T.fuerte} font-mono mr-1.5`}>{s.folio}</span>}
-                            {s.clientes?.nombre || 'General'} · {s.modelo_equipo}
-                          </div>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="font-mono font-black text-white text-base tracking-wide break-all">{s.imei_serie}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleCopiarImei(s.id, s.imei_serie || '')}
-                              className={`flex-shrink-0 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-all ${imeiCopiadoId === s.id ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800/60 text-slate-300 border-slate-700'}`}
-                            >
-                              {imeiCopiadoId === s.id ? '✓ Copiado' : '📋 Copiar'}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-3 gap-1.5 flex-shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => handleMarcarImeiEstado(s.id, 'limpio')}
-                            className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold text-[10px] uppercase tracking-wider py-2 rounded-lg transition-all"
-                          >
-                            Limpio
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleMarcarImeiEstado(s.id, 'reportado')}
-                            className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 font-bold text-[10px] uppercase tracking-wider py-2 rounded-lg transition-all"
-                          >
-                            Reportado
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleMarcarImeiEstado(s.id, 'bloqueado')}
-                            className="bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold text-[10px] uppercase tracking-wider py-2 rounded-lg transition-all"
-                          >
-                            Bloqueado
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          <ImeiTab
+            T={T}
+            imeisPendientes={imeisPendientes}
+            imeiCopiadoId={imeiCopiadoId}
+            handleAbrirVerificadorImei={handleAbrirVerificadorImei}
+            handleCopiarImei={handleCopiarImei}
+            handleMarcarImeiEstado={handleMarcarImeiEstado}
+          />
         )}
 
         {/* ===================== PESTAÑA: CUENTAS BANCARIAS ===================== */}
         {vista === 'cuentas' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
-            <div className={`bg-slate-900/80 border ${T.borde} p-5 md:p-6 rounded-2xl shadow-xl backdrop-blur-md h-fit transition-colors`}>
-              <div className="flex justify-between items-center mb-5">
-                <h2 className={`text-base font-bold ${T.texto} uppercase tracking-wider flex items-center gap-2`}>
-                  <span className={`w-2 h-2 rounded-full ${T.dot}`}></span>
-                  {editandoCuentaId ? 'Editar Cuenta' : 'Agregar Cuenta'}
-                </h2>
-                {editandoCuentaId && (
-                  <button onClick={limpiarFormularioCuenta} className="text-[10px] bg-slate-800 text-slate-300 px-2.5 py-1 rounded-lg uppercase tracking-wider hover:bg-slate-700 transition-colors">Cancelar</button>
-                )}
-              </div>
-              <form onSubmit={handleGuardarCuenta} className="space-y-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Banco</label>
-                  <input
-                    type="text"
-                    value={formCuenta.banco}
-                    onChange={(e) => setFormCuenta((f) => ({ ...f, banco: e.target.value }))}
-                    required
-                    placeholder="Ej. BancoEstado"
-                    className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tipo de Cuenta</label>
-                  <select
-                    value={formCuenta.tipoCuenta}
-                    onChange={(e) => setFormCuenta((f) => ({ ...f, tipoCuenta: e.target.value }))}
-                    className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
-                  >
-                    <option value="Cuenta Corriente">Cuenta Corriente</option>
-                    <option value="Cuenta Vista">Cuenta Vista</option>
-                    <option value="Cuenta RUT">Cuenta RUT</option>
-                    <option value="Cuenta de Ahorro">Cuenta de Ahorro</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">N° de Cuenta</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={formCuenta.numeroCuenta}
-                    onChange={(e) => setFormCuenta((f) => ({ ...f, numeroCuenta: e.target.value }))}
-                    required
-                    placeholder="Ej. 12345678901"
-                    className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all font-mono`}
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Titular</label>
-                  <input
-                    type="text"
-                    value={formCuenta.titular}
-                    onChange={(e) => setFormCuenta((f) => ({ ...f, titular: e.target.value }))}
-                    required
-                    placeholder="Nombre completo"
-                    className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">RUT (opcional)</label>
-                  <input
-                    type="text"
-                    value={formCuenta.rut}
-                    onChange={(e) => setFormCuenta((f) => ({ ...f, rut: e.target.value }))}
-                    placeholder="Ej. 12.345.678-9"
-                    className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Email (opcional)</label>
-                  <input
-                    type="email"
-                    value={formCuenta.email}
-                    onChange={(e) => setFormCuenta((f) => ({ ...f, email: e.target.value }))}
-                    placeholder="Para transferencias por email"
-                    className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
-                  />
-                </div>
-                <button type="submit" className={`w-full py-3.5 md:py-3 rounded-xl text-xs md:text-sm uppercase tracking-wider font-black transition-all ${editandoCuentaId ? 'bg-amber-400 hover:bg-amber-300 text-slate-950' : T.submit}`}>
-                  {editandoCuentaId ? 'Actualizar Cuenta' : 'Agregar Cuenta'}
-                </button>
-              </form>
-            </div>
-
-            <div className={`lg:col-span-2 bg-slate-900/80 border ${T.borde} p-5 md:p-6 rounded-2xl shadow-xl backdrop-blur-md transition-colors`}>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-                <h2 className={`text-base font-bold ${T.texto} uppercase tracking-wider flex items-center gap-2`}>
-                  <span className={`w-2 h-2 rounded-full ${T.dot2}`}></span>
-                  Cuentas Publicadas ({cuentasList.length})
-                </h2>
-                <a
-                  href="/pago"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[10px] font-bold uppercase tracking-wider bg-slate-800/60 border border-slate-700 text-slate-300 hover:text-white px-3 py-2 rounded-lg transition-all text-center"
-                >
-                  🔗 Ver página pública ↗
-                </a>
-              </div>
-              <p className="text-xs text-slate-400 mb-5 leading-relaxed">
-                Esta lista se manda tal cual en el link de WhatsApp cuando marcas un trabajo "Completado" — actualízala aquí cuando cambie algo, no hace falta avisarle a nadie de nuevo.
-              </p>
-
-              {cuentasList.length === 0 ? (
-                <p className="text-sm text-slate-400 py-8 text-center">Todavía no agregas ninguna cuenta.</p>
-              ) : (
-                <div className="space-y-3">
-                  {cuentasList.map((c) => (
-                    <div key={c.id} className={`border border-slate-800 bg-slate-950/60 rounded-xl p-4 ${editandoCuentaId === c.id ? 'border-amber-500/50' : ''}`}>
-                      <div className="flex justify-between items-start gap-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-black text-white text-sm">{c.banco}</span>
-                            <span className={`text-[9px] font-bold uppercase tracking-wider ${T.fuerte} bg-slate-900 border border-slate-700 px-2 py-0.5 rounded-lg`}>{c.tipo_cuenta}</span>
-                          </div>
-                          <div className="font-mono text-sm text-slate-200 mt-1 break-all">{c.numero_cuenta}</div>
-                          <div className="text-xs text-slate-400 mt-0.5">{c.titular}{c.rut ? ` · ${c.rut}` : ''}</div>
-                        </div>
-                        <div className="flex gap-1.5 flex-shrink-0">
-                          <button onClick={() => handleEditarCuenta(c)} className={`${T.accionEditar} ${T.accionEditarHover} px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors`}>✏️</button>
-                          <button onClick={() => handleEliminarCuenta(c.id)} className="text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors">🗑️</button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          <CuentasTab
+            T={T}
+            cuentasList={cuentasList}
+            formCuenta={formCuenta}
+            setFormCuenta={setFormCuenta}
+            editandoCuentaId={editandoCuentaId}
+            limpiarFormularioCuenta={limpiarFormularioCuenta}
+            handleGuardarCuenta={handleGuardarCuenta}
+            handleEditarCuenta={handleEditarCuenta}
+            handleEliminarCuenta={handleEliminarCuenta}
+          />
         )}
       </div>
     </div>
