@@ -372,19 +372,14 @@ export function Dashboard() {
 
   const limpiarNumero = (tel: string) => tel.replace(/\D/g, '');
 
-  // Estados "en curso" y sus siguientes pasos válidos: siempre hacia
-  // adelante en el mismo selector (nunca hay que buscar un botón aparte),
-  // salvo reanudar desde Pausado, que no es un retroceso real. Una vez
-  // ENTREGADO o NO REALIZADO, es terminal — ya no se puede volver a cambiar.
-  const opcionesEstadoDisponibles = (estadoActual: string): string[] => {
-    switch (estadoActual) {
-      case 'PENDIENTE': return ['PENDIENTE', 'EN PROCESO', 'PAUSADO'];
-      case 'EN PROCESO': return ['EN PROCESO', 'PAUSADO', 'COMPLETADO'];
-      case 'PAUSADO': return ['PAUSADO', 'EN PROCESO', 'COMPLETADO'];
-      case 'COMPLETADO': return ['COMPLETADO', 'ENTREGADO'];
-      default: return [estadoActual];
-    }
-  };
+  // El selector siempre muestra los 5 estados de progreso — se puede
+  // editar libremente en cualquier momento (ej. corregir un Completado que
+  // en realidad necesita más trabajo). Lo que se eliminó fue el ciclo
+  // automático al tocar un botón, que era lo que causaba el lag y los
+  // cambios accidentales de estado.
+  const ESTADOS_PROGRESO = ['PENDIENTE', 'EN PROCESO', 'PAUSADO', 'COMPLETADO', 'ENTREGADO'];
+  const opcionesEstadoDisponibles = (estadoActual: string): string[] =>
+    estadoActual === 'NO REALIZADO' ? [estadoActual] : ESTADOS_PROGRESO;
 
   const handleCambiarEstado = async (id: string, estadoActual: string, nuevoEstado: string) => {
     if (nuevoEstado === estadoActual) return;
@@ -1308,7 +1303,7 @@ export function Dashboard() {
                                 {s.metodo_pago && <span className="text-[10px] text-slate-500">{s.metodo_pago}</span>}
                               </div>
                               <div className="flex flex-col items-end gap-1.5">
-                                {!['ENTREGADO', 'NO REALIZADO'].includes(s.estado) ? (
+                                {s.estado !== 'NO REALIZADO' ? (
                                   <select
                                     value={s.estado}
                                     onChange={(e) => handleCambiarEstado(s.id, s.estado, e.target.value)}
@@ -1379,7 +1374,7 @@ export function Dashboard() {
                                 {s.metodo_pago && <span className="block text-[10px] text-slate-500">{s.metodo_pago}</span>}
                               </td>
                               <td className="py-3.5 px-3">
-                                {!['ENTREGADO', 'NO REALIZADO'].includes(s.estado) ? (
+                                {s.estado !== 'NO REALIZADO' ? (
                                   <select
                                     value={s.estado}
                                     onChange={(e) => handleCambiarEstado(s.id, s.estado, e.target.value)}
