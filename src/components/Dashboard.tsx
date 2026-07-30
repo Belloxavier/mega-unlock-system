@@ -22,6 +22,7 @@ interface Servicio {
   entregado_at?: string | null;
   pagado: boolean;
   pagado_at?: string | null;
+  imei_estado?: string;
   clientes?: Cliente;
 }
 
@@ -81,6 +82,26 @@ const getDotColor = (estado: string) => {
   }
 };
 
+// URLs oficiales de cada operadora para consultar el estado de un IMEI
+// (Base de Datos Centralizada de Subtel / Multibanda-SAE). No hay API
+// pública: son formularios pensados para uso manual, uno por uno.
+// Verificadas contra el directorio oficial multibanda.cl (jul. 2026).
+const OPERADORAS_IMEI = [
+  { nombre: 'Movistar', url: 'https://ww2.movistar.cl/terminos-regulaciones/multibanda-sae/', color: 'bg-[#019df4] hover:bg-[#0189d6]' },
+  { nombre: 'Entel', url: 'https://www.entel.cl/nueva-normativa', color: 'bg-[#00a19a] hover:bg-[#008a84]' },
+  { nombre: 'WOM', url: 'https://www.wom.cl/sello-multibandas/', color: 'bg-[#6a1b9a] hover:bg-[#59168a]' },
+  { nombre: 'Claro', url: 'https://www.clarochile.cl/personas/equipos/consulta-imei/', color: 'bg-[#e2001a] hover:bg-[#c50017]' },
+];
+
+const getImeiWarning = (estado?: string) => {
+  switch (estado) {
+    case 'reportado': return { icono: '⚠️', clase: 'text-red-400', texto: 'IMEI reportado' };
+    case 'bloqueado': return { icono: '⚠️', clase: 'text-orange-400', texto: 'IMEI bloqueado' };
+    case 'limpio': return { icono: '✅', clase: 'text-emerald-400', texto: 'IMEI limpio' };
+    default: return null;
+  }
+};
+
 // Devuelve la fecha en formato YYYY-MM-DD según la hora LOCAL de Chile,
 // en vez de usar toISOString() que trabaja en UTC y desfasa el "Hoy".
 const getFechaLocal = (fecha: Date | string) => {
@@ -137,7 +158,7 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   // Navegación por pestañas
-  const [vista, setVista] = useState<'inicio' | 'clientes' | 'finanzas' | 'garantias'>('inicio');
+  const [vista, setVista] = useState<'inicio' | 'clientes' | 'finanzas' | 'garantias' | 'imei'>('inicio');
 
   // Filtros y Buscador (pestaña Inicio)
   const [busqueda, setBusqueda] = useState('');
@@ -147,6 +168,7 @@ export function Dashboard() {
   const [paginaActual, setPaginaActual] = useState(1);
   const [temaCalido, setTemaCalido] = useState(false);
   const [estadoMenuAbierto, setEstadoMenuAbierto] = useState<string | null>(null);
+  const [imeiCopiadoId, setImeiCopiadoId] = useState<string | null>(null);
 
   // Filtros (pestaña Clientes)
   const [filtroFechaClientes, setFiltroFechaClientes] = useState('todos'); // 'todos', 'hoy', 'mes'
@@ -645,6 +667,34 @@ export function Dashboard() {
     }
   };
 
+  // Abre el sitio de la operadora en una ventana aparte, angostada y pegada
+  // al lado derecho, para poder ver la lista de pendientes al mismo tiempo.
+  // En iPhone/Android no hay "ventanas": Safari/Chrome simplemente abren una
+  // pestaña nueva y listo, no hay nada que romper.
+  const handleAbrirVerificadorImei = (url: string) => {
+    const width = 480;
+    const height = 720;
+    const left = Math.max(0, window.screen.width - width - 20);
+    const top = 40;
+    window.open(url, '_blank', `width=${width},height=${height},left=${left},top=${top},noopener,noreferrer`);
+  };
+
+  const handleCopiarImei = async (id: string, imei: string) => {
+    try {
+      await navigator.clipboard.writeText(imei);
+      setImeiCopiadoId(id);
+      setTimeout(() => setImeiCopiadoId((prev) => (prev === id ? null : prev)), 1500);
+    } catch {
+      alert(`No se pudo copiar automáticamente. Cópialo a mano: ${imei}`);
+    }
+  };
+
+  const handleMarcarImeiEstado = async (id: string, estado: 'limpio' | 'reportado' | 'bloqueado') => {
+    const { error } = await supabase.from('servicios').update({ imei_estado: estado }).eq('id', id);
+    if (!error) fetchServicios();
+    else alert(`No se pudo guardar: ${error.message}`);
+  };
+
   // Todo lo derivado de `servicios` recorre listas potencialmente largas con
   // .filter/.reduce; se memoiza para que escribir en el formulario (que no
   // cambia estos datos) no dispare esos cálculos en cada tecla.
@@ -769,6 +819,12 @@ export function Dashboard() {
       return horas > 24;
     });
   }, [servicios]);
+
+  // ---- Pestaña IMEI: trabajos con IMEI/serie cargado y sin verificar aún ----
+  const imeisPendientes = useMemo(
+    () => servicios.filter((s) => s.imei_serie && (s.imei_estado || 'sin_verificar') === 'sin_verificar'),
+    [servicios]
+  );
 
   // ---- Pestaña Clientes: dataset filtrado por periodo + tipo de contacto ----
   const {
@@ -1158,17 +1214,17 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* Navegación de pestañas (sticky para cambiar de vista sin desplazarse hacia arriba) */}
-        <div className={`sticky top-[calc(env(safe-area-inset-top))] z-30 flex gap-2 mb-8 ${T.navBg} backdrop-blur-md border border-slate-800 p-1.5 rounded-2xl w-full sm:w-fit shadow-lg transition-colors`}>
-          {(['inicio', 'clientes', 'finanzas', 'garantias'] as const).map((tab) => (
+        {/* Navegación de pestañas (sticky, con scroll horizontal en iPhone en vez de achicar los botones) */}
+        <div className={`sticky top-[calc(env(safe-area-inset-top))] z-30 flex gap-2 mb-8 ${T.navBg} backdrop-blur-md border border-slate-800 p-1.5 rounded-2xl w-full sm:w-fit shadow-lg transition-colors overflow-x-auto`}>
+          {(['inicio', 'clientes', 'finanzas', 'garantias', 'imei'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setVista(tab)}
-              className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
+              className={`flex-shrink-0 sm:flex-none px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
                 vista === tab ? T.tabActivo : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              {tab === 'inicio' ? '🏠 Inicio' : tab === 'clientes' ? '👥 Clientes' : tab === 'finanzas' ? '💰 Finanzas' : '🛡️ Garantías'}
+              {tab === 'inicio' ? '🏠 Inicio' : tab === 'clientes' ? '👥 Clientes' : tab === 'finanzas' ? '💰 Finanzas' : tab === 'garantias' ? '🛡️ Garantías' : '📡 IMEI'}
             </button>
           ))}
         </div>
@@ -1461,7 +1517,14 @@ export function Dashboard() {
                           <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800/50">
                             <span className="text-slate-200 block font-semibold text-sm mb-1">{s.modelo_equipo}</span>
                             {s.imei_serie && (
-                              <span className={`text-[11px] ${T.fuerte}/80 font-mono tracking-tight block mb-2`}>{s.imei_serie}</span>
+                              <span className={`text-[11px] ${T.fuerte}/80 font-mono tracking-tight block mb-2`}>
+                                {s.imei_serie}
+                                {getImeiWarning(s.imei_estado) && (
+                                  <span title={getImeiWarning(s.imei_estado)!.texto} className={`ml-1.5 ${getImeiWarning(s.imei_estado)!.clase}`}>
+                                    {getImeiWarning(s.imei_estado)!.icono}
+                                  </span>
+                                )}
+                              </span>
                             )}
                             <div className={`${T.texto} font-medium text-sm flex items-center justify-between gap-2`}>
                               <div className="flex flex-col">
@@ -1516,7 +1579,14 @@ export function Dashboard() {
                               <td className="py-3.5 px-3">
                                 <span className="text-slate-200 block font-semibold">{s.modelo_equipo}</span>
                                 {s.imei_serie && (
-                                  <span className={`text-[10px] ${T.fuerte}/80 font-mono tracking-tight block`}>{s.imei_serie}</span>
+                                  <span className={`text-[10px] ${T.fuerte}/80 font-mono tracking-tight block`}>
+                                    {s.imei_serie}
+                                    {getImeiWarning(s.imei_estado) && (
+                                      <span title={getImeiWarning(s.imei_estado)!.texto} className={`ml-1.5 ${getImeiWarning(s.imei_estado)!.clase}`}>
+                                        {getImeiWarning(s.imei_estado)!.icono}
+                                      </span>
+                                    )}
+                                  </span>
                                 )}
                               </td>
                               <td className={`py-3.5 px-3 ${T.texto} font-medium`}>
@@ -1880,6 +1950,97 @@ export function Dashboard() {
                         </div>
                       )}
                       <p className="text-[10px] text-slate-500 mt-2">{getFechaLocal(g.created_at)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ===================== PESTAÑA: VERIFICADOR IMEI ===================== */}
+        {vista === 'imei' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
+            <div className="space-y-6 lg:col-span-1">
+              <div className={`bg-slate-900/80 border ${T.borde} p-5 md:p-6 rounded-2xl shadow-xl backdrop-blur-md transition-colors`}>
+                <h2 className={`text-base font-bold ${T.texto} uppercase tracking-wider flex items-center gap-2 mb-3`}>
+                  <span className={`w-2 h-2 rounded-full ${T.dot}`}></span>
+                  Verificador IMEI
+                </h2>
+                <p className="text-xs text-slate-400 mb-5 leading-relaxed">
+                  No existe una API pública en Chile para esto — cada operadora tiene su propio formulario manual. Abre el sitio, copia el IMEI de la lista y pégalo allá.
+                </p>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {OPERADORAS_IMEI.map((op) => (
+                    <button
+                      key={op.nombre}
+                      type="button"
+                      onClick={() => handleAbrirVerificadorImei(op.url)}
+                      className={`${op.color} text-white font-black text-xs uppercase tracking-wider py-3.5 rounded-xl transition-all shadow-md active:scale-95`}
+                    >
+                      {op.nombre} ↗
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-4 leading-relaxed">
+                  En computador se abren a un lado de la pantalla. En el celular se abren en una pestaña nueva — la barra de direcciones no se puede ni se debe ocultar (por seguridad del navegador).
+                </p>
+              </div>
+            </div>
+
+            <div className={`lg:col-span-2 bg-slate-900/80 border ${T.borde} p-5 md:p-6 rounded-2xl shadow-xl backdrop-blur-md transition-colors`}>
+              <h2 className={`text-base font-bold ${T.texto} uppercase tracking-wider flex items-center gap-2 mb-5`}>
+                <span className={`w-2 h-2 rounded-full ${T.dot2}`}></span>
+                Pendientes de Verificar ({imeisPendientes.length})
+              </h2>
+
+              {imeisPendientes.length === 0 ? (
+                <p className="text-sm text-slate-400 py-8 text-center">No hay IMEI pendientes de verificar. 🎉</p>
+              ) : (
+                <div className="space-y-3">
+                  {imeisPendientes.map((s) => (
+                    <div key={s.id} className="border border-slate-800 bg-slate-950/60 rounded-xl p-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-xs text-slate-400">
+                            {s.folio && <span className={`${T.fuerte} font-mono mr-1.5`}>{s.folio}</span>}
+                            {s.clientes?.nombre || 'General'} · {s.modelo_equipo}
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="font-mono font-black text-white text-base tracking-wide break-all">{s.imei_serie}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopiarImei(s.id, s.imei_serie || '')}
+                              className={`flex-shrink-0 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-all ${imeiCopiadoId === s.id ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800/60 text-slate-300 border-slate-700'}`}
+                            >
+                              {imeiCopiadoId === s.id ? '✓ Copiado' : '📋 Copiar'}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1.5 flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleMarcarImeiEstado(s.id, 'limpio')}
+                            className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold text-[10px] uppercase tracking-wider py-2 rounded-lg transition-all"
+                          >
+                            Limpio
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMarcarImeiEstado(s.id, 'reportado')}
+                            className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 font-bold text-[10px] uppercase tracking-wider py-2 rounded-lg transition-all"
+                          >
+                            Reportado
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMarcarImeiEstado(s.id, 'bloqueado')}
+                            className="bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold text-[10px] uppercase tracking-wider py-2 rounded-lg transition-all"
+                          >
+                            Bloqueado
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
