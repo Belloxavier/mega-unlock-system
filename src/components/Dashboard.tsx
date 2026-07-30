@@ -61,6 +61,22 @@ const ZONA_HORARIA = 'America/Santiago';
 const PAGE_SIZE = 10;
 const DIAS_SEMANA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
+// Estados de progreso de un trabajo. Siempre editable libremente (elegir de
+// este menú, sin ciclos automáticos ni orden forzado).
+const ESTADOS_PROGRESO = ['PENDIENTE', 'EN PROCESO', 'PAUSADO', 'COMPLETADO', 'ENTREGADO'];
+
+const getDotColor = (estado: string) => {
+  switch (estado) {
+    case 'PENDIENTE': return 'bg-yellow-400';
+    case 'EN PROCESO': return 'bg-cyan-400';
+    case 'PAUSADO': return 'bg-violet-400';
+    case 'COMPLETADO': return 'bg-blue-400';
+    case 'ENTREGADO': return 'bg-emerald-400';
+    case 'NO REALIZADO': return 'bg-rose-400';
+    default: return 'bg-slate-400';
+  }
+};
+
 // Devuelve la fecha en formato YYYY-MM-DD según la hora LOCAL de Chile,
 // en vez de usar toISOString() que trabaja en UTC y desfasa el "Hoy".
 const getFechaLocal = (fecha: Date | string) => {
@@ -126,6 +142,7 @@ export function Dashboard() {
   const [mostrarMontos, setMostrarMontos] = useState(true);
   const [paginaActual, setPaginaActual] = useState(1);
   const [temaCalido, setTemaCalido] = useState(false);
+  const [estadoMenuAbierto, setEstadoMenuAbierto] = useState<string | null>(null);
 
   // Filtros (pestaña Clientes)
   const [filtroFechaClientes, setFiltroFechaClientes] = useState('todos'); // 'todos', 'hoy', 'mes'
@@ -371,15 +388,6 @@ export function Dashboard() {
   };
 
   const limpiarNumero = (tel: string) => tel.replace(/\D/g, '');
-
-  // El selector siempre muestra los 5 estados de progreso — se puede
-  // editar libremente en cualquier momento (ej. corregir un Completado que
-  // en realidad necesita más trabajo). Lo que se eliminó fue el ciclo
-  // automático al tocar un botón, que era lo que causaba el lag y los
-  // cambios accidentales de estado.
-  const ESTADOS_PROGRESO = ['PENDIENTE', 'EN PROCESO', 'PAUSADO', 'COMPLETADO', 'ENTREGADO'];
-  const opcionesEstadoDisponibles = (estadoActual: string): string[] =>
-    estadoActual === 'NO REALIZADO' ? [estadoActual] : ESTADOS_PROGRESO;
 
   const handleCambiarEstado = async (id: string, estadoActual: string, nuevoEstado: string) => {
     if (nuevoEstado === estadoActual) return;
@@ -806,6 +814,59 @@ export function Dashboard() {
       case 'NO REALIZADO': return 'bg-rose-500/10 text-rose-400 border-rose-500/30';
       default: return 'bg-slate-500/10 text-slate-400 border-slate-500/30';
     }
+  };
+
+  // Menú de estado hecho a mano en vez de un <select> nativo: en iPhone un
+  // <select> abre el picker de rueda del sistema, que ignora por completo
+  // el diseño de la app. Esto se ve igual (y se controla igual) en iOS y en
+  // escritorio. `alinear` evita que el menú se salga de la pantalla según
+  // dónde esté el botón (tarjeta móvil = derecha, tabla = izquierda).
+  const renderEstadoControl = (s: Servicio, alinear: 'left' | 'right' = 'left') => {
+    const badge = (
+      <span className={`inline-flex items-center gap-1.5 border px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase shadow-sm ${getBadgeColor(s.estado, s.created_at)}`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${getDotColor(s.estado)}`}></span>
+        {s.estado}
+      </span>
+    );
+
+    if (s.estado === 'NO REALIZADO') return badge;
+
+    const abierto = estadoMenuAbierto === s.id;
+
+    return (
+      <div className="relative inline-block">
+        <button
+          type="button"
+          onClick={() => setEstadoMenuAbierto(abierto ? null : s.id)}
+          className={`inline-flex items-center gap-1.5 border px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all shadow-sm ${getBadgeColor(s.estado, s.created_at)}`}
+        >
+          <span className={`w-1.5 h-1.5 rounded-full ${getDotColor(s.estado)}`}></span>
+          {s.estado}
+          <span className="text-[8px] opacity-70">▾</span>
+        </button>
+        {abierto && (
+          <>
+            <div className="fixed inset-0 z-30" onClick={() => setEstadoMenuAbierto(null)}></div>
+            <div className={`absolute z-40 mt-1.5 ${alinear === 'right' ? 'right-0' : 'left-0'} bg-slate-950 border border-slate-700 rounded-xl overflow-hidden shadow-2xl min-w-[150px]`}>
+              {ESTADOS_PROGRESO.filter((op) => op !== s.estado).map((op) => (
+                <button
+                  type="button"
+                  key={op}
+                  onClick={() => {
+                    handleCambiarEstado(s.id, s.estado, op);
+                    setEstadoMenuAbierto(null);
+                  }}
+                  className="w-full text-left px-3.5 py-2.5 flex items-center gap-2 hover:bg-slate-800/80 active:bg-slate-800 transition-colors"
+                >
+                  <span className={`w-2 h-2 rounded-full ${getDotColor(op)}`}></span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-200">{op}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    );
   };
 
   const fmt = (valor: number) => (mostrarMontos ? `$${valor.toFixed(2)}` : '••••••');
@@ -1298,21 +1359,7 @@ export function Dashboard() {
                                 {s.metodo_pago && <span className="text-[10px] text-slate-500">{s.metodo_pago}</span>}
                               </div>
                               <div className="flex flex-col items-end gap-1.5">
-                                {s.estado !== 'NO REALIZADO' ? (
-                                  <select
-                                    value={s.estado}
-                                    onChange={(e) => handleCambiarEstado(s.id, s.estado, e.target.value)}
-                                    className={`border px-2 py-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all shadow-sm ${getBadgeColor(s.estado, s.created_at)}`}
-                                  >
-                                    {opcionesEstadoDisponibles(s.estado).map((op) => (
-                                      <option key={op} value={op}>{op}</option>
-                                    ))}
-                                  </select>
-                                ) : (
-                                  <span className={`border px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase shadow-sm ${getBadgeColor(s.estado, s.created_at)}`}>
-                                    {s.estado}
-                                  </span>
-                                )}
+                                {renderEstadoControl(s, 'right')}
                                 <button onClick={() => handleTogglePagado(s.id, s.pagado)} className={`border px-3 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all ${s.pagado ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800/60 text-slate-400 border-slate-700'}`}>
                                   {s.pagado ? '💰 Pagado' : 'Sin Pagar'}
                                 </button>
@@ -1369,22 +1416,7 @@ export function Dashboard() {
                                 {s.metodo_pago && <span className="block text-[10px] text-slate-500">{s.metodo_pago}</span>}
                               </td>
                               <td className="py-3.5 px-3">
-                                {s.estado !== 'NO REALIZADO' ? (
-                                  <select
-                                    value={s.estado}
-                                    onChange={(e) => handleCambiarEstado(s.id, s.estado, e.target.value)}
-                                    title="Cambiar estado"
-                                    className={`border px-2 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all shadow-sm ${getBadgeColor(s.estado, s.created_at)}`}
-                                  >
-                                    {opcionesEstadoDisponibles(s.estado).map((op) => (
-                                      <option key={op} value={op}>{op}</option>
-                                    ))}
-                                  </select>
-                                ) : (
-                                  <span className={`border px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase shadow-sm ${getBadgeColor(s.estado, s.created_at)}`}>
-                                    {s.estado}
-                                  </span>
-                                )}
+                                {renderEstadoControl(s, 'left')}
                               </td>
                               <td className="py-3.5 px-3">
                                 <button onClick={() => handleTogglePagado(s.id, s.pagado)} title="Haz clic para marcar pagado/sin pagar" className={`border px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all ${s.pagado ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800/60 text-slate-400 border-slate-700'}`}>
