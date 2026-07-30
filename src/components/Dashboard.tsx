@@ -198,6 +198,8 @@ export function Dashboard() {
   const [temaCalido, setTemaCalido] = useState(false);
   const [estadoMenuAbierto, setEstadoMenuAbierto] = useState<string | null>(null);
   const [imeiCopiadoId, setImeiCopiadoId] = useState<string | null>(null);
+  const [editandoFechaPagoId, setEditandoFechaPagoId] = useState<string | null>(null);
+  const [fechaPagoInput, setFechaPagoInput] = useState('');
 
   // Filtros (pestaña Clientes)
   const [filtroFechaClientes, setFiltroFechaClientes] = useState('todos'); // 'todos', 'hoy', 'mes'
@@ -552,6 +554,25 @@ export function Dashboard() {
       fetchServicios();
     } else {
       alert(`No se pudo actualizar el pago: ${error.message}`);
+    }
+  };
+
+  // Ajuste manual de la fecha de pago — para adelantos u otros casos donde
+  // el clic en "Pagado" pasa un día después de la fecha real (como F11).
+  const handleAbrirEditorFechaPago = (s: Servicio) => {
+    setFechaPagoInput(getFechaLocal(s.pagado_at || new Date()));
+    setEditandoFechaPagoId(s.id);
+  };
+
+  const handleGuardarFechaPago = async (id: string) => {
+    if (!fechaPagoInput) return;
+    const pagadoAtIso = new Date(`${fechaPagoInput}T12:00:00`).toISOString();
+    const { error } = await supabase.from('servicios').update({ pagado: true, pagado_at: pagadoAtIso }).eq('id', id);
+    if (!error) {
+      setEditandoFechaPagoId(null);
+      fetchServicios();
+    } else {
+      alert(`No se pudo guardar la fecha: ${error.message}`);
     }
   };
 
@@ -1112,6 +1133,45 @@ export function Dashboard() {
     );
   };
 
+  // Botón de calendario junto a "Pagado/Sin Pagar": corrige la fecha real de
+  // pago cuando el clic ocurrió otro día (ej. adelantos registrados tarde).
+  const renderEditorFechaPago = (s: Servicio, alinear: 'left' | 'right' = 'left') => {
+    const abierto = editandoFechaPagoId === s.id;
+    return (
+      <div className="relative inline-block">
+        <button
+          type="button"
+          onClick={() => (abierto ? setEditandoFechaPagoId(null) : handleAbrirEditorFechaPago(s))}
+          title="Corregir fecha real de pago"
+          className="flex-shrink-0 px-2 py-1 rounded-lg text-xs bg-slate-800/60 hover:bg-slate-700 border border-slate-700 transition-all"
+        >
+          📅
+        </button>
+        {abierto && (
+          <>
+            <div className="fixed inset-0 z-30" onClick={() => setEditandoFechaPagoId(null)}></div>
+            <div className={`absolute z-40 mt-1.5 ${alinear === 'right' ? 'right-0' : 'left-0'} bg-slate-950 border border-slate-700 rounded-xl shadow-2xl p-3 w-56`}>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Fecha real de pago</label>
+              <input
+                type="date"
+                value={fechaPagoInput}
+                onChange={(e) => setFechaPagoInput(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-sm text-white focus:outline-none focus:border-cyan-400 mb-2"
+              />
+              <button
+                type="button"
+                onClick={() => handleGuardarFechaPago(s.id)}
+                className="w-full bg-cyan-500 text-slate-950 font-bold text-xs uppercase tracking-wider py-2 rounded-lg transition-all"
+              >
+                Guardar
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
   const fmt = (valor: number) => (mostrarMontos ? `$${valor.toFixed(2)}` : '••••••');
 
   // Paleta de marca: "frío" (cian/azul, el look por defecto) vs "cálido"
@@ -1630,9 +1690,12 @@ export function Dashboard() {
                               </div>
                               <div className="flex flex-col items-end gap-1.5">
                                 {renderEstadoControl(s, 'right')}
-                                <button onClick={() => handleTogglePagado(s.id, s.pagado)} className={`border px-3 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all ${s.pagado ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800/60 text-slate-400 border-slate-700'}`}>
-                                  {s.pagado ? '💰 Pagado' : 'Sin Pagar'}
-                                </button>
+                                <div className="flex items-center gap-1">
+                                  <button onClick={() => handleTogglePagado(s.id, s.pagado)} className={`border px-3 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all ${s.pagado ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800/60 text-slate-400 border-slate-700'}`}>
+                                    {s.pagado ? '💰 Pagado' : 'Sin Pagar'}
+                                  </button>
+                                  {renderEditorFechaPago(s, 'right')}
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -1694,9 +1757,12 @@ export function Dashboard() {
                                 {renderEstadoControl(s, 'left')}
                               </td>
                               <td className="py-3.5 px-3">
-                                <button onClick={() => handleTogglePagado(s.id, s.pagado)} title="Haz clic para marcar pagado/sin pagar" className={`border px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all ${s.pagado ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800/60 text-slate-400 border-slate-700'}`}>
-                                  {s.pagado ? '💰 Pagado' : 'Sin Pagar'}
-                                </button>
+                                <div className="flex items-center gap-1">
+                                  <button onClick={() => handleTogglePagado(s.id, s.pagado)} title="Haz clic para marcar pagado/sin pagar" className={`border px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all ${s.pagado ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800/60 text-slate-400 border-slate-700'}`}>
+                                    {s.pagado ? '💰 Pagado' : 'Sin Pagar'}
+                                  </button>
+                                  {renderEditorFechaPago(s, 'left')}
+                                </div>
                               </td>
                               <td className={`py-3.5 px-3 text-right font-black ${T.fuerte}`}>{fmt(s.monto)}</td>
                               <td className="py-3.5 px-3 text-center">
