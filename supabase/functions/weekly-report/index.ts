@@ -116,26 +116,38 @@ Deno.serve(async () => {
   const ahora = new Date();
   const hace7dias = new Date(ahora.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  const { data: serviciosSemana, error } = await supabase
-    .from('servicios')
-    .select('id, modelo_equipo, tipo_trabajo, monto, estado, created_at, completado_at, clientes ( nombre, tipo_contacto )')
-    .gte('created_at', hace7dias.toISOString());
+  // Las 3 consultas son independientes entre sí — se disparan en paralelo
+  // en vez de una tras otra, para no sumar sus latencias de red.
+  const [
+    { data: serviciosSemana, error },
+    { data: pagosSemana },
+    { count: atascados },
+  ] = await Promise.all([
+    supabase
+      .from('servicios')
+      .select('id, modelo_equipo, tipo_trabajo, monto, estado, created_at, completado_at, clientes ( nombre, tipo_contacto )')
+      .gte('created_at', hace7dias.toISOString()),
+    // La caja se calcula por cuándo se COBRÓ (pagado_at), no por cuándo se
+    // registró el trabajo: un trabajo de la semana pasada cobrado esta
+    // semana cuenta para la caja de esta semana, y viceversa.
+    supabase
+      .from('servicios')
+      .select('monto')
+      .eq('pagado', true)
+      .gte('pagado_at', hace7dias.toISOString())
+      .lte('pagado_at', ahora.toISOString()),
+    supabase
+      .from('servicios')
+      .select('id', { count: 'exact', head: true })
+      .in('estado', ENTALLER_ESTADOS)
+      .lt('created_at', new Date(ahora.getTime() - 24 * 60 * 60 * 1000).toISOString()),
+  ]);
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 
   const servicios = (serviciosSemana || []) as unknown as Servicio[];
-
-  // La caja se calcula por cuándo se COBRÓ (pagado_at), no por cuándo se
-  // registró el trabajo: un trabajo de la semana pasada cobrado esta semana
-  // cuenta para la caja de esta semana, y viceversa.
-  const { data: pagosSemana } = await supabase
-    .from('servicios')
-    .select('monto')
-    .eq('pagado', true)
-    .gte('pagado_at', hace7dias.toISOString())
-    .lte('pagado_at', ahora.toISOString());
   const cajaSemana = (pagosSemana || []).reduce((acc, s) => acc + (s.monto || 0), 0);
 
   const construirRanking = (tipo: 'tecnico' | 'cliente') => {
@@ -168,12 +180,6 @@ Deno.serve(async () => {
     .filter((s) => s.completado_at)
     .map((s) => (new Date(s.completado_at!).getTime() - new Date(s.created_at).getTime()) / (1000 * 60 * 60));
   const tiempoPromedioHoras = horasReparacion.length > 0 ? horasReparacion.reduce((a, b) => a + b, 0) / horasReparacion.length : null;
-
-  const { count: atascados } = await supabase
-    .from('servicios')
-    .select('id', { count: 'exact', head: true })
-    .in('estado', ENTALLER_ESTADOS)
-    .lt('created_at', new Date(ahora.getTime() - 24 * 60 * 60 * 1000).toISOString());
 
   const html = construirHtml({
     desde: hace7dias,

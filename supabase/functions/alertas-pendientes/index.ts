@@ -99,24 +99,30 @@ Deno.serve(async () => {
   const ahora = new Date();
   const hace48h = new Date(ahora.getTime() - HORAS_LIMITE * 60 * 60 * 1000).toISOString();
 
-  const { data: completadosSinCobrar, error: e1 } = await supabase
-    .from('servicios')
-    .select('folio, modelo_equipo, created_at, completado_at, clientes ( nombre )')
-    .eq('estado', 'COMPLETADO')
-    .eq('pagado', false)
-    .lt('completado_at', hace48h);
-
-  const { data: pendientesSinEmpezar, error: e2 } = await supabase
-    .from('servicios')
-    .select('folio, modelo_equipo, created_at, completado_at, clientes ( nombre )')
-    .eq('estado', 'PENDIENTE')
-    .lt('created_at', hace48h);
-
-  const { data: garantiasSinResolver, error: e3 } = await supabase
-    .from('garantias')
-    .select('folio, descripcion, created_at, servicios ( clientes ( nombre ) )')
-    .eq('resuelta', false)
-    .lt('created_at', hace48h);
+  // Las 3 consultas son independientes — se disparan en paralelo en vez de
+  // una tras otra, para no sumar sus latencias de red.
+  const [
+    { data: completadosSinCobrar, error: e1 },
+    { data: pendientesSinEmpezar, error: e2 },
+    { data: garantiasSinResolver, error: e3 },
+  ] = await Promise.all([
+    supabase
+      .from('servicios')
+      .select('folio, modelo_equipo, created_at, completado_at, clientes ( nombre )')
+      .eq('estado', 'COMPLETADO')
+      .eq('pagado', false)
+      .lt('completado_at', hace48h),
+    supabase
+      .from('servicios')
+      .select('folio, modelo_equipo, created_at, completado_at, clientes ( nombre )')
+      .eq('estado', 'PENDIENTE')
+      .lt('created_at', hace48h),
+    supabase
+      .from('garantias')
+      .select('folio, descripcion, created_at, servicios ( clientes ( nombre ) )')
+      .eq('resuelta', false)
+      .lt('created_at', hace48h),
+  ]);
 
   const error = e1 || e2 || e3;
   if (error) {

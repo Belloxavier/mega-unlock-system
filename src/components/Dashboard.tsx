@@ -19,6 +19,15 @@ import { useCuentasBancarias } from '../hooks/useCuentasBancarias';
 
 const PAGE_SIZE = 10;
 
+// Intensidad de color de una garantía según cuántas trae ese cliente en el
+// mes (1ra = suave, va subiendo hasta rojo).
+const NIVELES_GARANTIA = [
+  'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+  'bg-amber-500/10 text-amber-400 border-amber-500/30',
+  'bg-orange-500/20 text-orange-300 border-orange-500/40',
+  'bg-red-600/20 text-red-300 border-red-500/50 shadow-[0_0_8px_rgba(220,38,38,0.4)]',
+];
+
 export function Dashboard() {
   const { servicios, loading, fetchServicios } = useServicios();
   const { clientesList, fetchClientes } = useClientes();
@@ -76,11 +85,14 @@ export function Dashboard() {
   }, [busqueda, filtroFecha, filtroEstado]);
 
   // ---- Autocompletado ----
-  const sugerencias = nombreCliente.trim()
-    ? clientesList.filter((c) =>
-        c.nombre.toLowerCase().includes(nombreCliente.trim().toLowerCase())
-      ).slice(0, 6)
-    : [];
+  // Se memoiza igual que el resto de los cálculos sobre `servicios`/
+  // `clientesList`: sin esto, recorría la lista completa en cada tecla
+  // escrita en CUALQUIER campo de la app, no solo en este input.
+  const sugerencias = useMemo(() => {
+    const q = nombreCliente.trim().toLowerCase();
+    if (!q) return [];
+    return clientesList.filter((c) => c.nombre.toLowerCase().includes(q)).slice(0, 6);
+  }, [nombreCliente, clientesList]);
 
   const handleSeleccionarCliente = (c: Cliente) => {
     setClienteIdAsociado(c.id);
@@ -91,9 +103,11 @@ export function Dashboard() {
   };
 
   // ---- Autocompletado de folio (pestaña Garantías) ----
-  const sugerenciasFolio = folioGarantia.trim()
-    ? servicios.filter((s) => s.folio?.toLowerCase().includes(folioGarantia.trim().toLowerCase())).slice(0, 6)
-    : [];
+  const sugerenciasFolio = useMemo(() => {
+    const q = folioGarantia.trim().toLowerCase();
+    if (!q) return [];
+    return servicios.filter((s) => s.folio?.toLowerCase().includes(q)).slice(0, 6);
+  }, [folioGarantia, servicios]);
 
   const handleSeleccionarFolio = (s: Servicio) => {
     setServicioIdGarantia(s.id);
@@ -845,13 +859,6 @@ export function Dashboard() {
 
   // ---- Pestaña Garantías: intensidad de color según cuántas trae ese
   // cliente en el mes (1ra = suave, va subiendo hasta rojo). ----
-  const NIVELES_GARANTIA = [
-    'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
-    'bg-amber-500/10 text-amber-400 border-amber-500/30',
-    'bg-orange-500/20 text-orange-300 border-orange-500/40',
-    'bg-red-600/20 text-red-300 border-red-500/50 shadow-[0_0_8px_rgba(220,38,38,0.4)]',
-  ];
-
   const garantiasConIntensidad = useMemo(() => {
     const ordenadasAsc = [...garantiasList].sort(
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
