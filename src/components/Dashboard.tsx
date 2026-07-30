@@ -87,10 +87,10 @@ const getDotColor = (estado: string) => {
 // pública: son formularios pensados para uso manual, uno por uno.
 // Verificadas contra el directorio oficial multibanda.cl (jul. 2026).
 const OPERADORAS_IMEI = [
-  { nombre: 'Movistar', url: 'https://ww2.movistar.cl/terminos-regulaciones/multibanda-sae/', color: 'bg-[#019df4] hover:bg-[#0189d6]' },
-  { nombre: 'Entel', url: 'https://www.entel.cl/nueva-normativa', color: 'bg-[#00a19a] hover:bg-[#008a84]' },
-  { nombre: 'WOM', url: 'https://www.wom.cl/sello-multibandas/', color: 'bg-[#6a1b9a] hover:bg-[#59168a]' },
-  { nombre: 'Claro', url: 'https://www.clarochile.cl/personas/equipos/consulta-imei/', color: 'bg-[#e2001a] hover:bg-[#c50017]' },
+  { nombre: 'Movistar', url: 'https://ww2.movistar.cl/terminos-regulaciones/multibanda-sae/', hex: '#019df4' },
+  { nombre: 'Entel', url: 'https://www.entel.cl/nueva-normativa', hex: '#00b2a9' },
+  { nombre: 'WOM', url: 'https://www.wom.cl/sello-multibandas/', hex: '#7b2ff7' },
+  { nombre: 'Claro', url: 'https://www.clarochile.cl/personas/equipos/consulta-imei/', hex: '#e2001a' },
 ];
 
 const getImeiWarning = (estado?: string) => {
@@ -1970,15 +1970,25 @@ export function Dashboard() {
                 <p className="text-xs text-slate-400 mb-5 leading-relaxed">
                   No existe una API pública en Chile para esto — cada operadora tiene su propio formulario manual. Abre el sitio, copia el IMEI de la lista y pégalo allá.
                 </p>
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="space-y-2.5">
                   {OPERADORAS_IMEI.map((op) => (
                     <button
                       key={op.nombre}
                       type="button"
                       onClick={() => handleAbrirVerificadorImei(op.url)}
-                      className={`${op.color} text-white font-black text-xs uppercase tracking-wider py-3.5 rounded-xl transition-all shadow-md active:scale-95`}
+                      className="group w-full flex items-center gap-3 bg-slate-950/60 border border-slate-800 hover:border-slate-600 p-3 rounded-xl transition-all active:scale-[0.98] hover:bg-slate-950"
                     >
-                      {op.nombre} ↗
+                      <span
+                        className="w-9 h-9 rounded-full flex items-center justify-center font-black text-white text-sm flex-shrink-0"
+                        style={{ backgroundColor: op.hex, boxShadow: `0 0 12px ${op.hex}66` }}
+                      >
+                        {op.nombre[0]}
+                      </span>
+                      <span className="flex-1 text-left">
+                        <span className="block text-sm font-bold text-slate-100">{op.nombre}</span>
+                        <span className="block text-[10px] text-slate-500">Consultar IMEI</span>
+                      </span>
+                      <span className="text-slate-600 group-hover:text-slate-300 transition-colors text-base flex-shrink-0">↗</span>
                     </button>
                   ))}
                 </div>
