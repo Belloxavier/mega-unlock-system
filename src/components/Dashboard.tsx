@@ -160,6 +160,7 @@ export function Dashboard() {
   const [tipoContacto, setTipoContacto] = useState<'tecnico' | 'cliente'>('tecnico');
   const [sugerenciasVisibles, setSugerenciasVisibles] = useState(false);
   const [equipos, setEquipos] = useState<EquipoForm[]>([equipoVacio()]);
+  const [escaneandoImei, setEscaneandoImei] = useState<number | null>(null);
 
   // Pestaña Garantías
   const [garantiasList, setGarantiasList] = useState<Garantia[]>([]);
@@ -247,6 +248,31 @@ export function Dashboard() {
 
   const handleCambiarEquipo = (idx: number, campo: keyof EquipoForm, valor: string) => {
     setEquipos((prev) => prev.map((eq, i) => (i === idx ? { ...eq, [campo]: valor } : eq)));
+  };
+
+  // Lee el IMEI/serie de una foto con OCR (Tesseract.js, 100% en el navegador,
+  // no toca el servidor). Se carga solo al usarse, para no pesar la carga
+  // inicial de la página. El resultado se deja en el campo para revisar, no
+  // se guarda solo — el OCR se puede equivocar en un dígito.
+  const handleEscanearImei = async (idx: number, file: File) => {
+    setEscaneandoImei(idx);
+    try {
+      const { default: Tesseract } = await import('tesseract.js');
+      const { data } = await Tesseract.recognize(file, 'eng');
+      const secuencias = data.text.match(/\d[\d\s-]{8,}\d/g) || [];
+      const mejor = secuencias
+        .map((s) => s.replace(/[^0-9]/g, ''))
+        .sort((a, b) => b.length - a.length)[0];
+      if (mejor) {
+        handleCambiarEquipo(idx, 'imeiSerie', mejor);
+      } else {
+        alert('No se pudo leer ningún número en la foto. Prueba con más luz, más de cerca, o escríbelo a mano.');
+      }
+    } catch {
+      alert('No se pudo leer la imagen. Intenta de nuevo o escríbelo a mano.');
+    } finally {
+      setEscaneandoImei(null);
+    }
   };
 
   const handleGuardarServicio = async (e: React.FormEvent) => {
@@ -1258,13 +1284,37 @@ export function Dashboard() {
                       </div>
                       <div>
                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">IMEI o N° de Serie (S/N)</label>
-                        <input
-                          type="text"
-                          value={eq.imeiSerie}
-                          onChange={(e) => handleCambiarEquipo(idx, 'imeiSerie', e.target.value)}
-                          placeholder="Ej. 864521049382101"
-                          className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all font-mono`}
-                        />
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={eq.imeiSerie}
+                            onChange={(e) => handleCambiarEquipo(idx, 'imeiSerie', e.target.value)}
+                            placeholder="Ej. 864521049382101"
+                            className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all font-mono`}
+                          />
+                          <label
+                            title="Escanear IMEI con la cámara"
+                            className="flex-shrink-0 flex items-center justify-center w-12 bg-slate-950/80 border border-slate-800 rounded-xl cursor-pointer active:bg-slate-800 transition-all"
+                          >
+                            {escaneandoImei === idx ? (
+                              <span className="text-xs animate-pulse">⏳</span>
+                            ) : (
+                              <span className="text-lg">📷</span>
+                            )}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              className="hidden"
+                              disabled={escaneandoImei !== null}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                e.target.value = '';
+                                if (file) handleEscanearImei(idx, file);
+                              }}
+                            />
+                          </label>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tipo de Servicio</label>
