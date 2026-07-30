@@ -43,6 +43,20 @@ const equipoVacio = (): EquipoForm => ({
   metodoPago: 'Efectivo',
 });
 
+interface Garantia {
+  id: string;
+  folio: string;
+  descripcion: string;
+  created_at: string;
+  servicios?: {
+    id: string;
+    modelo_equipo: string;
+    tipo_trabajo: string;
+    cliente_id?: string;
+    clientes?: { id: string; nombre: string };
+  } | null;
+}
+
 const ZONA_HORARIA = 'America/Santiago';
 const PAGE_SIZE = 10;
 const DIAS_SEMANA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -103,7 +117,7 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   // Navegación por pestañas
-  const [vista, setVista] = useState<'inicio' | 'clientes' | 'finanzas'>('inicio');
+  const [vista, setVista] = useState<'inicio' | 'clientes' | 'finanzas' | 'garantias'>('inicio');
 
   // Filtros y Buscador (pestaña Inicio)
   const [busqueda, setBusqueda] = useState('');
@@ -126,9 +140,17 @@ export function Dashboard() {
   const [sugerenciasVisibles, setSugerenciasVisibles] = useState(false);
   const [equipos, setEquipos] = useState<EquipoForm[]>([equipoVacio()]);
 
+  // Pestaña Garantías
+  const [garantiasList, setGarantiasList] = useState<Garantia[]>([]);
+  const [folioGarantia, setFolioGarantia] = useState('');
+  const [servicioIdGarantia, setServicioIdGarantia] = useState<string | null>(null);
+  const [descripcionGarantia, setDescripcionGarantia] = useState('');
+  const [sugerenciasFolioVisibles, setSugerenciasFolioVisibles] = useState(false);
+
   useEffect(() => {
     fetchServicios();
     fetchClientes();
+    fetchGarantias();
   }, []);
 
   useEffect(() => {
@@ -144,6 +166,14 @@ export function Dashboard() {
 
     if (!error && data) setServicios(data);
     setLoading(false);
+  };
+
+  const fetchGarantias = async () => {
+    const { data, error } = await supabase
+      .from('garantias')
+      .select('id, folio, descripcion, created_at, servicios ( id, modelo_equipo, tipo_trabajo, cliente_id, clientes ( id, nombre ) )')
+      .order('created_at', { ascending: false });
+    if (!error && data) setGarantiasList(data as unknown as Garantia[]);
   };
 
   const fetchClientes = async () => {
@@ -167,6 +197,17 @@ export function Dashboard() {
     setTelefonoCliente(c.telefono || '');
     setTipoContacto((c.tipo_contacto as 'tecnico' | 'cliente') || 'tecnico');
     setSugerenciasVisibles(false);
+  };
+
+  // ---- Autocompletado de folio (pestaña Garantías) ----
+  const sugerenciasFolio = folioGarantia.trim()
+    ? servicios.filter((s) => s.folio?.toLowerCase().includes(folioGarantia.trim().toLowerCase())).slice(0, 6)
+    : [];
+
+  const handleSeleccionarFolio = (s: Servicio) => {
+    setServicioIdGarantia(s.id);
+    setFolioGarantia(s.folio || '');
+    setSugerenciasFolioVisibles(false);
   };
 
   const handleCambiarNombre = (valor: string) => {
@@ -331,29 +372,45 @@ export function Dashboard() {
 
   const limpiarNumero = (tel: string) => tel.replace(/\D/g, '');
 
-  const handleToggleEstado = async (id: string, estadoActual: string) => {
-    if (estadoActual === 'NO REALIZADO') return;
-    const estados = ['PENDIENTE', 'EN PROCESO', 'COMPLETADO', 'ENTREGADO'];
-    const idx = estados.indexOf(estadoActual);
-    const siguienteEstado = estados[(idx === -1 ? 0 : idx + 1) % estados.length];
+  // Estados "en curso" y sus siguientes pasos válidos. Nunca hacia atrás
+  // (salvo reanudar desde Pausado, que no es un retroceso real) y sin ciclo:
+  // una vez COMPLETADO, ese control queda bloqueado — para pasar a ENTREGADO
+  // hay que usar handleConfirmarEntrega, una acción aparte y confirmada.
+  const opcionesEstadoDisponibles = (estadoActual: string): string[] => {
+    switch (estadoActual) {
+      case 'PENDIENTE': return ['PENDIENTE', 'EN PROCESO', 'PAUSADO'];
+      case 'EN PROCESO': return ['EN PROCESO', 'PAUSADO', 'COMPLETADO'];
+      case 'PAUSADO': return ['PAUSADO', 'EN PROCESO', 'COMPLETADO'];
+      default: return [estadoActual];
+    }
+  };
+
+  const handleCambiarEstado = async (id: string, estadoActual: string, nuevoEstado: string) => {
+    if (nuevoEstado === estadoActual) return;
 
     const servicioActual = servicios.find((s) => s.id === id);
     const tieneWhatsApp = !!servicioActual?.clientes?.telefono;
     let ventanaWhatsApp: Window | null = null;
-    if (siguienteEstado === 'COMPLETADO' && tieneWhatsApp) {
-      ventanaWhatsApp = window.open('', '_blank');
+    let avisarWhatsApp = false;
+
+    if (nuevoEstado === 'COMPLETADO' && tieneWhatsApp) {
+      const otrosPendientes = servicios.filter(
+        (s) =>
+          s.id !== id &&
+          s.clientes?.id &&
+          s.clientes.id === servicioActual?.clientes?.id &&
+          !['COMPLETADO', 'ENTREGADO', 'NO REALIZADO'].includes(s.estado)
+      ).length;
+      avisarWhatsApp = window.confirm(
+        otrosPendientes > 0
+          ? `Este cliente tiene ${otrosPendientes} equipo(s) más sin completar todavía.\n\n¿Enviar WhatsApp avisando que este equipo ya está listo?`
+          : '¿Enviar WhatsApp avisando que el equipo está listo para retirar?'
+      );
+      if (avisarWhatsApp) ventanaWhatsApp = window.open('', '_blank');
     }
 
-    const cambios: { estado: string; completado_at?: string; entregado_at?: string; pagado?: boolean; pagado_at?: string } = { estado: siguienteEstado };
-    if (siguienteEstado === 'COMPLETADO') cambios.completado_at = new Date().toISOString();
-    if (siguienteEstado === 'ENTREGADO') {
-      cambios.entregado_at = new Date().toISOString();
-      // Si no lo habían marcado pagado antes (adelanto), se asume que se paga al entregar.
-      if (!servicioActual?.pagado) {
-        cambios.pagado = true;
-        cambios.pagado_at = cambios.entregado_at;
-      }
-    }
+    const cambios: { estado: string; completado_at?: string } = { estado: nuevoEstado };
+    if (nuevoEstado === 'COMPLETADO') cambios.completado_at = new Date().toISOString();
 
     const { error } = await supabase.from('servicios').update(cambios).eq('id', id);
 
@@ -364,13 +421,30 @@ export function Dashboard() {
 
     fetchServicios();
 
-    if (siguienteEstado === 'COMPLETADO' && servicioActual && ventanaWhatsApp) {
+    if (avisarWhatsApp && servicioActual && ventanaWhatsApp) {
       const numero = limpiarNumero(servicioActual.clientes?.telefono || '');
       const mensaje = `Hola ${servicioActual.clientes?.nombre || ''}, tu equipo ${servicioActual.modelo_equipo}${servicioActual.folio ? ` (folio ${servicioActual.folio})` : ''} ya está listo. Puedes pasar a retirarlo.`;
       ventanaWhatsApp.location.href = `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
     } else {
       ventanaWhatsApp?.close();
     }
+  };
+
+  const handleConfirmarEntrega = async (id: string) => {
+    if (!window.confirm('¿Confirmas que el cliente retiró el equipo? Esto no se puede deshacer.')) return;
+    const servicioActual = servicios.find((s) => s.id === id);
+    const entregadoAt = new Date().toISOString();
+    const cambios: { estado: string; entregado_at: string; pagado?: boolean; pagado_at?: string } = {
+      estado: 'ENTREGADO',
+      entregado_at: entregadoAt,
+    };
+    // Si no lo habían marcado pagado antes (adelanto), se asume que se paga al entregar.
+    if (!servicioActual?.pagado) {
+      cambios.pagado = true;
+      cambios.pagado_at = entregadoAt;
+    }
+    const { error } = await supabase.from('servicios').update(cambios).eq('id', id);
+    if (!error) fetchServicios();
   };
 
   const handleTogglePagado = async (id: string, pagadoActual: boolean) => {
@@ -447,6 +521,44 @@ export function Dashboard() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+  };
+
+  const limpiarFormularioGarantia = () => {
+    setFolioGarantia('');
+    setServicioIdGarantia(null);
+    setDescripcionGarantia('');
+  };
+
+  const handleAgregarGarantia = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!folioGarantia.trim() || !descripcionGarantia.trim()) return;
+
+    let servicioId = servicioIdGarantia;
+    if (!servicioId) {
+      const match = servicios.find((s) => s.folio?.toLowerCase() === folioGarantia.trim().toLowerCase());
+      if (!match) {
+        alert('No se encontró ese folio. Selecciónalo de la lista mientras escribes.');
+        return;
+      }
+      servicioId = match.id;
+    }
+
+    const { error } = await supabase.from('garantias').insert([
+      { servicio_id: servicioId, folio: folioGarantia.trim(), descripcion: descripcionGarantia.trim() },
+    ]);
+
+    if (!error) {
+      limpiarFormularioGarantia();
+      fetchGarantias();
+    } else {
+      alert('Error al registrar la garantía');
+    }
+  };
+
+  const handleEliminarGarantia = async (id: string) => {
+    if (!window.confirm('¿Eliminar este registro de garantía?')) return;
+    const { error } = await supabase.from('garantias').delete().eq('id', id);
+    if (!error) fetchGarantias();
   };
 
   // Todo lo derivado de `servicios` recorre listas potencialmente largas con
@@ -649,6 +761,42 @@ export function Dashboard() {
     };
   }, [servicios, filtroFechaClientes, filtroTipoContacto, hoyStr, mesActualStr]);
 
+  // ---- Pestaña Garantías: intensidad de color según cuántas trae ese
+  // cliente en el mes (1ra = suave, va subiendo hasta rojo). ----
+  const NIVELES_GARANTIA = [
+    'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+    'bg-amber-500/10 text-amber-400 border-amber-500/30',
+    'bg-orange-500/20 text-orange-300 border-orange-500/40',
+    'bg-red-600/20 text-red-300 border-red-500/50 shadow-[0_0_8px_rgba(220,38,38,0.4)]',
+  ];
+
+  const garantiasConIntensidad = useMemo(() => {
+    const ordenadasAsc = [...garantiasList].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+    const contadorPorClienteMes: { [clave: string]: number } = {};
+    const conOrdinal = ordenadasAsc.map((g) => {
+      const clienteId = g.servicios?.clientes?.id || g.servicios?.cliente_id || 'sin-cliente';
+      const mes = g.created_at.slice(0, 7);
+      const clave = `${clienteId}-${mes}`;
+      contadorPorClienteMes[clave] = (contadorPorClienteMes[clave] || 0) + 1;
+      const ordinal = contadorPorClienteMes[clave];
+      return { ...g, ordinal, colorClasses: NIVELES_GARANTIA[Math.min(ordinal, NIVELES_GARANTIA.length) - 1] };
+    });
+    return conOrdinal.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [garantiasList]);
+
+  const rankingClientesGarantiasMes = useMemo(() => {
+    const mesActual = hoyStr.slice(0, 7);
+    const obj: { [nombre: string]: number } = {};
+    garantiasList.forEach((g) => {
+      if (g.created_at.slice(0, 7) !== mesActual) return;
+      const nombre = g.servicios?.clientes?.nombre || 'Sin cliente';
+      obj[nombre] = (obj[nombre] || 0) + 1;
+    });
+    return Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  }, [garantiasList, hoyStr]);
+
   const getBadgeColor = (estado: string, createdAt?: string) => {
     if (estado === 'PENDIENTE' && createdAt) {
       const horas = (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60);
@@ -661,6 +809,7 @@ export function Dashboard() {
     switch (estado) {
       case 'PENDIENTE': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30';
       case 'EN PROCESO': return 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30';
+      case 'PAUSADO': return 'bg-violet-500/10 text-violet-400 border-violet-500/30';
       case 'COMPLETADO': return 'bg-blue-500/10 text-blue-400 border-blue-500/30';
       case 'ENTREGADO': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
       case 'NO REALIZADO': return 'bg-rose-500/10 text-rose-400 border-rose-500/30';
@@ -869,7 +1018,7 @@ export function Dashboard() {
 
         {/* Navegación de pestañas (sticky para cambiar de vista sin desplazarse hacia arriba) */}
         <div className={`sticky top-[calc(env(safe-area-inset-top))] z-30 flex gap-2 mb-8 ${T.navBg} backdrop-blur-md border border-slate-800 p-1.5 rounded-2xl w-full sm:w-fit shadow-lg transition-colors`}>
-          {(['inicio', 'clientes', 'finanzas'] as const).map((tab) => (
+          {(['inicio', 'clientes', 'finanzas', 'garantias'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setVista(tab)}
@@ -877,7 +1026,7 @@ export function Dashboard() {
                 vista === tab ? T.tabActivo : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              {tab === 'inicio' ? '🏠 Inicio' : tab === 'clientes' ? '👥 Clientes' : '💰 Finanzas'}
+              {tab === 'inicio' ? '🏠 Inicio' : tab === 'clientes' ? '👥 Clientes' : tab === 'finanzas' ? '💰 Finanzas' : '🛡️ Garantías'}
             </button>
           ))}
         </div>
@@ -1107,7 +1256,7 @@ export function Dashboard() {
                 </div>
 
                 <div className="flex flex-wrap gap-1.5 mb-5">
-                  {(['todos', 'PENDIENTE', 'EN PROCESO', 'COMPLETADO', 'ENTREGADO', 'NO REALIZADO'] as const).map((est) => {
+                  {(['todos', 'PENDIENTE', 'EN PROCESO', 'PAUSADO', 'COMPLETADO', 'ENTREGADO', 'NO REALIZADO'] as const).map((est) => {
                     const cantidad = est === 'todos' ? serviciosBase.length : conteosPorEstado[est] || 0;
                     const activo = filtroEstado === est;
                     return (
@@ -1158,9 +1307,21 @@ export function Dashboard() {
                                 {s.metodo_pago && <span className="text-[10px] text-slate-500">{s.metodo_pago}</span>}
                               </div>
                               <div className="flex flex-col items-end gap-1.5">
-                                <button onClick={() => handleToggleEstado(s.id, s.estado)} className={`border px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all shadow-sm ${getBadgeColor(s.estado, s.created_at)}`}>
-                                  {s.estado} {s.estado !== 'NO REALIZADO' && '🔄'}
-                                </button>
+                                {['PENDIENTE', 'EN PROCESO', 'PAUSADO'].includes(s.estado) ? (
+                                  <select
+                                    value={s.estado}
+                                    onChange={(e) => handleCambiarEstado(s.id, s.estado, e.target.value)}
+                                    className={`border px-2 py-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all shadow-sm ${getBadgeColor(s.estado, s.created_at)}`}
+                                  >
+                                    {opcionesEstadoDisponibles(s.estado).map((op) => (
+                                      <option key={op} value={op}>{op}</option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <span className={`border px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase shadow-sm ${getBadgeColor(s.estado, s.created_at)}`}>
+                                    {s.estado}
+                                  </span>
+                                )}
                                 <button onClick={() => handleTogglePagado(s.id, s.pagado)} className={`border px-3 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all ${s.pagado ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800/60 text-slate-400 border-slate-700'}`}>
                                   {s.pagado ? '💰 Pagado' : 'Sin Pagar'}
                                 </button>
@@ -1173,9 +1334,12 @@ export function Dashboard() {
                             {s.folio && (
                               <button onClick={() => handleImprimirFolio(s)} className="flex-1 text-slate-300 bg-slate-700/30 py-2.5 rounded-xl text-xs font-semibold">🖨️ Ticket</button>
                             )}
+                            {s.estado === 'COMPLETADO' && (
+                              <button onClick={() => handleConfirmarEntrega(s.id)} className="flex-1 text-emerald-400 bg-emerald-500/10 py-2.5 rounded-xl text-xs font-semibold">📦 Entregar</button>
+                            )}
                             {s.estado === 'NO REALIZADO' ? (
                               <button onClick={() => handleReactivar(s.id)} className="flex-1 text-amber-400 bg-amber-500/10 py-2.5 rounded-xl text-xs font-semibold">↺ Activar</button>
-                            ) : (
+                            ) : s.estado !== 'ENTREGADO' && (
                               <button onClick={() => handleMarcarNoRealizado(s.id)} className="flex-1 text-orange-400 bg-orange-500/10 py-2.5 rounded-xl text-xs font-semibold">✕ Canc</button>
                             )}
                           </div>
@@ -1217,9 +1381,22 @@ export function Dashboard() {
                                 {s.metodo_pago && <span className="block text-[10px] text-slate-500">{s.metodo_pago}</span>}
                               </td>
                               <td className="py-3.5 px-3">
-                                <button onClick={() => handleToggleEstado(s.id, s.estado)} title="Haz clic para cambiar el estado" className={`border px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all shadow-sm hover:opacity-80 ${getBadgeColor(s.estado, s.created_at)}`}>
-                                  {s.estado} {s.estado !== 'NO REALIZADO' && '🔄'}
-                                </button>
+                                {['PENDIENTE', 'EN PROCESO', 'PAUSADO'].includes(s.estado) ? (
+                                  <select
+                                    value={s.estado}
+                                    onChange={(e) => handleCambiarEstado(s.id, s.estado, e.target.value)}
+                                    title="Cambiar estado"
+                                    className={`border px-2 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all shadow-sm ${getBadgeColor(s.estado, s.created_at)}`}
+                                  >
+                                    {opcionesEstadoDisponibles(s.estado).map((op) => (
+                                      <option key={op} value={op}>{op}</option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <span className={`border px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase shadow-sm ${getBadgeColor(s.estado, s.created_at)}`}>
+                                    {s.estado}
+                                  </span>
+                                )}
                               </td>
                               <td className="py-3.5 px-3">
                                 <button onClick={() => handleTogglePagado(s.id, s.pagado)} title="Haz clic para marcar pagado/sin pagar" className={`border px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all ${s.pagado ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800/60 text-slate-400 border-slate-700'}`}>
@@ -1233,9 +1410,12 @@ export function Dashboard() {
                                   {s.folio && (
                                     <button onClick={() => handleImprimirFolio(s)} title="Imprimir folio" className="text-slate-300 hover:text-white bg-slate-700/30 hover:bg-slate-700/50 px-2 py-1 rounded-lg text-xs font-semibold transition-colors">🖨️</button>
                                   )}
+                                  {s.estado === 'COMPLETADO' && (
+                                    <button onClick={() => handleConfirmarEntrega(s.id)} title="Confirmar entrega al cliente" className="text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors">📦</button>
+                                  )}
                                   {s.estado === 'NO REALIZADO' ? (
                                     <button onClick={() => handleReactivar(s.id)} title="Reactivar trabajo" className="text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors">↺</button>
-                                  ) : (
+                                  ) : s.estado !== 'ENTREGADO' && (
                                     <button onClick={() => handleMarcarNoRealizado(s.id)} title="Marcar como no realizado" className="text-orange-400 hover:text-orange-300 bg-orange-500/10 hover:bg-orange-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors">✕</button>
                                   )}
                                   <button onClick={() => handleDeleteServicio(s.id)} title="Eliminar registro" className="text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors">Borrar</button>
@@ -1443,6 +1623,122 @@ export function Dashboard() {
                   );
                 })}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===================== PESTAÑA: GARANTÍAS ===================== */}
+        {vista === 'garantias' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
+            <div className="space-y-6 lg:col-span-1">
+              {/* Formulario */}
+              <div className={`bg-slate-900/80 border ${T.borde} p-5 md:p-6 rounded-2xl shadow-xl backdrop-blur-md h-fit transition-colors`}>
+                <h2 className={`text-base font-bold ${T.texto} uppercase tracking-wider flex items-center gap-2 mb-5`}>
+                  <span className={`w-2 h-2 rounded-full ${T.dot}`}></span>
+                  Registrar Garantía
+                </h2>
+                <form onSubmit={handleAgregarGarantia} className="space-y-4">
+                  <div className="relative">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Folio del trabajo</label>
+                    <input
+                      type="text"
+                      value={folioGarantia}
+                      onChange={(e) => {
+                        setFolioGarantia(e.target.value);
+                        setServicioIdGarantia(null);
+                        setSugerenciasFolioVisibles(true);
+                      }}
+                      onFocus={() => setSugerenciasFolioVisibles(true)}
+                      onBlur={() => setTimeout(() => setSugerenciasFolioVisibles(false), 150)}
+                      required
+                      autoComplete="off"
+                      placeholder="Ej. F13"
+                      className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all font-mono`}
+                    />
+                    {sugerenciasFolioVisibles && sugerenciasFolio.length > 0 && (
+                      <div className={`absolute z-20 mt-1 w-full bg-slate-950 border ${T.sugerenciaBorde} rounded-xl overflow-hidden shadow-xl`}>
+                        {sugerenciasFolio.map((s) => (
+                          <button
+                            type="button"
+                            key={s.id}
+                            onClick={() => handleSeleccionarFolio(s)}
+                            className={`w-full text-left px-4 py-3 text-sm text-slate-200 ${T.sugerenciaHover} transition-colors flex justify-between items-center gap-2`}
+                          >
+                            <span className="font-mono">{s.folio}</span>
+                            <span className="text-xs text-slate-500 truncate">{s.clientes?.nombre} · {s.modelo_equipo}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {servicioIdGarantia && (
+                      <p className="text-[10px] text-emerald-400 mt-1">✓ Trabajo encontrado y enlazado</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Descripción del problema</label>
+                    <textarea
+                      value={descripcionGarantia}
+                      onChange={(e) => setDescripcionGarantia(e.target.value)}
+                      required
+                      rows={3}
+                      placeholder="Ej. No quitó la cuenta"
+                      className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all resize-none`}
+                    />
+                  </div>
+                  <button type="submit" className={`w-full py-3.5 md:py-3 rounded-xl text-xs md:text-sm uppercase tracking-wider font-black transition-all ${T.submit}`}>
+                    + Registrar Garantía
+                  </button>
+                </form>
+              </div>
+
+              {/* Ranking de clientes con más garantías este mes */}
+              <div className={`bg-slate-900/80 border ${T.borde2} p-5 rounded-2xl shadow-xl backdrop-blur-md transition-colors`}>
+                <h3 className={`text-xs font-bold ${T.texto2} uppercase tracking-widest mb-3`}>⚠️ Más Garantías Este Mes</h3>
+                <div className="space-y-2">
+                  {rankingClientesGarantiasMes.length === 0 ? (
+                    <p className="text-xs text-slate-500 py-2">Sin garantías este mes.</p>
+                  ) : (
+                    rankingClientesGarantiasMes.map(([nombre, cantidad], idx) => (
+                      <div key={nombre} className="flex justify-between items-center bg-slate-950/60 border border-slate-800/80 px-4 py-2 rounded-xl text-xs">
+                        <span className="font-semibold text-slate-300">#{idx + 1} {nombre}</span>
+                        <span className={`font-black ${T.fuerte2}`}>{cantidad}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Lista de garantías */}
+            <div className={`lg:col-span-2 bg-slate-900/80 border ${T.borde} p-5 md:p-6 rounded-2xl shadow-xl backdrop-blur-md transition-colors`}>
+              <h2 className={`text-base font-bold ${T.texto} uppercase tracking-wider flex items-center gap-2 mb-5`}>
+                <span className={`w-2 h-2 rounded-full ${T.dot2}`}></span>
+                Historial de Garantías
+              </h2>
+              {garantiasConIntensidad.length === 0 ? (
+                <p className="text-sm text-slate-400 py-8 text-center">No hay garantías registradas.</p>
+              ) : (
+                <div className="space-y-3">
+                  {garantiasConIntensidad.map((g) => (
+                    <div key={g.id} className={`border rounded-xl p-4 ${g.colorClasses}`}>
+                      <div className="flex justify-between items-start gap-3">
+                        <div>
+                          <div className="font-mono font-black text-sm">{g.folio}</div>
+                          <div className="text-xs text-slate-300 mt-0.5">
+                            {g.servicios?.clientes?.nombre || 'Cliente desconocido'} · {g.servicios?.modelo_equipo} ({g.servicios?.tipo_trabajo})
+                          </div>
+                        </div>
+                        <div className="text-right flex flex-col items-end gap-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider">{g.ordinal}ª este mes</span>
+                          <button onClick={() => handleEliminarGarantia(g.id)} className="text-[10px] text-slate-400 hover:text-rose-400 transition-colors">Eliminar</button>
+                        </div>
+                      </div>
+                      <p className="text-sm text-slate-200 mt-2">{g.descripcion}</p>
+                      <p className="text-[10px] text-slate-500 mt-2">{getFechaLocal(g.created_at)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
