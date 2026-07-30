@@ -23,6 +23,8 @@ export interface Servicio {
   pagado: boolean;
   pagado_at?: string | null;
   imei_estado?: string;
+  es_revision?: boolean;
+  diagnostico?: string | null;
   clientes?: Cliente;
 }
 
@@ -33,6 +35,7 @@ export interface EquipoForm {
   tipoTrabajoOtro: string;
   monto: string;
   metodoPago: string;
+  esRevision: boolean;
 }
 
 export const equipoVacio = (): EquipoForm => ({
@@ -42,6 +45,7 @@ export const equipoVacio = (): EquipoForm => ({
   tipoTrabajoOtro: '',
   monto: '',
   metodoPago: 'Efectivo',
+  esRevision: false,
 });
 
 export interface Garantia {

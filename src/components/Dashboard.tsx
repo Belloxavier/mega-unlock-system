@@ -129,7 +129,7 @@ export function Dashboard() {
     setEquipos((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const handleCambiarEquipo = (idx: number, campo: keyof EquipoForm, valor: string) => {
+  const handleCambiarEquipo = <K extends keyof EquipoForm>(idx: number, campo: K, valor: EquipoForm[K]) => {
     setEquipos((prev) => prev.map((eq, i) => (i === idx ? { ...eq, [campo]: valor } : eq)));
   };
 
@@ -167,7 +167,7 @@ export function Dashboard() {
 
     if (editandoId) {
       const eq = equipos[0];
-      if (!eq.modelo || !eq.monto) return;
+      if (!eq.modelo || (!eq.esRevision && !eq.monto)) return;
       if (eq.tipoTrabajo === 'Otros' && !eq.tipoTrabajoOtro.trim()) {
         alert('Escribe el tipo de servicio en "Otros"');
         return;
@@ -187,8 +187,9 @@ export function Dashboard() {
           modelo_equipo: eq.modelo,
           imei_serie: eq.imeiSerie || null,
           tipo_trabajo: tipoTrabajoFinal,
-          monto: parseFloat(eq.monto),
+          monto: eq.monto ? parseFloat(eq.monto) : 0,
           metodo_pago: eq.metodoPago,
+          es_revision: eq.esRevision,
         })
         .eq('id', editandoId);
 
@@ -206,8 +207,8 @@ export function Dashboard() {
     const equiposValidos = equipos.filter((eq) => eq.modelo.trim() !== '' || eq.monto.trim() !== '');
     if (equiposValidos.length === 0) return;
     for (const eq of equiposValidos) {
-      if (!eq.modelo || !eq.monto) {
-        alert('Cada equipo necesita al menos el modelo y el monto.');
+      if (!eq.modelo || (!eq.esRevision && !eq.monto)) {
+        alert('Cada equipo necesita al menos el modelo y el monto (salvo que sea una revisión).');
         return;
       }
       if (eq.tipoTrabajo === 'Otros' && !eq.tipoTrabajoOtro.trim()) {
@@ -271,9 +272,10 @@ export function Dashboard() {
         imei_serie: eq.imeiSerie || null,
         tipo_trabajo: tipoTrabajoFinal,
         folio: siguienteFolio(tipoTrabajoFinal),
-        monto: parseFloat(eq.monto),
+        monto: eq.monto ? parseFloat(eq.monto) : 0,
         estado: 'PENDIENTE',
         metodo_pago: eq.metodoPago,
+        es_revision: eq.esRevision,
       };
     });
 
@@ -302,6 +304,7 @@ export function Dashboard() {
         tipoTrabajoOtro: TIPOS_ESTANDAR.includes(s.tipo_trabajo) ? '' : s.tipo_trabajo,
         monto: s.monto.toString(),
         metodoPago: s.metodo_pago || 'Efectivo',
+        esRevision: s.es_revision || false,
       },
     ]);
   };
@@ -335,6 +338,24 @@ export function Dashboard() {
     let ventanaWhatsApp: Window | null = null;
     let avisarWhatsApp = false;
 
+    // Una revisión no tiene precio al crearse — se pide el diagnóstico y el
+    // precio final justo antes de marcarla como completada.
+    let diagnosticoFinal: string | undefined;
+    let montoFinal: number | undefined;
+    if (nuevoEstado === 'COMPLETADO' && servicioActual?.es_revision) {
+      const diagnosticoInput = window.prompt('¿Qué se encontró o se hizo en la revisión?', servicioActual.diagnostico || '');
+      if (diagnosticoInput === null || !diagnosticoInput.trim()) return;
+      const precioInput = window.prompt('Precio final a cobrar:', servicioActual.monto ? servicioActual.monto.toString() : '');
+      if (precioInput === null) return;
+      const precioParseado = parseFloat(precioInput);
+      if (isNaN(precioParseado) || precioParseado < 0) {
+        alert('Precio inválido');
+        return;
+      }
+      diagnosticoFinal = diagnosticoInput.trim();
+      montoFinal = precioParseado;
+    }
+
     if (nuevoEstado === 'COMPLETADO' && tieneWhatsApp) {
       const otrosPendientes = servicios.filter(
         (s) =>
@@ -351,8 +372,10 @@ export function Dashboard() {
       if (avisarWhatsApp) ventanaWhatsApp = window.open('', '_blank');
     }
 
-    const cambios: { estado: string; completado_at?: string; entregado_at?: string; pagado?: boolean; pagado_at?: string } = { estado: nuevoEstado };
+    const cambios: { estado: string; completado_at?: string; entregado_at?: string; pagado?: boolean; pagado_at?: string; diagnostico?: string; monto?: number } = { estado: nuevoEstado };
     if (nuevoEstado === 'COMPLETADO') cambios.completado_at = new Date().toISOString();
+    if (diagnosticoFinal !== undefined) cambios.diagnostico = diagnosticoFinal;
+    if (montoFinal !== undefined) cambios.monto = montoFinal;
     if (nuevoEstado === 'ENTREGADO') {
       // Por defecto se asume pagado al entregar; si no fue así, se destilda
       // manualmente con el botón Pagado/Sin Pagar.
@@ -374,7 +397,10 @@ export function Dashboard() {
     if (avisarWhatsApp && servicioActual && ventanaWhatsApp) {
       const numero = limpiarNumero(servicioActual.clientes?.telefono || '');
       const linkPago = cuentasList.length > 0 ? `\n\nDatos para transferencia: ${window.location.origin}/pago` : '';
-      const mensaje = `Hola ${servicioActual.clientes?.nombre || ''}, tu equipo ${servicioActual.modelo_equipo}${servicioActual.folio ? ` (folio ${servicioActual.folio})` : ''} ya está listo. Puedes pasar a retirarlo.${linkPago}`;
+      const referenciaFolio = servicioActual.folio ? ` (folio ${servicioActual.folio})` : '';
+      const mensaje = diagnosticoFinal !== undefined
+        ? `Hola ${servicioActual.clientes?.nombre || ''}, ya revisamos tu equipo ${servicioActual.modelo_equipo}${referenciaFolio}.\n\nDiagnóstico: ${diagnosticoFinal}\nPrecio: $${(montoFinal ?? 0).toFixed(2)}\n\nPuedes pasar a retirarlo.${linkPago}`
+        : `Hola ${servicioActual.clientes?.nombre || ''}, tu equipo ${servicioActual.modelo_equipo}${referenciaFolio} ya está listo. Puedes pasar a retirarlo.${linkPago}`;
       ventanaWhatsApp.location.href = `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
     } else {
       ventanaWhatsApp?.close();
@@ -1308,8 +1334,19 @@ export function Dashboard() {
                           />
                         )}
                       </div>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={eq.esRevision}
+                          onChange={(e) => handleCambiarEquipo(idx, 'esRevision', e.target.checked)}
+                          className="w-4 h-4 accent-amber-400"
+                        />
+                        <span className="text-xs font-bold text-slate-300">🔍 Es una revisión (el precio se define al terminar)</span>
+                      </label>
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Monto ($)</label>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
+                          Monto ($){eq.esRevision && <span className="text-slate-500 font-normal"> — opcional por ahora</span>}
+                        </label>
                         <input
                           type="number"
                           inputMode="decimal"
@@ -1317,8 +1354,8 @@ export function Dashboard() {
                           min="0"
                           value={eq.monto}
                           onChange={(e) => handleCambiarEquipo(idx, 'monto', e.target.value)}
-                          required={idx === 0}
-                          placeholder="0.00"
+                          required={idx === 0 && !eq.esRevision}
+                          placeholder={eq.esRevision ? 'Se define al terminar la revisión' : '0.00'}
                           className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
                         />
                       </div>
@@ -1417,7 +1454,9 @@ export function Dashboard() {
                               <div className="text-[11px] text-slate-400 mt-1">{getFechaLocal(s.created_at)}</div>
                             </div>
                             <div className="text-right">
-                              <div className={`font-black ${T.fuerte} text-lg`}>{fmt(s.monto)}</div>
+                              <div className={`font-black ${T.fuerte} text-lg`}>
+                                {s.es_revision && s.monto === 0 && !['COMPLETADO', 'ENTREGADO'].includes(s.estado) ? 'Por definir' : fmt(s.monto)}
+                              </div>
                               <div className={`text-[10px] uppercase ${T.fuerte}/70 mt-1`}>{s.clientes?.tipo_contacto === 'cliente' ? 'Cliente' : 'Técnico'}</div>
                             </div>
                           </div>
@@ -1436,8 +1475,14 @@ export function Dashboard() {
                             )}
                             <div className={`${T.texto} font-medium text-sm flex items-center justify-between gap-2`}>
                               <div className="flex flex-col">
-                                <span>{s.tipo_trabajo}</span>
+                                <span>
+                                  {s.tipo_trabajo}
+                                  {s.es_revision && (
+                                    <span className="ml-1.5 text-amber-400 text-[10px] font-bold uppercase align-middle" title={s.diagnostico || 'Revisión'}>🔍 Revisión</span>
+                                  )}
+                                </span>
                                 {s.metodo_pago && <span className="text-[10px] text-slate-500">{s.metodo_pago}</span>}
+                                {s.es_revision && s.diagnostico && <span className="text-[10px] text-slate-400 mt-0.5 max-w-[180px]">{s.diagnostico}</span>}
                               </div>
                               <div className="flex flex-col items-end gap-1.5">
                                 {renderEstadoControl(s, 'right')}
@@ -1502,7 +1547,11 @@ export function Dashboard() {
                               </td>
                               <td className={`py-3.5 px-3 ${T.texto} font-medium`}>
                                 {s.tipo_trabajo}
+                                {s.es_revision && (
+                                  <span className="ml-1.5 text-amber-400 text-[10px] font-bold uppercase align-middle" title={s.diagnostico || 'Revisión'}>🔍 Revisión</span>
+                                )}
                                 {s.metodo_pago && <span className="block text-[10px] text-slate-500">{s.metodo_pago}</span>}
+                                {s.es_revision && s.diagnostico && <span className="block text-[10px] text-slate-400 mt-0.5">{s.diagnostico}</span>}
                               </td>
                               <td className="py-3.5 px-3">
                                 {renderEstadoControl(s, 'left')}
@@ -1515,7 +1564,9 @@ export function Dashboard() {
                                   {renderEditorFechaPago(s, 'left')}
                                 </div>
                               </td>
-                              <td className={`py-3.5 px-3 text-right font-black ${T.fuerte}`}>{fmt(s.monto)}</td>
+                              <td className={`py-3.5 px-3 text-right font-black ${T.fuerte}`}>
+                                {s.es_revision && s.monto === 0 && !['COMPLETADO', 'ENTREGADO'].includes(s.estado) ? 'Por definir' : fmt(s.monto)}
+                              </td>
                               <td className="py-3.5 px-3 text-center">
                                 <div className="flex items-center justify-center gap-1.5">
                                   {s.folio && (
