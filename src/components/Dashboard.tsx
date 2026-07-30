@@ -372,21 +372,26 @@ export function Dashboard() {
 
   const limpiarNumero = (tel: string) => tel.replace(/\D/g, '');
 
-  // Estados "en curso" y sus siguientes pasos válidos. Nunca hacia atrás
-  // (salvo reanudar desde Pausado, que no es un retroceso real) y sin ciclo:
-  // una vez COMPLETADO, ese control queda bloqueado — para pasar a ENTREGADO
-  // hay que usar handleConfirmarEntrega, una acción aparte y confirmada.
+  // Estados "en curso" y sus siguientes pasos válidos: siempre hacia
+  // adelante en el mismo selector (nunca hay que buscar un botón aparte),
+  // salvo reanudar desde Pausado, que no es un retroceso real. Una vez
+  // ENTREGADO o NO REALIZADO, es terminal — ya no se puede volver a cambiar.
   const opcionesEstadoDisponibles = (estadoActual: string): string[] => {
     switch (estadoActual) {
       case 'PENDIENTE': return ['PENDIENTE', 'EN PROCESO', 'PAUSADO'];
       case 'EN PROCESO': return ['EN PROCESO', 'PAUSADO', 'COMPLETADO'];
       case 'PAUSADO': return ['PAUSADO', 'EN PROCESO', 'COMPLETADO'];
+      case 'COMPLETADO': return ['COMPLETADO', 'ENTREGADO'];
       default: return [estadoActual];
     }
   };
 
   const handleCambiarEstado = async (id: string, estadoActual: string, nuevoEstado: string) => {
     if (nuevoEstado === estadoActual) return;
+
+    if (nuevoEstado === 'ENTREGADO') {
+      if (!window.confirm('¿Confirmas que el cliente retiró el equipo? Esto no se puede deshacer.')) return;
+    }
 
     const servicioActual = servicios.find((s) => s.id === id);
     const tieneWhatsApp = !!servicioActual?.clientes?.telefono;
@@ -409,13 +414,22 @@ export function Dashboard() {
       if (avisarWhatsApp) ventanaWhatsApp = window.open('', '_blank');
     }
 
-    const cambios: { estado: string; completado_at?: string } = { estado: nuevoEstado };
+    const cambios: { estado: string; completado_at?: string; entregado_at?: string; pagado?: boolean; pagado_at?: string } = { estado: nuevoEstado };
     if (nuevoEstado === 'COMPLETADO') cambios.completado_at = new Date().toISOString();
+    if (nuevoEstado === 'ENTREGADO') {
+      cambios.entregado_at = new Date().toISOString();
+      // Si no lo habían marcado pagado antes (adelanto), se asume que se paga al entregar.
+      if (!servicioActual?.pagado) {
+        cambios.pagado = true;
+        cambios.pagado_at = cambios.entregado_at;
+      }
+    }
 
     const { error } = await supabase.from('servicios').update(cambios).eq('id', id);
 
     if (error) {
       ventanaWhatsApp?.close();
+      alert(`No se pudo cambiar el estado: ${error.message}`);
       return;
     }
 
@@ -430,29 +444,16 @@ export function Dashboard() {
     }
   };
 
-  const handleConfirmarEntrega = async (id: string) => {
-    if (!window.confirm('¿Confirmas que el cliente retiró el equipo? Esto no se puede deshacer.')) return;
-    const servicioActual = servicios.find((s) => s.id === id);
-    const entregadoAt = new Date().toISOString();
-    const cambios: { estado: string; entregado_at: string; pagado?: boolean; pagado_at?: string } = {
-      estado: 'ENTREGADO',
-      entregado_at: entregadoAt,
-    };
-    // Si no lo habían marcado pagado antes (adelanto), se asume que se paga al entregar.
-    if (!servicioActual?.pagado) {
-      cambios.pagado = true;
-      cambios.pagado_at = entregadoAt;
-    }
-    const { error } = await supabase.from('servicios').update(cambios).eq('id', id);
-    if (!error) fetchServicios();
-  };
-
   const handleTogglePagado = async (id: string, pagadoActual: boolean) => {
     const cambios = pagadoActual
       ? { pagado: false, pagado_at: null }
       : { pagado: true, pagado_at: new Date().toISOString() };
     const { error } = await supabase.from('servicios').update(cambios).eq('id', id);
-    if (!error) fetchServicios();
+    if (!error) {
+      fetchServicios();
+    } else {
+      alert(`No se pudo actualizar el pago: ${error.message}`);
+    }
   };
 
   const handleMarcarNoRealizado = async (id: string) => {
@@ -551,7 +552,7 @@ export function Dashboard() {
       limpiarFormularioGarantia();
       fetchGarantias();
     } else {
-      alert('Error al registrar la garantía');
+      alert(`Error al registrar la garantía: ${error.message}`);
     }
   };
 
@@ -1307,7 +1308,7 @@ export function Dashboard() {
                                 {s.metodo_pago && <span className="text-[10px] text-slate-500">{s.metodo_pago}</span>}
                               </div>
                               <div className="flex flex-col items-end gap-1.5">
-                                {['PENDIENTE', 'EN PROCESO', 'PAUSADO'].includes(s.estado) ? (
+                                {!['ENTREGADO', 'NO REALIZADO'].includes(s.estado) ? (
                                   <select
                                     value={s.estado}
                                     onChange={(e) => handleCambiarEstado(s.id, s.estado, e.target.value)}
@@ -1333,9 +1334,6 @@ export function Dashboard() {
                             <button onClick={() => handleIniciarEdicion(s)} className={`flex-1 ${T.accionEditar} py-2.5 rounded-xl text-xs font-semibold`}>✏️ Editar</button>
                             {s.folio && (
                               <button onClick={() => handleImprimirFolio(s)} className="flex-1 text-slate-300 bg-slate-700/30 py-2.5 rounded-xl text-xs font-semibold">🖨️ Ticket</button>
-                            )}
-                            {s.estado === 'COMPLETADO' && (
-                              <button onClick={() => handleConfirmarEntrega(s.id)} className="flex-1 text-emerald-400 bg-emerald-500/10 py-2.5 rounded-xl text-xs font-semibold">📦 Entregar</button>
                             )}
                             {s.estado === 'NO REALIZADO' ? (
                               <button onClick={() => handleReactivar(s.id)} className="flex-1 text-amber-400 bg-amber-500/10 py-2.5 rounded-xl text-xs font-semibold">↺ Activar</button>
@@ -1381,7 +1379,7 @@ export function Dashboard() {
                                 {s.metodo_pago && <span className="block text-[10px] text-slate-500">{s.metodo_pago}</span>}
                               </td>
                               <td className="py-3.5 px-3">
-                                {['PENDIENTE', 'EN PROCESO', 'PAUSADO'].includes(s.estado) ? (
+                                {!['ENTREGADO', 'NO REALIZADO'].includes(s.estado) ? (
                                   <select
                                     value={s.estado}
                                     onChange={(e) => handleCambiarEstado(s.id, s.estado, e.target.value)}
@@ -1409,9 +1407,6 @@ export function Dashboard() {
                                   <button onClick={() => handleIniciarEdicion(s)} title="Editar registro" className={`${T.accionEditar} ${T.accionEditarHover} px-2 py-1 rounded-lg text-xs font-semibold transition-colors`}>✏️</button>
                                   {s.folio && (
                                     <button onClick={() => handleImprimirFolio(s)} title="Imprimir folio" className="text-slate-300 hover:text-white bg-slate-700/30 hover:bg-slate-700/50 px-2 py-1 rounded-lg text-xs font-semibold transition-colors">🖨️</button>
-                                  )}
-                                  {s.estado === 'COMPLETADO' && (
-                                    <button onClick={() => handleConfirmarEntrega(s.id)} title="Confirmar entrega al cliente" className="text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors">📦</button>
                                   )}
                                   {s.estado === 'NO REALIZADO' ? (
                                     <button onClick={() => handleReactivar(s.id)} title="Reactivar trabajo" className="text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors">↺</button>
