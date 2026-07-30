@@ -117,7 +117,16 @@ Deno.serve(async () => {
 
   const servicios = (serviciosSemana || []) as unknown as Servicio[];
 
-  const cajaSemana = servicios.filter((s) => s.estado === 'ENTREGADO').reduce((acc, s) => acc + (s.monto || 0), 0);
+  // La caja se calcula por cuándo se COBRÓ (pagado_at), no por cuándo se
+  // registró el trabajo: un trabajo de la semana pasada cobrado esta semana
+  // cuenta para la caja de esta semana, y viceversa.
+  const { data: pagosSemana } = await supabase
+    .from('servicios')
+    .select('monto')
+    .eq('pagado', true)
+    .gte('pagado_at', hace7dias.toISOString())
+    .lte('pagado_at', ahora.toISOString());
+  const cajaSemana = (pagosSemana || []).reduce((acc, s) => acc + (s.monto || 0), 0);
 
   const construirRanking = (tipo: 'tecnico' | 'cliente') => {
     const obj: { [key: string]: { nombre: string; dinero: number; visitas: number } } = {};

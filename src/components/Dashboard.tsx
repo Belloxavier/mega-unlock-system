@@ -20,8 +20,28 @@ interface Servicio {
   created_at: string;
   completado_at?: string | null;
   entregado_at?: string | null;
+  pagado: boolean;
+  pagado_at?: string | null;
   clientes?: Cliente;
 }
+
+interface EquipoForm {
+  modelo: string;
+  imeiSerie: string;
+  tipoTrabajo: string;
+  tipoTrabajoOtro: string;
+  monto: string;
+  metodoPago: string;
+}
+
+const equipoVacio = (): EquipoForm => ({
+  modelo: '',
+  imeiSerie: '',
+  tipoTrabajo: 'Cuenta Mi',
+  tipoTrabajoOtro: '',
+  monto: '',
+  metodoPago: 'Efectivo',
+});
 
 const ZONA_HORARIA = 'America/Santiago';
 const PAGE_SIZE = 10;
@@ -88,6 +108,7 @@ export function Dashboard() {
   // Filtros y Buscador (pestaña Inicio)
   const [busqueda, setBusqueda] = useState('');
   const [filtroFecha, setFiltroFecha] = useState('todos'); // 'todos', 'hoy', 'mes'
+  const [filtroEstado, setFiltroEstado] = useState('todos'); // 'todos' | estado exacto
   const [mostrarMontos, setMostrarMontos] = useState(true);
   const [paginaActual, setPaginaActual] = useState(1);
   const [temaCalido, setTemaCalido] = useState(false);
@@ -103,12 +124,7 @@ export function Dashboard() {
   const [telefonoCliente, setTelefonoCliente] = useState('');
   const [tipoContacto, setTipoContacto] = useState<'tecnico' | 'cliente'>('tecnico');
   const [sugerenciasVisibles, setSugerenciasVisibles] = useState(false);
-  const [modelo, setModelo] = useState('');
-  const [imeiSerie, setImeiSerie] = useState('');
-  const [tipoTrabajo, setTipoTrabajo] = useState('Cuenta Mi');
-  const [tipoTrabajoOtro, setTipoTrabajoOtro] = useState('');
-  const [monto, setMonto] = useState('');
-  const [metodoPago, setMetodoPago] = useState('Efectivo');
+  const [equipos, setEquipos] = useState<EquipoForm[]>([equipoVacio()]);
 
   useEffect(() => {
     fetchServicios();
@@ -117,7 +133,7 @@ export function Dashboard() {
 
   useEffect(() => {
     setPaginaActual(1);
-  }, [busqueda, filtroFecha]);
+  }, [busqueda, filtroFecha, filtroEstado]);
 
   const fetchServicios = async () => {
     setLoading(true);
@@ -159,33 +175,46 @@ export function Dashboard() {
     setSugerenciasVisibles(true);
   };
 
+  const handleAgregarEquipo = () => {
+    setEquipos((prev) => [...prev, equipoVacio()]);
+  };
+
+  const handleQuitarEquipo = (idx: number) => {
+    setEquipos((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleCambiarEquipo = (idx: number, campo: keyof EquipoForm, valor: string) => {
+    setEquipos((prev) => prev.map((eq, i) => (i === idx ? { ...eq, [campo]: valor } : eq)));
+  };
+
   const handleGuardarServicio = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!modelo || !monto || !nombreCliente) return;
-    if (tipoTrabajo === 'Otros' && !tipoTrabajoOtro.trim()) {
-      alert('Escribe el tipo de servicio en "Otros"');
-      return;
-    }
-
-    const tipoTrabajoFinal = tipoTrabajo === 'Otros' ? tipoTrabajoOtro.trim() : tipoTrabajo;
-    let clienteId = clienteIdAsociado;
+    if (!nombreCliente) return;
 
     if (editandoId) {
-      if (clienteId) {
+      const eq = equipos[0];
+      if (!eq.modelo || !eq.monto) return;
+      if (eq.tipoTrabajo === 'Otros' && !eq.tipoTrabajoOtro.trim()) {
+        alert('Escribe el tipo de servicio en "Otros"');
+        return;
+      }
+      const tipoTrabajoFinal = eq.tipoTrabajo === 'Otros' ? eq.tipoTrabajoOtro.trim() : eq.tipoTrabajo;
+
+      if (clienteIdAsociado) {
         await supabase
           .from('clientes')
           .update({ nombre: nombreCliente, telefono: telefonoCliente || null, tipo_contacto: tipoContacto })
-          .eq('id', clienteId);
+          .eq('id', clienteIdAsociado);
       }
 
       const { error: servicioError } = await supabase
         .from('servicios')
         .update({
-          modelo_equipo: modelo,
-          imei_serie: imeiSerie || null,
+          modelo_equipo: eq.modelo,
+          imei_serie: eq.imeiSerie || null,
           tipo_trabajo: tipoTrabajoFinal,
-          monto: parseFloat(monto),
-          metodo_pago: metodoPago,
+          monto: parseFloat(eq.monto),
+          metodo_pago: eq.metodoPago,
         })
         .eq('id', editandoId);
 
@@ -199,6 +228,21 @@ export function Dashboard() {
       return;
     }
 
+    // Alta nueva: puede traer varios equipos del mismo cliente en un solo envío.
+    const equiposValidos = equipos.filter((eq) => eq.modelo.trim() !== '' || eq.monto.trim() !== '');
+    if (equiposValidos.length === 0) return;
+    for (const eq of equiposValidos) {
+      if (!eq.modelo || !eq.monto) {
+        alert('Cada equipo necesita al menos el modelo y el monto.');
+        return;
+      }
+      if (eq.tipoTrabajo === 'Otros' && !eq.tipoTrabajoOtro.trim()) {
+        alert('Escribe el tipo de servicio en "Otros"');
+        return;
+      }
+    }
+
+    let clienteId = clienteIdAsociado;
     if (!clienteId) {
       const existente = clientesList.find(
         (c) => c.nombre.trim().toLowerCase() === nombreCliente.trim().toLowerCase()
@@ -220,18 +264,34 @@ export function Dashboard() {
       }
     }
 
-    const { error: servicioError } = await supabase.from('servicios').insert([
-      {
+    // Genera folios en secuencia dentro del mismo lote (dos equipos del mismo
+    // tipo en un envío no pueden compartir número de folio).
+    const contadorFolios: { [prefijo: string]: number } = {};
+    const siguienteFolio = (tipo: string) => {
+      const prefijo = getPrefijo(tipo);
+      if (contadorFolios[prefijo] === undefined) {
+        const actual = generarFolio(tipo, servicios);
+        contadorFolios[prefijo] = parseInt(actual.slice(prefijo.length), 10) - 1;
+      }
+      contadorFolios[prefijo] += 1;
+      return `${prefijo}${contadorFolios[prefijo]}`;
+    };
+
+    const filas = equiposValidos.map((eq) => {
+      const tipoTrabajoFinal = eq.tipoTrabajo === 'Otros' ? eq.tipoTrabajoOtro.trim() : eq.tipoTrabajo;
+      return {
         cliente_id: clienteId,
-        modelo_equipo: modelo,
-        imei_serie: imeiSerie || null,
+        modelo_equipo: eq.modelo,
+        imei_serie: eq.imeiSerie || null,
         tipo_trabajo: tipoTrabajoFinal,
-        folio: generarFolio(tipoTrabajoFinal, servicios),
-        monto: parseFloat(monto),
+        folio: siguienteFolio(tipoTrabajoFinal),
+        monto: parseFloat(eq.monto),
         estado: 'PENDIENTE',
-        metodo_pago: metodoPago,
-      },
-    ]);
+        metodo_pago: eq.metodoPago,
+      };
+    });
+
+    const { error: servicioError } = await supabase.from('servicios').insert(filas);
 
     if (!servicioError) {
       limpiarFormulario();
@@ -248,17 +308,16 @@ export function Dashboard() {
     setNombreCliente(s.clientes?.nombre || '');
     setTelefonoCliente(s.clientes?.telefono || '');
     setTipoContacto((s.clientes?.tipo_contacto as 'tecnico' | 'cliente') || 'tecnico');
-    setModelo(s.modelo_equipo);
-    setImeiSerie(s.imei_serie || '');
-    if (TIPOS_ESTANDAR.includes(s.tipo_trabajo)) {
-      setTipoTrabajo(s.tipo_trabajo);
-      setTipoTrabajoOtro('');
-    } else {
-      setTipoTrabajo('Otros');
-      setTipoTrabajoOtro(s.tipo_trabajo);
-    }
-    setMonto(s.monto.toString());
-    setMetodoPago(s.metodo_pago || 'Efectivo');
+    setEquipos([
+      {
+        modelo: s.modelo_equipo,
+        imeiSerie: s.imei_serie || '',
+        tipoTrabajo: TIPOS_ESTANDAR.includes(s.tipo_trabajo) ? s.tipo_trabajo : 'Otros',
+        tipoTrabajoOtro: TIPOS_ESTANDAR.includes(s.tipo_trabajo) ? '' : s.tipo_trabajo,
+        monto: s.monto.toString(),
+        metodoPago: s.metodo_pago || 'Efectivo',
+      },
+    ]);
   };
 
   const limpiarFormulario = () => {
@@ -267,12 +326,7 @@ export function Dashboard() {
     setNombreCliente('');
     setTelefonoCliente('');
     setTipoContacto('tecnico');
-    setModelo('');
-    setImeiSerie('');
-    setTipoTrabajo('Cuenta Mi');
-    setTipoTrabajoOtro('');
-    setMonto('');
-    setMetodoPago('Efectivo');
+    setEquipos([equipoVacio()]);
   };
 
   const limpiarNumero = (tel: string) => tel.replace(/\D/g, '');
@@ -290,9 +344,16 @@ export function Dashboard() {
       ventanaWhatsApp = window.open('', '_blank');
     }
 
-    const cambios: { estado: string; completado_at?: string; entregado_at?: string } = { estado: siguienteEstado };
+    const cambios: { estado: string; completado_at?: string; entregado_at?: string; pagado?: boolean; pagado_at?: string } = { estado: siguienteEstado };
     if (siguienteEstado === 'COMPLETADO') cambios.completado_at = new Date().toISOString();
-    if (siguienteEstado === 'ENTREGADO') cambios.entregado_at = new Date().toISOString();
+    if (siguienteEstado === 'ENTREGADO') {
+      cambios.entregado_at = new Date().toISOString();
+      // Si no lo habían marcado pagado antes (adelanto), se asume que se paga al entregar.
+      if (!servicioActual?.pagado) {
+        cambios.pagado = true;
+        cambios.pagado_at = cambios.entregado_at;
+      }
+    }
 
     const { error } = await supabase.from('servicios').update(cambios).eq('id', id);
 
@@ -310,6 +371,14 @@ export function Dashboard() {
     } else {
       ventanaWhatsApp?.close();
     }
+  };
+
+  const handleTogglePagado = async (id: string, pagadoActual: boolean) => {
+    const cambios = pagadoActual
+      ? { pagado: false, pagado_at: null }
+      : { pagado: true, pagado_at: new Date().toISOString() };
+    const { error } = await supabase.from('servicios').update(cambios).eq('id', id);
+    if (!error) fetchServicios();
   };
 
   const handleMarcarNoRealizado = async (id: string) => {
@@ -383,7 +452,7 @@ export function Dashboard() {
   // Todo lo derivado de `servicios` recorre listas potencialmente largas con
   // .filter/.reduce; se memoiza para que escribir en el formulario (que no
   // cambia estos datos) no dispare esos cálculos en cada tecla.
-  const serviciosFiltrados = useMemo(() => {
+  const serviciosBase = useMemo(() => {
     return servicios.filter((s) => {
       const textoMatch =
         s.modelo_equipo.toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -405,6 +474,19 @@ export function Dashboard() {
     });
   }, [servicios, busqueda, filtroFecha]);
 
+  const conteosPorEstado = useMemo(() => {
+    const counts: { [estado: string]: number } = {};
+    serviciosBase.forEach((s) => {
+      counts[s.estado] = (counts[s.estado] || 0) + 1;
+    });
+    return counts;
+  }, [serviciosBase]);
+
+  const serviciosFiltrados = useMemo(() => {
+    if (filtroEstado === 'todos') return serviciosBase;
+    return serviciosBase.filter((s) => s.estado === filtroEstado);
+  }, [serviciosBase, filtroEstado]);
+
   const totalPaginas = Math.max(1, Math.ceil(serviciosFiltrados.length / PAGE_SIZE));
   const serviciosPaginados = serviciosFiltrados.slice((paginaActual - 1) * PAGE_SIZE, paginaActual * PAGE_SIZE);
 
@@ -419,12 +501,15 @@ export function Dashboard() {
     cajaMesPasado,
     deltaSemana,
     deltaMes,
-    porCobrarHoy,
-    porCobrarSemana,
-    porCobrarMes,
+    porCobrarTotal,
     flujoPorDiaObj,
     maxFlujoDia,
   } = useMemo(() => {
+    // La caja se cuenta por la fecha en que se COBRÓ (pagado_at), no por
+    // cuándo se registró el trabajo — si no, un trabajo del lunes cobrado
+    // el martes no aparecía en la caja de ningún día.
+    const fechaPago = (s: Servicio) => s.pagado_at || s.entregado_at || s.created_at;
+
     const esDeEstaSemana = (fechaStr: string) => {
       const fecha = new Date(fechaStr);
       const hoy = new Date();
@@ -439,48 +524,43 @@ export function Dashboard() {
       return diffDays > 7 && diffDays <= 14;
     };
 
-    const cajaHoy = servicios
-      .filter((s) => getFechaLocal(s.created_at) === hoyStr && s.estado === 'ENTREGADO')
+    const pagados = servicios.filter((s) => s.pagado);
+
+    const cajaHoy = pagados
+      .filter((s) => getFechaLocal(fechaPago(s)) === hoyStr)
       .reduce((acc, c) => acc + (c.monto || 0), 0);
-    const cajaSemana = servicios
-      .filter((s) => esDeEstaSemana(s.created_at) && s.estado === 'ENTREGADO')
+    const cajaSemana = pagados
+      .filter((s) => esDeEstaSemana(fechaPago(s)))
       .reduce((acc, c) => acc + (c.monto || 0), 0);
-    const cajaMes = servicios
-      .filter((s) => getFechaLocal(s.created_at).slice(0, 7) === mesActualStr && s.estado === 'ENTREGADO')
+    const cajaMes = pagados
+      .filter((s) => getFechaLocal(fechaPago(s)).slice(0, 7) === mesActualStr)
       .reduce((acc, c) => acc + (c.monto || 0), 0);
-    const cajaSemanaPasada = servicios
-      .filter((s) => esDeSemanaPasada(s.created_at) && s.estado === 'ENTREGADO')
+    const cajaSemanaPasada = pagados
+      .filter((s) => esDeSemanaPasada(fechaPago(s)))
       .reduce((acc, c) => acc + (c.monto || 0), 0);
     const mesPasadoStr = sumarMeses(mesActualStr, -1);
-    const cajaMesPasado = servicios
-      .filter((s) => getFechaLocal(s.created_at).slice(0, 7) === mesPasadoStr && s.estado === 'ENTREGADO')
+    const cajaMesPasado = pagados
+      .filter((s) => getFechaLocal(fechaPago(s)).slice(0, 7) === mesPasadoStr)
       .reduce((acc, c) => acc + (c.monto || 0), 0);
     const deltaSemana = cajaSemana - cajaSemanaPasada;
     const deltaMes = cajaMes - cajaMesPasado;
 
-    const enTallerEstados = ['PENDIENTE', 'EN PROCESO', 'COMPLETADO'];
-    const porCobrarHoy = servicios
-      .filter((s) => getFechaLocal(s.created_at) === hoyStr && enTallerEstados.includes(s.estado))
-      .reduce((acc, c) => acc + (c.monto || 0), 0);
-    const porCobrarSemana = servicios
-      .filter((s) => esDeEstaSemana(s.created_at) && enTallerEstados.includes(s.estado))
-      .reduce((acc, c) => acc + (c.monto || 0), 0);
-    const porCobrarMes = servicios
-      .filter((s) => getFechaLocal(s.created_at).slice(0, 7) === mesActualStr && enTallerEstados.includes(s.estado))
+    // Por Cobrar: total acumulado de todo lo no pagado, sin importar cuándo
+    // se registró — no se resetea con los días, solo baja cuando se cobra.
+    const porCobrarTotal = servicios
+      .filter((s) => !s.pagado && s.estado !== 'NO REALIZADO')
       .reduce((acc, c) => acc + (c.monto || 0), 0);
 
-    const flujoPorDiaObj = servicios
-      .filter((s) => s.estado === 'ENTREGADO')
-      .reduce((acc: { [dia: string]: number }, s) => {
-        const dia = getDiaSemana(s.created_at);
-        if (DIAS_SEMANA.includes(dia)) acc[dia] = (acc[dia] || 0) + (s.monto || 0);
-        return acc;
-      }, {});
+    const flujoPorDiaObj = pagados.reduce((acc: { [dia: string]: number }, s) => {
+      const dia = getDiaSemana(fechaPago(s));
+      if (DIAS_SEMANA.includes(dia)) acc[dia] = (acc[dia] || 0) + (s.monto || 0);
+      return acc;
+    }, {});
     const maxFlujoDia = Math.max(1, ...DIAS_SEMANA.map((d) => flujoPorDiaObj[d] || 0));
 
     return {
       cajaHoy, cajaSemana, cajaMes, cajaSemanaPasada, cajaMesPasado, deltaSemana, deltaMes,
-      porCobrarHoy, porCobrarSemana, porCobrarMes, flujoPorDiaObj, maxFlujoDia,
+      porCobrarTotal, flujoPorDiaObj, maxFlujoDia,
     };
   }, [servicios, hoyStr, mesActualStr]);
 
@@ -674,7 +754,7 @@ export function Dashboard() {
   };
 
   const handleExportarCSV = () => {
-    const columnas = ['Folio', 'Cliente', 'Tipo Contacto', 'Equipo', 'IMEI/Serie', 'Servicio', 'Estado', 'Metodo Pago', 'Monto', 'Fecha'];
+    const columnas = ['Folio', 'Cliente', 'Tipo Contacto', 'Equipo', 'IMEI/Serie', 'Servicio', 'Estado', 'Pagado', 'Metodo Pago', 'Monto', 'Fecha'];
     const filas = serviciosFiltrados.map((s) => [
       s.folio,
       s.clientes?.nombre || 'General',
@@ -683,6 +763,7 @@ export function Dashboard() {
       s.imei_serie,
       s.tipo_trabajo,
       s.estado,
+      s.pagado ? 'Si' : 'No',
       s.metodo_pago,
       s.monto.toFixed(2),
       getFechaLocal(s.created_at),
@@ -710,6 +791,7 @@ export function Dashboard() {
           <td>${s.modelo_equipo}</td>
           <td>${s.tipo_trabajo}</td>
           <td>${s.estado}</td>
+          <td>${s.pagado ? 'Pagado' : 'Sin pagar'}</td>
           <td style="text-align:right">$${s.monto.toFixed(2)}</td>
           <td>${getFechaLocal(s.created_at)}</td>
         </tr>`
@@ -734,7 +816,7 @@ export function Dashboard() {
           <p class="sub">Generado el ${hoyStr} · ${serviciosFiltrados.length} registros</p>
           <table>
             <thead>
-              <tr><th>Folio</th><th>Cliente</th><th>Equipo</th><th>Servicio</th><th>Estado</th><th>Monto</th><th>Fecha</th></tr>
+              <tr><th>Folio</th><th>Cliente</th><th>Equipo</th><th>Servicio</th><th>Estado</th><th>Pagado</th><th>Monto</th><th>Fecha</th></tr>
             </thead>
             <tbody>${filasHtml}</tbody>
           </table>
@@ -819,16 +901,16 @@ export function Dashboard() {
               <div className="bg-gradient-to-br from-slate-900/90 to-emerald-950/40 border border-emerald-500/30 p-5 rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.07)] backdrop-blur-md flex justify-between items-center">
                 <div>
                   <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-1">Caja de Hoy</p>
-                  <p className="text-[10px] text-slate-400">Trabajos entregados y pagados</p>
+                  <p className="text-[10px] text-slate-400">Cobrado hoy (sin importar cuándo se registró)</p>
                 </div>
                 <span className="font-black text-emerald-300 text-2xl">{fmt(cajaHoy)}</span>
               </div>
               <div className="bg-gradient-to-br from-slate-900/90 to-amber-950/40 border border-amber-500/30 p-5 rounded-2xl shadow-[0_0_20px_rgba(245,158,11,0.07)] backdrop-blur-md flex justify-between items-center">
                 <div>
-                  <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-1">Por Cobrar Hoy</p>
-                  <p className="text-[10px] text-slate-400">En taller o pendiente</p>
+                  <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-1">Por Cobrar (Total)</p>
+                  <p className="text-[10px] text-slate-400">Todo lo pendiente, no se resetea con los días</p>
                 </div>
-                <span className="font-black text-amber-300 text-2xl">{fmt(porCobrarHoy)}</span>
+                <span className="font-black text-amber-300 text-2xl">{fmt(porCobrarTotal)}</span>
               </div>
             </div>
 
@@ -899,78 +981,98 @@ export function Dashboard() {
                       className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
                     />
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Modelo del Equipo</label>
-                    <input
-                      type="text"
-                      value={modelo}
-                      onChange={(e) => setModelo(e.target.value)}
-                      required
-                      placeholder="Ej. Xiaomi Redmi Note 12"
-                      className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">IMEI o N° de Serie (S/N)</label>
-                    <input
-                      type="text"
-                      value={imeiSerie}
-                      onChange={(e) => setImeiSerie(e.target.value)}
-                      placeholder="Ej. 864521049382101"
-                      className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all font-mono`}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tipo de Servicio</label>
-                    <select
-                      value={tipoTrabajo}
-                      onChange={(e) => setTipoTrabajo(e.target.value)}
-                      className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
+                  {equipos.map((eq, idx) => (
+                    <div key={idx} className="border border-slate-800 rounded-xl p-3 space-y-3 relative">
+                      {equipos.length > 1 && (
+                        <div className="flex justify-between items-center">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Equipo {idx + 1}</p>
+                          <button type="button" onClick={() => handleQuitarEquipo(idx)} className="text-rose-400 hover:text-rose-300 text-xs font-bold">✕ Quitar</button>
+                        </div>
+                      )}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Modelo del Equipo</label>
+                        <input
+                          type="text"
+                          value={eq.modelo}
+                          onChange={(e) => handleCambiarEquipo(idx, 'modelo', e.target.value)}
+                          required={idx === 0}
+                          placeholder="Ej. Xiaomi Redmi Note 12"
+                          className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">IMEI o N° de Serie (S/N)</label>
+                        <input
+                          type="text"
+                          value={eq.imeiSerie}
+                          onChange={(e) => handleCambiarEquipo(idx, 'imeiSerie', e.target.value)}
+                          placeholder="Ej. 864521049382101"
+                          className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all font-mono`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tipo de Servicio</label>
+                        <select
+                          value={eq.tipoTrabajo}
+                          onChange={(e) => handleCambiarEquipo(idx, 'tipoTrabajo', e.target.value)}
+                          className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
+                        >
+                          <option value="Cuenta Mi">Cuenta Mi</option>
+                          <option value="Reparación IMEI">Reparación IMEI</option>
+                          <option value="FRP">FRP</option>
+                          <option value="Desbloqueo Red">Desbloqueo Red</option>
+                          <option value="iCloud">iCloud</option>
+                          <option value="Software General">Software General</option>
+                          <option value="Otros">Otros</option>
+                        </select>
+                        {eq.tipoTrabajo === 'Otros' && (
+                          <input
+                            type="text"
+                            value={eq.tipoTrabajoOtro}
+                            onChange={(e) => handleCambiarEquipo(idx, 'tipoTrabajoOtro', e.target.value)}
+                            placeholder="Escribe el tipo de servicio"
+                            className={`w-full mt-2 bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
+                          />
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Monto ($)</label>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          step="0.01"
+                          min="0"
+                          value={eq.monto}
+                          onChange={(e) => handleCambiarEquipo(idx, 'monto', e.target.value)}
+                          required={idx === 0}
+                          placeholder="0.00"
+                          className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Método de Pago</label>
+                        <select
+                          value={eq.metodoPago}
+                          onChange={(e) => handleCambiarEquipo(idx, 'metodoPago', e.target.value)}
+                          className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
+                        >
+                          <option value="Efectivo">Efectivo</option>
+                          <option value="Transferencia">Transferencia</option>
+                          <option value="Tarjeta">Tarjeta</option>
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+
+                  {!editandoId && (
+                    <button
+                      type="button"
+                      onClick={handleAgregarEquipo}
+                      className="w-full py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider border border-dashed border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200 transition-all"
                     >
-                      <option value="Cuenta Mi">Cuenta Mi</option>
-                      <option value="Reparación IMEI">Reparación IMEI</option>
-                      <option value="FRP">FRP</option>
-                      <option value="Desbloqueo Red">Desbloqueo Red</option>
-                      <option value="iCloud">iCloud</option>
-                      <option value="Software General">Software General</option>
-                      <option value="Otros">Otros</option>
-                    </select>
-                    {tipoTrabajo === 'Otros' && (
-                      <input
-                        type="text"
-                        value={tipoTrabajoOtro}
-                        onChange={(e) => setTipoTrabajoOtro(e.target.value)}
-                        placeholder="Escribe el tipo de servicio"
-                        className={`w-full mt-2 bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
-                      />
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Monto ($)</label>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      step="0.01"
-                      min="0"
-                      value={monto}
-                      onChange={(e) => setMonto(e.target.value)}
-                      required
-                      placeholder="0.00"
-                      className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Método de Pago</label>
-                    <select
-                      value={metodoPago}
-                      onChange={(e) => setMetodoPago(e.target.value)}
-                      className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
-                    >
-                      <option value="Efectivo">Efectivo</option>
-                      <option value="Transferencia">Transferencia</option>
-                      <option value="Tarjeta">Tarjeta</option>
-                    </select>
-                  </div>
+                      + Agregar otro equipo (mismo cliente)
+                    </button>
+                  )}
                   <button type="submit" className={`w-full py-3.5 md:py-3 rounded-xl text-xs md:text-sm uppercase tracking-wider font-black transition-all mt-2 ${editandoId ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-[0_0_15px_rgba(251,191,36,0.3)]' : T.submit}`}>
                     {editandoId ? 'Actualizar Cambios' : 'Guardar Servicio'}
                   </button>
@@ -1004,6 +1106,24 @@ export function Dashboard() {
                   </div>
                 </div>
 
+                <div className="flex flex-wrap gap-1.5 mb-5">
+                  {(['todos', 'PENDIENTE', 'EN PROCESO', 'COMPLETADO', 'ENTREGADO', 'NO REALIZADO'] as const).map((est) => {
+                    const cantidad = est === 'todos' ? serviciosBase.length : conteosPorEstado[est] || 0;
+                    const activo = filtroEstado === est;
+                    return (
+                      <button
+                        key={est}
+                        onClick={() => setFiltroEstado(est)}
+                        className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all border ${
+                          activo ? T.filtroActivo + ' border-transparent' : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-600'
+                        }`}
+                      >
+                        {est === 'todos' ? 'Todos' : est} ({cantidad})
+                      </button>
+                    );
+                  })}
+                </div>
+
                 {loading ? (
                   <p className="text-sm text-slate-400 py-8 text-center">Cargando base de datos...</p>
                 ) : serviciosFiltrados.length === 0 ? (
@@ -1032,14 +1152,19 @@ export function Dashboard() {
                           <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800/50">
                             <span className="text-slate-200 block font-semibold text-sm">{s.modelo_equipo}</span>
                             <span className={`text-[11px] ${T.fuerte}/80 font-mono tracking-tight block mb-3`}>{s.imei_serie ? `IMEI/SN: ${s.imei_serie}` : 'Sin IMEI registrado'}</span>
-                            <div className={`${T.texto} font-medium text-sm flex items-center justify-between`}>
+                            <div className={`${T.texto} font-medium text-sm flex items-center justify-between gap-2`}>
                               <div className="flex flex-col">
                                 <span>{s.tipo_trabajo}</span>
                                 {s.metodo_pago && <span className="text-[10px] text-slate-500">{s.metodo_pago}</span>}
                               </div>
-                              <button onClick={() => handleToggleEstado(s.id, s.estado)} className={`border px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all shadow-sm ${getBadgeColor(s.estado, s.created_at)}`}>
-                                {s.estado} {s.estado !== 'NO REALIZADO' && '🔄'}
-                              </button>
+                              <div className="flex flex-col items-end gap-1.5">
+                                <button onClick={() => handleToggleEstado(s.id, s.estado)} className={`border px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all shadow-sm ${getBadgeColor(s.estado, s.created_at)}`}>
+                                  {s.estado} {s.estado !== 'NO REALIZADO' && '🔄'}
+                                </button>
+                                <button onClick={() => handleTogglePagado(s.id, s.pagado)} className={`border px-3 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all ${s.pagado ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800/60 text-slate-400 border-slate-700'}`}>
+                                  {s.pagado ? '💰 Pagado' : 'Sin Pagar'}
+                                </button>
+                              </div>
                             </div>
                           </div>
 
@@ -1067,6 +1192,7 @@ export function Dashboard() {
                             <th className="py-3 px-3">Equipo / IMEI</th>
                             <th className="py-3 px-3">Servicio</th>
                             <th className="py-3 px-3">Estado</th>
+                            <th className="py-3 px-3">Pagado</th>
                             <th className="py-3 px-3 text-right">Monto</th>
                             <th className="py-3 px-3 text-center">Acciones</th>
                           </tr>
@@ -1093,6 +1219,11 @@ export function Dashboard() {
                               <td className="py-3.5 px-3">
                                 <button onClick={() => handleToggleEstado(s.id, s.estado)} title="Haz clic para cambiar el estado" className={`border px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all shadow-sm hover:opacity-80 ${getBadgeColor(s.estado, s.created_at)}`}>
                                   {s.estado} {s.estado !== 'NO REALIZADO' && '🔄'}
+                                </button>
+                              </td>
+                              <td className="py-3.5 px-3">
+                                <button onClick={() => handleTogglePagado(s.id, s.pagado)} title="Haz clic para marcar pagado/sin pagar" className={`border px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all ${s.pagado ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800/60 text-slate-400 border-slate-700'}`}>
+                                  {s.pagado ? '💰 Pagado' : 'Sin Pagar'}
                                 </button>
                               </td>
                               <td className={`py-3.5 px-3 text-right font-black ${T.fuerte}`}>{fmt(s.monto)}</td>
@@ -1287,18 +1418,12 @@ export function Dashboard() {
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-slate-900/90 to-amber-950/40 border border-amber-500/30 p-5 md:p-6 rounded-2xl shadow-[0_0_20px_rgba(245,158,11,0.07)] backdrop-blur-md">
-              <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-3">Por Cobrar / En Taller</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex justify-between items-center text-xs bg-slate-950/40 rounded-xl px-4 py-2.5">
-                  <span className="text-slate-400 font-medium">Semana:</span>
-                  <span className="font-black text-amber-300 text-sm">{fmt(porCobrarSemana)}</span>
-                </div>
-                <div className="flex justify-between items-center text-xs bg-slate-950/40 rounded-xl px-4 py-2.5">
-                  <span className="text-slate-400 font-medium">Mes:</span>
-                  <span className="font-black text-amber-300 text-sm">{fmt(porCobrarMes)}</span>
-                </div>
+            <div className="bg-gradient-to-br from-slate-900/90 to-amber-950/40 border border-amber-500/30 p-5 md:p-6 rounded-2xl shadow-[0_0_20px_rgba(245,158,11,0.07)] backdrop-blur-md flex justify-between items-center">
+              <div>
+                <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-1">Por Cobrar (Total)</p>
+                <p className="text-[10px] text-slate-400">Todo lo pendiente de cobro ahora mismo</p>
               </div>
+              <span className="font-black text-amber-300 text-2xl">{fmt(porCobrarTotal)}</span>
             </div>
 
             <div className={`bg-slate-900/80 border ${T.borde} p-5 md:p-6 rounded-2xl shadow-xl backdrop-blur-md transition-colors`}>
