@@ -1100,17 +1100,11 @@ export function Dashboard() {
             {/* Flujo de Hoy */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 mb-8">
               <div className="bg-gradient-to-br from-slate-900/90 to-emerald-950/40 border border-emerald-500/30 p-5 rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.07)] backdrop-blur-md flex justify-between items-center">
-                <div>
-                  <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-1">Caja de Hoy</p>
-                  <p className="text-[10px] text-slate-400">Cobrado hoy (sin importar cuándo se registró)</p>
-                </div>
+                <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest">Caja de Hoy</p>
                 <span className="font-black text-emerald-300 text-2xl">{fmt(cajaHoy)}</span>
               </div>
               <div className="bg-gradient-to-br from-slate-900/90 to-amber-950/40 border border-amber-500/30 p-5 rounded-2xl shadow-[0_0_20px_rgba(245,158,11,0.07)] backdrop-blur-md flex justify-between items-center">
-                <div>
-                  <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-1">Por Cobrar (Total)</p>
-                  <p className="text-[10px] text-slate-400">Todo lo pendiente, no se resetea con los días</p>
-                </div>
+                <p className="text-xs font-bold text-amber-400 uppercase tracking-widest">Por Cobrar (Total)</p>
                 <span className="font-black text-amber-300 text-2xl">{fmt(porCobrarTotal)}</span>
               </div>
             </div>
@@ -1351,8 +1345,10 @@ export function Dashboard() {
                           </div>
 
                           <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800/50">
-                            <span className="text-slate-200 block font-semibold text-sm">{s.modelo_equipo}</span>
-                            <span className={`text-[11px] ${T.fuerte}/80 font-mono tracking-tight block mb-3`}>{s.imei_serie ? `IMEI/SN: ${s.imei_serie}` : 'Sin IMEI registrado'}</span>
+                            <span className="text-slate-200 block font-semibold text-sm mb-1">{s.modelo_equipo}</span>
+                            {s.imei_serie && (
+                              <span className={`text-[11px] ${T.fuerte}/80 font-mono tracking-tight block mb-2`}>{s.imei_serie}</span>
+                            )}
                             <div className={`${T.texto} font-medium text-sm flex items-center justify-between gap-2`}>
                               <div className="flex flex-col">
                                 <span>{s.tipo_trabajo}</span>
@@ -1400,16 +1396,14 @@ export function Dashboard() {
                           {serviciosPaginados.map((s) => (
                             <tr key={s.id} className={`hover:bg-slate-950/40 transition-colors ${editandoId === s.id ? T.filaEscritorioResaltada : ''}`}>
                               <td className="py-3.5 px-3 font-medium">
-                                <span className="text-white">
-                                  {s.folio && <span className={`${T.fuerte}/70 font-mono text-[10px] mr-1.5`}>{s.folio}</span>}
-                                  {s.clientes?.nombre || 'General'}
-                                </span>
-                                <span className={`block text-[9px] uppercase ${T.fuerte}/70`}>{s.clientes?.tipo_contacto === 'cliente' ? 'Cliente' : 'Técnico'}</span>
+                                <span className="text-white block">{s.clientes?.nombre || 'General'}</span>
                                 <span className="block text-[10px] text-slate-400">{getFechaLocal(s.created_at)}</span>
                               </td>
                               <td className="py-3.5 px-3">
                                 <span className="text-slate-200 block font-semibold">{s.modelo_equipo}</span>
-                                <span className={`text-[10px] ${T.fuerte}/80 font-mono tracking-tight block`}>{s.imei_serie ? `IMEI/SN: ${s.imei_serie}` : 'Sin IMEI registrado'}</span>
+                                {s.imei_serie && (
+                                  <span className={`text-[10px] ${T.fuerte}/80 font-mono tracking-tight block`}>{s.imei_serie}</span>
+                                )}
                               </td>
                               <td className={`py-3.5 px-3 ${T.texto} font-medium`}>
                                 {s.tipo_trabajo}
@@ -1426,6 +1420,9 @@ export function Dashboard() {
                               <td className={`py-3.5 px-3 text-right font-black ${T.fuerte}`}>{fmt(s.monto)}</td>
                               <td className="py-3.5 px-3 text-center">
                                 <div className="flex items-center justify-center gap-1.5">
+                                  {s.folio && (
+                                    <span className={`${T.fuerte}/70 font-mono text-[10px] mr-0.5`}>{s.folio}</span>
+                                  )}
                                   <button onClick={() => handleIniciarEdicion(s)} title="Editar registro" className={`${T.accionEditar} ${T.accionEditarHover} px-2 py-1 rounded-lg text-xs font-semibold transition-colors`}>✏️</button>
                                   {s.folio && (
                                     <button onClick={() => handleImprimirFolio(s)} title="Imprimir folio" className="text-slate-300 hover:text-white bg-slate-700/30 hover:bg-slate-700/50 px-2 py-1 rounded-lg text-xs font-semibold transition-colors">🖨️</button>
@@ -1435,7 +1432,7 @@ export function Dashboard() {
                                   ) : s.estado !== 'ENTREGADO' && (
                                     <button onClick={() => handleMarcarNoRealizado(s.id)} title="Marcar como no realizado" className="text-orange-400 hover:text-orange-300 bg-orange-500/10 hover:bg-orange-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors">✕</button>
                                   )}
-                                  <button onClick={() => handleDeleteServicio(s.id)} title="Eliminar registro" className="text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors">Borrar</button>
+                                  <button onClick={() => handleDeleteServicio(s.id)} title="Eliminar registro" className="text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors">🗑️</button>
                                 </div>
                               </td>
                             </tr>
@@ -1616,10 +1613,7 @@ export function Dashboard() {
             </div>
 
             <div className="bg-gradient-to-br from-slate-900/90 to-amber-950/40 border border-amber-500/30 p-5 md:p-6 rounded-2xl shadow-[0_0_20px_rgba(245,158,11,0.07)] backdrop-blur-md flex justify-between items-center">
-              <div>
-                <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-1">Por Cobrar (Total)</p>
-                <p className="text-[10px] text-slate-400">Todo lo pendiente de cobro ahora mismo</p>
-              </div>
+              <p className="text-xs font-bold text-amber-400 uppercase tracking-widest">Por Cobrar (Total)</p>
               <span className="font-black text-amber-300 text-2xl">{fmt(porCobrarTotal)}</span>
             </div>
 
