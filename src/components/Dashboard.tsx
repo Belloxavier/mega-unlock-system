@@ -93,6 +93,15 @@ const OPERADORAS_IMEI = [
   { nombre: 'Claro', url: 'https://www.clarochile.cl/personas/equipos/consulta-imei/', hex: '#e2001a' },
 ];
 
+// El campo "IMEI o N° de Serie (S/N)" acepta cualquier texto (a veces hasta
+// un teléfono, por error). Un IMEI real son 14-15 dígitos numéricos, así
+// que solo eso entra a la lista de pendientes de verificar.
+const pareceImei = (valor?: string) => {
+  if (!valor) return false;
+  const digitos = valor.replace(/\D/g, '');
+  return digitos.length === 14 || digitos.length === 15;
+};
+
 const getImeiWarning = (estado?: string) => {
   switch (estado) {
     case 'reportado': return { icono: '⚠️', clase: 'text-red-400', texto: 'IMEI reportado' };
@@ -820,9 +829,9 @@ export function Dashboard() {
     });
   }, [servicios]);
 
-  // ---- Pestaña IMEI: trabajos con IMEI/serie cargado y sin verificar aún ----
+  // ---- Pestaña IMEI: trabajos con un IMEI real (14-15 dígitos) sin verificar ----
   const imeisPendientes = useMemo(
-    () => servicios.filter((s) => s.imei_serie && (s.imei_estado || 'sin_verificar') === 'sin_verificar'),
+    () => servicios.filter((s) => pareceImei(s.imei_serie) && (s.imei_estado || 'sin_verificar') === 'sin_verificar'),
     [servicios]
   );
 
