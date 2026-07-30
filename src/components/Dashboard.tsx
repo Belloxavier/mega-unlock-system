@@ -384,10 +384,6 @@ export function Dashboard() {
   const handleCambiarEstado = async (id: string, estadoActual: string, nuevoEstado: string) => {
     if (nuevoEstado === estadoActual) return;
 
-    if (nuevoEstado === 'ENTREGADO') {
-      if (!window.confirm('¿Confirmas que el cliente retiró el equipo? Esto no se puede deshacer.')) return;
-    }
-
     const servicioActual = servicios.find((s) => s.id === id);
     const tieneWhatsApp = !!servicioActual?.clientes?.telefono;
     let ventanaWhatsApp: Window | null = null;
@@ -412,12 +408,11 @@ export function Dashboard() {
     const cambios: { estado: string; completado_at?: string; entregado_at?: string; pagado?: boolean; pagado_at?: string } = { estado: nuevoEstado };
     if (nuevoEstado === 'COMPLETADO') cambios.completado_at = new Date().toISOString();
     if (nuevoEstado === 'ENTREGADO') {
+      // Por defecto se asume pagado al entregar; si no fue así, se destilda
+      // manualmente con el botón Pagado/Sin Pagar.
       cambios.entregado_at = new Date().toISOString();
-      // Si no lo habían marcado pagado antes (adelanto), se asume que se paga al entregar.
-      if (!servicioActual?.pagado) {
-        cambios.pagado = true;
-        cambios.pagado_at = cambios.entregado_at;
-      }
+      cambios.pagado = true;
+      cambios.pagado_at = cambios.entregado_at;
     }
 
     const { error } = await supabase.from('servicios').update(cambios).eq('id', id);
