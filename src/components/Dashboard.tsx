@@ -266,10 +266,13 @@ export function Dashboard() {
       if (mejor) {
         handleCambiarEquipo(idx, 'imeiSerie', mejor);
       } else {
-        alert('No se pudo leer ningún número en la foto. Prueba con más luz, más de cerca, o escríbelo a mano.');
+        const textoLeido = data.text.trim();
+        alert(
+          `No encontré una secuencia larga de números.\n\nEsto fue lo que se leyó de la foto:\n"${textoLeido || '(no se reconoció texto)'}"\n\nPrueba con más luz/de más cerca, o escríbelo a mano.`
+        );
       }
-    } catch {
-      alert('No se pudo leer la imagen. Intenta de nuevo o escríbelo a mano.');
+    } catch (err) {
+      alert(`Error al leer la imagen: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setEscaneandoImei(null);
     }
