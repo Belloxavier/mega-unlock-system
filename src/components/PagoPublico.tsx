@@ -97,20 +97,12 @@ export function PagoPublico() {
 
                 <div className="flex gap-2">
                   <button
-                    onClick={() => copiar(`${c.id}-num`, c.numero_cuenta)}
+                    onClick={() => copiar(c.id, textoCompleto(c))}
                     className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
-                      copiado === `${c.id}-num` ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-cyan-500 text-slate-950'
+                      copiado === c.id ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-cyan-500 text-slate-950'
                     }`}
                   >
-                    {copiado === `${c.id}-num` ? '✓ Copiado' : '📋 Copiar N° Cuenta'}
-                  </button>
-                  <button
-                    onClick={() => copiar(`${c.id}-todo`, textoCompleto(c))}
-                    className={`flex-shrink-0 px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border ${
-                      copiado === `${c.id}-todo` ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800/60 text-slate-300 border-slate-700'
-                    }`}
-                  >
-                    {copiado === `${c.id}-todo` ? '✓' : 'Todo'}
+                    {copiado === c.id ? '✓ Copiado' : '📋 Copiar Datos'}
                   </button>
                 </div>
               </div>
