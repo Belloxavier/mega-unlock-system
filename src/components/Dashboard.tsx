@@ -387,9 +387,22 @@ export function Dashboard() {
     const servicioActual = servicios.find((s) => s.id === id);
     const tieneWhatsApp = !!servicioActual?.clientes?.telefono;
     let ventanaWhatsApp: Window | null = null;
+    let avisarWhatsApp = false;
 
     if (nuevoEstado === 'COMPLETADO' && tieneWhatsApp) {
-      ventanaWhatsApp = window.open('', '_blank');
+      const otrosPendientes = servicios.filter(
+        (s) =>
+          s.id !== id &&
+          s.clientes?.id &&
+          s.clientes.id === servicioActual?.clientes?.id &&
+          !['COMPLETADO', 'ENTREGADO', 'NO REALIZADO'].includes(s.estado)
+      ).length;
+      avisarWhatsApp = window.confirm(
+        otrosPendientes > 0
+          ? `Este cliente tiene ${otrosPendientes} equipo(s) más sin completar todavía.\n\n¿Enviar WhatsApp avisando que este equipo ya está listo?`
+          : '¿Enviar WhatsApp avisando que el equipo está listo para retirar?'
+      );
+      if (avisarWhatsApp) ventanaWhatsApp = window.open('', '_blank');
     }
 
     const cambios: { estado: string; completado_at?: string; entregado_at?: string; pagado?: boolean; pagado_at?: string } = { estado: nuevoEstado };
@@ -412,7 +425,7 @@ export function Dashboard() {
 
     fetchServicios();
 
-    if (nuevoEstado === 'COMPLETADO' && servicioActual && ventanaWhatsApp) {
+    if (avisarWhatsApp && servicioActual && ventanaWhatsApp) {
       const numero = limpiarNumero(servicioActual.clientes?.telefono || '');
       const mensaje = `Hola ${servicioActual.clientes?.nombre || ''}, tu equipo ${servicioActual.modelo_equipo}${servicioActual.folio ? ` (folio ${servicioActual.folio})` : ''} ya está listo. Puedes pasar a retirarlo.`;
       ventanaWhatsApp.location.href = `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
