@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from './supabase';
 import { Login } from './components/Login';
 import { Dashboard } from './components/Dashboard';
+import { PagoPublico } from './components/PagoPublico';
 
 export function App() {
   const [session, setSession] = useState<any>(null);
@@ -21,6 +22,12 @@ export function App() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Página pública de datos bancarios (enlazada desde WhatsApp): no requiere
+  // sesión, así que se resuelve antes de cualquier chequeo de login.
+  if (window.location.pathname === '/pago') {
+    return <PagoPublico />;
+  }
 
   if (loading) {
     return (
