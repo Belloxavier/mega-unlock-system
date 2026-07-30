@@ -501,6 +501,18 @@ export function Dashboard() {
 
   const limpiarNumero = (tel: string) => tel.replace(/\D/g, '');
 
+  const handleRecordarWhatsApp = (s: Servicio) => {
+    const telefono = s.clientes?.telefono;
+    if (!telefono) return;
+    const nombre = s.clientes?.nombre || 'el cliente';
+    const referencia = s.folio ? ` (folio ${s.folio})` : '';
+    if (!window.confirm(`¿Enviar WhatsApp a ${nombre} recordándole que su equipo ${s.modelo_equipo}${referencia} lleva más de 24h sin retirar?`)) return;
+
+    const numero = limpiarNumero(telefono);
+    const mensaje = `Hola ${s.clientes?.nombre || ''}, te recordamos que tu equipo ${s.modelo_equipo}${referencia} sigue en el taller. ¿Puedes pasar a retirarlo o coordinar el pago pendiente?`;
+    window.open(`https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`, '_blank');
+  };
+
   const handleCambiarEstado = async (id: string, estadoActual: string, nuevoEstado: string) => {
     if (nuevoEstado === estadoActual) return;
 
@@ -1403,12 +1415,26 @@ export function Dashboard() {
           <>
             {/* Alerta de trabajos atascados */}
             {trabajosAtascados.length > 0 && (
-              <div className="mb-6 bg-rose-500/10 border border-rose-500/30 rounded-2xl px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <div className="mb-6 bg-rose-500/10 border border-rose-500/30 rounded-2xl px-5 py-4">
                 <span className="text-rose-400 font-black text-sm">⚠️ {trabajosAtascados.length} trabajo{trabajosAtascados.length > 1 ? 's' : ''} lleva{trabajosAtascados.length > 1 ? 'n' : ''} más de 24h sin entregarse</span>
-                <span className="text-rose-300/70 text-xs truncate">
-                  {trabajosAtascados.slice(0, 3).map((s) => s.folio || s.modelo_equipo).join(' · ')}
-                  {trabajosAtascados.length > 3 ? ` · +${trabajosAtascados.length - 3} más` : ''}
-                </span>
+                <div className="mt-2.5 space-y-1.5">
+                  {trabajosAtascados.map((s) => (
+                    <div key={s.id} className="flex items-center justify-between gap-2 bg-slate-950/40 rounded-lg px-3 py-2">
+                      <span className="text-xs text-rose-300/80 truncate">
+                        {s.folio && <span className="font-mono mr-1.5">{s.folio}</span>}
+                        {s.clientes?.nombre || 'General'} · {s.modelo_equipo}
+                      </span>
+                      {s.clientes?.telefono && (
+                        <button
+                          onClick={() => handleRecordarWhatsApp(s)}
+                          className="flex-shrink-0 text-[10px] font-bold uppercase tracking-wider bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 px-2.5 py-1.5 rounded-lg transition-all"
+                        >
+                          📱 Recordar
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
