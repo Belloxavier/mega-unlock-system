@@ -542,6 +542,8 @@ export function Dashboard() {
   };
 
   const handleTogglePagado = async (id: string, pagadoActual: boolean) => {
+    if (pagadoActual && !window.confirm('¿Desmarcar como pagado? Se perderá la fecha real en que se pagó.')) return;
+
     const cambios = pagadoActual
       ? { pagado: false, pagado_at: null }
       : { pagado: true, pagado_at: new Date().toISOString() };
