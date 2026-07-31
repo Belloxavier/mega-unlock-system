@@ -9,6 +9,7 @@ import { escaparCSV } from '../../lib/csv';
 import { escapeHtml } from '../../lib/html';
 import { limpiarNumero } from '../../lib/phone';
 import { getTema } from '../../lib/theme';
+import { formatearMonto } from '../../lib/moneda';
 import {
   estaEnRango,
   inicioSemana,
@@ -620,7 +621,7 @@ export function Dashboard() {
           <div class="dato"><b>Servicio:</b> ${escapeHtml(s.tipo_trabajo)}</div>
           <div class="dato"><b>Fecha:</b> ${escapeHtml(fecha)}</div>
           <div class="linea"></div>
-          <div class="monto">$${s.monto.toFixed(2)}</div>
+          <div class="monto">${formatearMonto(s.monto)}</div>
           <script>window.print(); window.onafterprint = () => window.close();</script>
         </body>
       </html>
@@ -1132,7 +1133,7 @@ export function Dashboard() {
     [garantiasList]
   );
 
-  const fmt = (valor: number) => (mostrarMontos ? `$${valor.toFixed(2)}` : '••••••');
+  const fmt = (valor: number) => (mostrarMontos ? formatearMonto(valor) : '••••••');
   const T = getTema(temaCalido) as TemaUI;
   const botonFiltro = (activo: boolean) =>
     `py-2 text-[10px] sm:text-xs font-bold rounded-xl transition-all ${
@@ -1191,7 +1192,7 @@ export function Dashboard() {
           <td>${escapeHtml(s.tipo_trabajo)}</td>
           <td>${escapeHtml(s.estado)}</td>
           <td>${s.pagado ? 'Pagado' : 'Sin pagar'}</td>
-          <td style="text-align:right">$${s.monto.toFixed(2)}</td>
+          <td style="text-align:right">${formatearMonto(s.monto)}</td>
           <td>${escapeHtml(getFechaLocal(s.created_at))}</td>
         </tr>`
       )
@@ -1219,7 +1220,7 @@ export function Dashboard() {
             </thead>
             <tbody>${filasHtml}</tbody>
           </table>
-          <div class="totales">Total: $${totalDinero.toFixed(2)}</div>
+          <div class="totales">Total: ${formatearMonto(totalDinero)}</div>
           <script>window.print();</script>
         </body>
       </html>

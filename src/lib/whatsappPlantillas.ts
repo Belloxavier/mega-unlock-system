@@ -3,6 +3,8 @@
  * Claves estables para no romper si se renombra el copy por defecto.
  */
 
+import { formatearNumero } from './moneda';
+
 export type PlantillaKey =
   | 'equipoListo'
   | 'equipoListoRevision'
@@ -59,7 +61,7 @@ export function renderPlantilla(key: PlantillaKey, vars: VarsPlantilla, custom?:
     '{{nombre}}': vars.nombre || '',
     '{{modelo}}': vars.modelo || '',
     '{{folio}}': folioRef,
-    '{{monto}}': vars.monto !== undefined ? Number(vars.monto).toFixed(2) : '0.00',
+    '{{monto}}': vars.monto !== undefined ? formatearNumero(Number(vars.monto)) : '0',
     '{{diagnostico}}': vars.diagnostico || '',
     '{{linkPago}}': vars.linkPago || '',
   };
