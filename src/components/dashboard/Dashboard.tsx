@@ -29,6 +29,7 @@ import { ClientesTab } from './ClientesTab';
 import { FinanzasTab } from './FinanzasTab';
 import { GarantiasTab } from './GarantiasTab';
 import { CierreCajaModal } from './CierreCajaModal';
+import { ReporteMensualModal } from './ReporteMensualModal';
 import { FormularioServicio } from './components/FormularioServicio';
 import { HistorialServicios } from './components/HistorialServicios';
 import { AlertasAtascados } from './components/AlertasAtascados';
@@ -106,6 +107,7 @@ export function Dashboard() {
 
   const [cierreAbierto, setCierreAbierto] = useState(false);
   const [guardandoCierre, setGuardandoCierre] = useState(false);
+  const [reporteAbierto, setReporteAbierto] = useState(false);
 
   useEffect(() => {
     fetchServicios();
@@ -1273,6 +1275,14 @@ export function Dashboard() {
         onGuardar={handleGuardarCierre}
         fmt={fmt}
       />
+      <ReporteMensualModal
+        abierto={reporteAbierto}
+        T={T}
+        servicios={servicios}
+        garantias={garantiasList}
+        onCerrar={() => setReporteAbierto(false)}
+        fmt={fmt}
+      />
 
       <div className="max-w-7xl mx-auto relative z-10">
         <div
@@ -1343,7 +1353,14 @@ export function Dashboard() {
           <>
             <AlertasAtascados trabajos={trabajosAtascados} onRecordar={handleRecordarWhatsApp} />
 
-            <div className="flex justify-end mb-4">
+            <div className="flex justify-end gap-2 mb-4">
+              <button
+                type="button"
+                onClick={() => setReporteAbierto(true)}
+                className="bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wider transition-all"
+              >
+                📊 Reporte mensual
+              </button>
               <button
                 type="button"
                 onClick={handleAbrirCierreCaja}
