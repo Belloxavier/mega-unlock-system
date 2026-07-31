@@ -1,6 +1,11 @@
 // Tipos compartidos por Dashboard y sus futuras piezas (hooks, componentes
 // de pestaña). Antes vivían todos dentro de Dashboard.tsx.
 
+// Los componentes del dashboard (ClientesTab, FinanzasTab, etc.) reciben el
+// tema como prop tipado `TemaUI` — es un alias de `Tema` (lib/theme.ts) para
+// no duplicar la forma del objeto en dos archivos.
+export type { Tema as TemaUI } from './lib/theme';
+
 export interface Cliente {
   id: string;
   nombre: string;

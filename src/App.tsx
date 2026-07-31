@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './supabase';
 import { Login } from './components/Login';
-import { Dashboard } from './components/Dashboard';
+import { Dashboard } from './components/dashboard/Dashboard';
 import { PagoPublico } from './components/PagoPublico';
 
 export function App() {
