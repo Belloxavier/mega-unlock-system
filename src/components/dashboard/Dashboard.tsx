@@ -5,7 +5,6 @@ import { equipoVacio, cuentaVacia } from '../../types';
 import { DIAS_SEMANA, getFechaLocal, getDiaSemana } from '../../lib/date';
 import { TIPOS_ESTANDAR, getPrefijo } from '../../lib/folio';
 import { pareceImei } from '../../lib/imei';
-import { escaparCSV } from '../../lib/csv';
 import { escapeHtml } from '../../lib/html';
 import { limpiarNumero } from '../../lib/phone';
 import { getTema } from '../../lib/theme';
@@ -1140,44 +1139,6 @@ export function Dashboard() {
       activo ? T.filtroActivo : 'bg-slate-950/80 text-slate-400 border border-slate-800'
     }`;
 
-  const handleExportarCSV = () => {
-    const columnas = [
-      'Folio',
-      'Cliente',
-      'Tipo Contacto',
-      'Equipo',
-      'IMEI/Serie',
-      'Servicio',
-      'Estado',
-      'Pagado',
-      'Metodo Pago',
-      'Monto',
-      'Fecha',
-    ];
-    const filas = serviciosFiltrados.map((s) => [
-      s.folio,
-      s.clientes?.nombre || 'General',
-      s.clientes?.tipo_contacto === 'cliente' ? 'Cliente' : 'Técnico',
-      s.modelo_equipo,
-      s.imei_serie,
-      s.tipo_trabajo,
-      s.estado,
-      s.pagado ? 'Si' : 'No',
-      s.metodo_pago,
-      s.monto.toFixed(2),
-      getFechaLocal(s.created_at),
-    ]);
-    const csv = [columnas, ...filas].map((fila) => fila.map(escaparCSV).join(',')).join('\n');
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `mega-unlock-historial-${hoyStr}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast('CSV descargado', 'success');
-  };
-
   const handleImprimirReporte = () => {
     const ventana = window.open('', '_blank');
     if (!ventana) return;
@@ -1386,7 +1347,6 @@ export function Dashboard() {
                 onFiltroEstado={setFiltroEstado}
                 onBusqueda={setBusqueda}
                 onPagina={setPaginaActual}
-                onExportarCSV={handleExportarCSV}
                 onImprimirReporte={handleImprimirReporte}
                 onToggleEstadoMenu={setEstadoMenuAbierto}
                 onCambiarEstado={handleCambiarEstado}

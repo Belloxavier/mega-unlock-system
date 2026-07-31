@@ -27,7 +27,6 @@ interface Props {
   onFiltroEstado: (v: string) => void;
   onBusqueda: (v: string) => void;
   onPagina: (fn: (p: number) => number) => void;
-  onExportarCSV: () => void;
   onImprimirReporte: () => void;
   onToggleEstadoMenu: (id: string | null) => void;
   onCambiarEstado: (id: string, actual: string, nuevo: string) => void;
@@ -102,14 +101,6 @@ export function HistorialServicios(props: Props) {
             className={`w-full sm:w-72 bg-slate-950/90 border ${T.searchBorde} rounded-xl px-4 py-2.5 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
           />
           <div className="flex gap-1.5">
-            <button
-              type="button"
-              onClick={props.onExportarCSV}
-              title="Exportar a Excel/CSV"
-              className="flex-1 sm:flex-none bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-slate-300 font-bold px-3 py-2 rounded-xl text-[10px] uppercase tracking-wider transition-all whitespace-nowrap"
-            >
-              ⬇️ CSV
-            </button>
             <button
               type="button"
               onClick={props.onImprimirReporte}
