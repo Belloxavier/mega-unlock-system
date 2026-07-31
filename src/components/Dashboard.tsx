@@ -326,7 +326,7 @@ export function Dashboard() {
     if (!window.confirm(`¿Enviar WhatsApp a ${nombre} recordándole que su equipo ${s.modelo_equipo}${referencia} lleva más de 24h sin retirar?`)) return;
 
     const numero = limpiarNumero(telefono);
-    const mensaje = `Hola ${s.clientes?.nombre || ''}, te recordamos que tu equipo ${s.modelo_equipo}${referencia} sigue en el taller. ¿Puedes pasar a retirarlo o coordinar el pago pendiente?`;
+    const mensaje = `Hola ${s.clientes?.nombre || ''} 👋, te escribimos de Mega Unlock para recordarte que tu equipo ${s.modelo_equipo}${referencia} sigue esperando por ti en el taller. Cuando puedas, pasa a retirarlo. ¡Saludos!`;
     window.open(`https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`, '_blank');
   };
 
@@ -400,7 +400,7 @@ export function Dashboard() {
       const referenciaFolio = servicioActual.folio ? ` (folio ${servicioActual.folio})` : '';
       const mensaje = diagnosticoFinal !== undefined
         ? `Hola ${servicioActual.clientes?.nombre || ''}, ya revisamos tu equipo ${servicioActual.modelo_equipo}${referenciaFolio}.\n\nDiagnóstico: ${diagnosticoFinal}\nPrecio: $${(montoFinal ?? 0).toFixed(2)}\n\nPuedes pasar a retirarlo.${linkPago}`
-        : `Hola ${servicioActual.clientes?.nombre || ''}, tu equipo ${servicioActual.modelo_equipo}${referenciaFolio} ya está listo. Puedes pasar a retirarlo.${linkPago}`;
+        : `Hola ${servicioActual.clientes?.nombre || ''}, tu equipo ${servicioActual.modelo_equipo}${referenciaFolio} ya está listo. El total a pagar es $${servicioActual.monto.toFixed(2)}. Puedes pasar a retirarlo.${linkPago}`;
       ventanaWhatsApp.location.href = `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
     } else {
       ventanaWhatsApp?.close();
