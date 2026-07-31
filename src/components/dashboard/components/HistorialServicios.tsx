@@ -399,57 +399,59 @@ export function HistorialServicios(props: Props) {
                         : fmt(s.monto)}
                     </td>
                     <td className="py-3.5 px-3 text-center min-w-48">
-                      <div className="flex items-center justify-center gap-1.5">
+                      <div className="flex flex-col items-center gap-1">
                         {s.folio && (
-                          <span className={`${T.fuerte}/70 font-mono text-[10px] mr-0.5`}>{s.folio}</span>
+                          <span className={`${T.fuerte}/70 font-mono text-[10px]`}>{s.folio}</span>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => props.onIniciarEdicion(s)}
-                          title="Editar registro"
-                          className={`${T.accionEditar} ${T.accionEditarHover} px-2 py-1 rounded-lg text-xs font-semibold transition-colors`}
-                        >
-                          ✏️
-                        </button>
-                        {s.folio && (
+                        <div className="flex items-center justify-center gap-1.5">
                           <button
                             type="button"
-                            onClick={() => props.onImprimirFolio(s)}
-                            title="Imprimir folio"
-                            className="text-slate-300 hover:text-white bg-slate-700/30 hover:bg-slate-700/50 px-2 py-1 rounded-lg text-xs font-semibold transition-colors"
+                            onClick={() => props.onIniciarEdicion(s)}
+                            title="Editar registro"
+                            className={`${T.accionEditar} ${T.accionEditarHover} px-2 py-1 rounded-lg text-xs font-semibold transition-colors`}
                           >
-                            🖨️
+                            ✏️
                           </button>
-                        )}
-                        {s.estado === 'NO REALIZADO' ? (
-                          <button
-                            type="button"
-                            onClick={() => props.onReactivar(s.id)}
-                            title="Reactivar trabajo"
-                            className="text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors"
-                          >
-                            ↺
-                          </button>
-                        ) : (
-                          s.estado !== 'ENTREGADO' && (
+                          {s.folio && (
                             <button
                               type="button"
-                              onClick={() => props.onMarcarNoRealizado(s.id)}
-                              title="Marcar como no realizado"
-                              className="text-orange-400 hover:text-orange-300 bg-orange-500/10 hover:bg-orange-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors"
+                              onClick={() => props.onImprimirFolio(s)}
+                              title="Imprimir folio"
+                              className="text-slate-300 hover:text-white bg-slate-700/30 hover:bg-slate-700/50 px-2 py-1 rounded-lg text-xs font-semibold transition-colors"
                             >
-                              ✕
+                              🖨️
                             </button>
-                          )
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => props.onDelete(s.id)}
-                          title="Eliminar registro"
-                          className="text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors"
-                        >
-                          🗑️
-                        </button>
+                          )}
+                          {s.estado === 'NO REALIZADO' ? (
+                            <button
+                              type="button"
+                              onClick={() => props.onReactivar(s.id)}
+                              title="Reactivar trabajo"
+                              className="text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors"
+                            >
+                              ↺
+                            </button>
+                          ) : (
+                            s.estado !== 'ENTREGADO' && (
+                              <button
+                                type="button"
+                                onClick={() => props.onMarcarNoRealizado(s.id)}
+                                title="Marcar como no realizado"
+                                className="text-orange-400 hover:text-orange-300 bg-orange-500/10 hover:bg-orange-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors"
+                              >
+                                ✕
+                              </button>
+                            )
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => props.onDelete(s.id)}
+                            title="Eliminar registro"
+                            className="text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors"
+                          >
+                            🗑️
+                          </button>
+                        </div>
                       </div>
                     </td>
                   </tr>
