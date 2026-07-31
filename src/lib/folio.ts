@@ -1,5 +1,3 @@
-import type { Servicio } from '../types';
-
 export const TIPOS_ESTANDAR = ['Cuenta Mi', 'Reparación IMEI', 'FRP', 'Desbloqueo Red', 'iCloud', 'Software General'];
 
 const PREFIJOS_FOLIO: { [tipo: string]: string } = {
@@ -11,20 +9,7 @@ const PREFIJOS_FOLIO: { [tipo: string]: string } = {
   'Software General': 'S',
 };
 
+// El número correlativo de cada folio (F1, F2, I1...) lo asigna el servidor
+// (función `asignar_folios`, RPC de Postgres) para que sea atómico entre
+// dispositivos — este prefijo es lo único que se calcula en el cliente.
 export const getPrefijo = (tipo: string) => PREFIJOS_FOLIO[tipo] || 'O';
-
-// Genera el siguiente folio (F1, F2, I1...) mirando los folios ya usados
-// para ese mismo prefijo entre los servicios ya cargados.
-export const generarFolio = (tipo: string, serviciosActuales: Servicio[]) => {
-  const prefijo = getPrefijo(tipo);
-  const regex = new RegExp(`^${prefijo}(\\d+)$`);
-  let max = 0;
-  serviciosActuales.forEach((s) => {
-    const m = s.folio?.match(regex);
-    if (m) {
-      const n = parseInt(m[1], 10);
-      if (n > max) max = n;
-    }
-  });
-  return `${prefijo}${max + 1}`;
-};

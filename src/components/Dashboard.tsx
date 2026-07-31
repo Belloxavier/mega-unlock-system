@@ -3,7 +3,7 @@ import { supabase } from '../supabase';
 import type { Cliente, Servicio, EquipoForm, Garantia, CuentaBancaria } from '../types';
 import { equipoVacio, cuentaVacia } from '../types';
 import { DIAS_SEMANA, getFechaLocal, getDiaSemana, sumarMeses } from '../lib/date';
-import { TIPOS_ESTANDAR, getPrefijo, generarFolio } from '../lib/folio';
+import { TIPOS_ESTANDAR, getPrefijo } from '../lib/folio';
 import { pareceImei, getImeiWarning } from '../lib/imei';
 import { ESTADOS_PROGRESO, getDotColor, getBadgeColor } from '../lib/estado';
 import { escaparCSV } from '../lib/csv';
@@ -251,33 +251,34 @@ export function Dashboard() {
         .eq('id', clienteId);
     }
 
-    // Genera folios en secuencia dentro del mismo lote (dos equipos del mismo
-    // tipo en un envío no pueden compartir número de folio).
-    const contadorFolios: { [prefijo: string]: number } = {};
-    const siguienteFolio = (tipo: string) => {
-      const prefijo = getPrefijo(tipo);
-      if (contadorFolios[prefijo] === undefined) {
-        const actual = generarFolio(tipo, servicios);
-        contadorFolios[prefijo] = parseInt(actual.slice(prefijo.length), 10) - 1;
-      }
-      contadorFolios[prefijo] += 1;
-      return `${prefijo}${contadorFolios[prefijo]}`;
-    };
+    // El folio se asigna en el servidor (función `asignar_folios`, RPC de
+    // Postgres) para que sea atómico entre dispositivos: dos personas
+    // guardando al mismo tiempo ya no pueden calcular el mismo número.
+    const tiposTrabajoFinal = equiposValidos.map((eq) =>
+      eq.tipoTrabajo === 'Otros' ? eq.tipoTrabajoOtro.trim() : eq.tipoTrabajo
+    );
+    const prefijos = tiposTrabajoFinal.map((tipo) => getPrefijo(tipo));
 
-    const filas = equiposValidos.map((eq) => {
-      const tipoTrabajoFinal = eq.tipoTrabajo === 'Otros' ? eq.tipoTrabajoOtro.trim() : eq.tipoTrabajo;
-      return {
-        cliente_id: clienteId,
-        modelo_equipo: eq.modelo,
-        imei_serie: eq.imeiSerie || null,
-        tipo_trabajo: tipoTrabajoFinal,
-        folio: siguienteFolio(tipoTrabajoFinal),
-        monto: eq.monto ? parseFloat(eq.monto) : 0,
-        estado: 'PENDIENTE',
-        metodo_pago: eq.metodoPago,
-        es_revision: eq.esRevision,
-      };
+    const { data: foliosAsignados, error: folioError } = await supabase.rpc('asignar_folios', {
+      p_prefijos: prefijos,
     });
+
+    if (folioError || !foliosAsignados) {
+      alert(`Error al asignar el folio: ${folioError?.message || 'sin respuesta del servidor'}`);
+      return;
+    }
+
+    const filas = equiposValidos.map((eq, idx) => ({
+      cliente_id: clienteId,
+      modelo_equipo: eq.modelo,
+      imei_serie: eq.imeiSerie || null,
+      tipo_trabajo: tiposTrabajoFinal[idx],
+      folio: (foliosAsignados as string[])[idx],
+      monto: eq.monto ? parseFloat(eq.monto) : 0,
+      estado: 'PENDIENTE',
+      metodo_pago: eq.metodoPago,
+      es_revision: eq.esRevision,
+    }));
 
     const { error: servicioError } = await supabase.from('servicios').insert(filas);
 
