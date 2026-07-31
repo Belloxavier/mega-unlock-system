@@ -76,7 +76,7 @@ export function HistorialServicios(props: Props) {
   } = props;
 
   return (
-    <div className={`lg:col-span-2 bg-slate-900/80 border ${T.borde} p-5 md:p-6 rounded-2xl shadow-xl backdrop-blur-md transition-colors`}>
+    <div className={`lg:col-span-2 min-w-0 bg-slate-900/80 border ${T.borde} p-5 md:p-6 rounded-2xl shadow-xl backdrop-blur-md transition-colors`}>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-5 gap-4">
         <h2 className={`text-base font-bold ${T.texto} uppercase tracking-wider flex items-center gap-2`}>
           <span className={`w-2 h-2 rounded-full ${T.dot2}`} />
@@ -295,7 +295,7 @@ export function HistorialServicios(props: Props) {
           </div>
 
           {/* Escritorio */}
-          <div className="hidden md:block overflow-x-auto">
+          <div className="hidden md:block overflow-x-auto pr-3">
             <table className="w-full text-left border-collapse text-sm">
               <thead>
                 <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider">
