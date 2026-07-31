@@ -305,7 +305,7 @@ export function HistorialServicios(props: Props) {
                   <th className="py-3 px-3">Estado</th>
                   <th className="py-3 px-3">Pagado</th>
                   <th className="py-3 px-3 text-right">Monto</th>
-                  <th className="py-3 px-3 text-center">Acciones</th>
+                  <th className="py-3 px-3 text-center min-w-48">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
@@ -398,7 +398,7 @@ export function HistorialServicios(props: Props) {
                         ? 'Por definir'
                         : fmt(s.monto)}
                     </td>
-                    <td className="py-3.5 px-3 text-center">
+                    <td className="py-3.5 px-3 text-center min-w-48">
                       <div className="flex items-center justify-center gap-1.5">
                         {s.folio && (
                           <span className={`${T.fuerte}/70 font-mono text-[10px] mr-0.5`}>{s.folio}</span>
