@@ -201,10 +201,10 @@ export function HistorialServicios(props: Props) {
                         {s.tipo_trabajo}
                         {s.es_revision && (
                           <span
-                            className="ml-1.5 text-amber-400 text-[10px] font-bold uppercase align-middle"
+                            className="ml-1.5 inline-flex items-center gap-1 whitespace-nowrap text-amber-400 text-[10px] font-bold uppercase align-middle"
                             title={s.diagnostico || 'Revisión'}
                           >
-                            🔍 Revisión
+                            <span aria-hidden>🔍</span> Revisión
                           </span>
                         )}
                       </span>
@@ -340,10 +340,10 @@ export function HistorialServicios(props: Props) {
                       {s.tipo_trabajo}
                       {s.es_revision && (
                         <span
-                          className="ml-1.5 text-amber-400 text-[10px] font-bold uppercase align-middle"
+                          className="ml-1.5 inline-flex items-center gap-1 whitespace-nowrap text-amber-400 text-[10px] font-bold uppercase align-middle"
                           title={s.diagnostico || 'Revisión'}
                         >
-                          🔍 Revisión
+                          <span aria-hidden>🔍</span> Revisión
                         </span>
                       )}
                       {s.metodo_pago && (
