@@ -22,11 +22,13 @@ import {
 } from '../../lib/fechaFinanzas';
 import { validarEquipo } from '../../lib/validacion';
 import { renderPlantilla } from '../../lib/whatsappPlantillas';
+import type { ResumenCierre } from '../../lib/cierreCaja';
 import { CuentasTab } from './CuentasTab';
 import { ImeiTab } from './ImeiTab';
 import { ClientesTab } from './ClientesTab';
 import { FinanzasTab } from './FinanzasTab';
 import { GarantiasTab } from './GarantiasTab';
+import { CierreCajaModal } from './CierreCajaModal';
 import { FormularioServicio } from './components/FormularioServicio';
 import { HistorialServicios } from './components/HistorialServicios';
 import { AlertasAtascados } from './components/AlertasAtascados';
@@ -37,6 +39,7 @@ import { useServicios } from '../../hooks/useServicios';
 import { useClientes } from '../../hooks/useClientes';
 import { useGarantias } from '../../hooks/useGarantias';
 import { useCuentasBancarias } from '../../hooks/useCuentasBancarias';
+import { useCierresCaja } from '../../hooks/useCierresCaja';
 
 const PAGE_SIZE = 10;
 
@@ -62,6 +65,7 @@ export function Dashboard() {
   const { clientesList, fetchClientes } = useClientes();
   const { garantiasList, fetchGarantias } = useGarantias();
   const { cuentasList, fetchCuentas } = useCuentasBancarias();
+  const { cierresList, fetchCierres } = useCierresCaja();
   const { toasts, toast, dismiss } = useToast();
 
   const [vista, setVista] = useState<Vista>('inicio');
@@ -99,6 +103,9 @@ export function Dashboard() {
   const [guardandoForm, setGuardandoForm] = useState(false);
   const [guardandoGarantia, setGuardandoGarantia] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+
+  const [cierreAbierto, setCierreAbierto] = useState(false);
+  const [guardandoCierre, setGuardandoCierre] = useState(false);
 
   useEffect(() => {
     fetchServicios();
@@ -852,6 +859,47 @@ export function Dashboard() {
     });
   };
 
+  const handleAbrirCierreCaja = () => {
+    fetchCierres();
+    setCierreAbierto(true);
+  };
+
+  // Un cierre = un snapshot al momento de guardar; upsert por fecha para
+  // que guardar de nuevo el mismo día actualice el registro en vez de
+  // duplicarlo.
+  const handleGuardarCierre = async (
+    resumen: ResumenCierre,
+    extra: { efectivoContado: number | null; nota: string }
+  ) => {
+    setGuardandoCierre(true);
+    const fila = {
+      fecha: resumen.fecha,
+      cerrado_at: new Date().toISOString(),
+      cobrado_total: resumen.cobradoTotal,
+      efectivo: resumen.efectivo,
+      transferencia: resumen.transferencia,
+      tarjeta: resumen.tarjeta,
+      otros_metodos: resumen.otrosMetodos,
+      n_cobros: resumen.nCobros,
+      por_cobrar: resumen.porCobrar,
+      devuelto_garantias: resumen.devueltoGarantias,
+      n_altas: resumen.nAltas,
+      efectivo_contado: extra.efectivoContado,
+      diferencia_efectivo:
+        extra.efectivoContado != null ? extra.efectivoContado - resumen.efectivo : null,
+      nota: extra.nota.trim() || null,
+      detalle: resumen.cobros,
+    };
+    const { error } = await supabase.from('cierres_caja').upsert(fila, { onConflict: 'fecha' });
+    setGuardandoCierre(false);
+    if (error) {
+      toast(error.message, 'error');
+    } else {
+      toast('Cierre guardado', 'success');
+      fetchCierres();
+    }
+  };
+
   const hoyStr = getFechaLocal(new Date());
   const mesActualStr = hoyStr.slice(0, 7);
 
@@ -1214,6 +1262,17 @@ export function Dashboard() {
         onConfirm={() => confirm?.onConfirm()}
         onCancel={() => setConfirm(null)}
       />
+      <CierreCajaModal
+        abierto={cierreAbierto}
+        T={T}
+        servicios={servicios}
+        garantias={garantiasList}
+        historial={cierresList}
+        guardando={guardandoCierre}
+        onCerrar={() => setCierreAbierto(false)}
+        onGuardar={handleGuardarCierre}
+        fmt={fmt}
+      />
 
       <div className="max-w-7xl mx-auto relative z-10">
         <div
@@ -1283,6 +1342,16 @@ export function Dashboard() {
         {vista === 'inicio' && (
           <>
             <AlertasAtascados trabajos={trabajosAtascados} onRecordar={handleRecordarWhatsApp} />
+
+            <div className="flex justify-end mb-4">
+              <button
+                type="button"
+                onClick={handleAbrirCierreCaja}
+                className="bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wider transition-all"
+              >
+                🧾 Cerrar caja
+              </button>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 mb-8">
               <div className="bg-gradient-to-br from-slate-900/90 to-emerald-950/40 border border-emerald-500/30 p-5 rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.07)] backdrop-blur-md flex justify-between items-center">
