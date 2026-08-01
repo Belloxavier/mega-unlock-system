@@ -288,6 +288,18 @@ export function FormularioServicio({
                   <option value="Tarjeta">Tarjeta</option>
                 </select>
               </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
+                  Nota (opcional)
+                </label>
+                <textarea
+                  value={eq.nota}
+                  onChange={(e) => onCambiarEquipo(idx, 'nota', e.target.value)}
+                  rows={2}
+                  placeholder="Ej. respaldar contactos antes de flashear"
+                  className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all resize-none`}
+                />
+              </div>
             </div>
           );
         })}

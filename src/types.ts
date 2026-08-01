@@ -30,6 +30,7 @@ export interface Servicio {
   imei_estado?: string;
   es_revision?: boolean;
   diagnostico?: string | null;
+  nota?: string | null;
   clientes?: Cliente;
 }
 
@@ -41,6 +42,7 @@ export interface EquipoForm {
   monto: string;
   metodoPago: string;
   esRevision: boolean;
+  nota: string;
 }
 
 export const equipoVacio = (): EquipoForm => ({
@@ -51,6 +53,7 @@ export const equipoVacio = (): EquipoForm => ({
   monto: '',
   metodoPago: 'Efectivo',
   esRevision: false,
+  nota: '',
 });
 
 export interface Garantia {

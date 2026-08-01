@@ -13,6 +13,8 @@ interface Props {
   totalDevueltoGarantias: number;
   flujoPorDiaObj: { [dia: string]: number };
   maxFlujoDia: number;
+  /** Cantidad de trabajos pagados por día de la semana (histórico). */
+  conteoPorDiaObj: { [dia: string]: number };
   /** Desglose por método de pago (pagados del mes actual). */
   porMetodoMes: { metodo: string; monto: number }[];
   /** Desglose por tipo de trabajo (pagados del mes actual). */
@@ -32,6 +34,7 @@ export function FinanzasTab({
   totalDevueltoGarantias,
   flujoPorDiaObj,
   maxFlujoDia,
+  conteoPorDiaObj,
   porMetodoMes,
   porTipoMes,
   fmt,
@@ -150,6 +153,7 @@ export function FinanzasTab({
         <div className="space-y-3">
           {DIAS_SEMANA.map((dia) => {
             const valor = flujoPorDiaObj[dia] || 0;
+            const cantidad = conteoPorDiaObj[dia] || 0;
             const pct = Math.round((valor / maxFlujoDia) * 100);
             return (
               <div key={dia} className="flex items-center gap-3">
@@ -160,6 +164,9 @@ export function FinanzasTab({
                     style={{ width: `${pct}%` }}
                   />
                 </div>
+                <span className="w-16 text-right text-[10px] text-slate-500">
+                  {cantidad} trab.
+                </span>
                 <span className={`w-24 text-right text-xs font-black ${T.texto}`}>{fmt(valor)}</span>
               </div>
             );

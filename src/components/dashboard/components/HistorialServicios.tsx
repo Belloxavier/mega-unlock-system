@@ -13,6 +13,7 @@ interface Props {
   conteosPorEstado: { [estado: string]: number };
   filtroFecha: string;
   filtroEstado: string;
+  filtroPagado: 'todos' | 'pagado' | 'sin_pagar';
   busqueda: string;
   paginaActual: number;
   totalPaginas: number;
@@ -25,6 +26,7 @@ interface Props {
   botonFiltro: (activo: boolean) => string;
   onFiltroFecha: (v: string) => void;
   onFiltroEstado: (v: string) => void;
+  onFiltroPagado: (v: 'todos' | 'pagado' | 'sin_pagar') => void;
   onBusqueda: (v: string) => void;
   onPagina: (fn: (p: number) => number) => void;
   onImprimirReporte: () => void;
@@ -62,6 +64,7 @@ export function HistorialServicios(props: Props) {
     conteosPorEstado,
     filtroFecha,
     filtroEstado,
+    filtroPagado,
     busqueda,
     paginaActual,
     totalPaginas,
@@ -130,6 +133,27 @@ export function HistorialServicios(props: Props) {
             </button>
           );
         })}
+      </div>
+
+      <div className="flex flex-wrap gap-1.5 mb-5">
+        {(
+          [
+            ['todos', `Todos (${serviciosBase.length})`],
+            ['pagado', `💰 Pagado (${serviciosBase.filter((s) => s.pagado).length})`],
+            ['sin_pagar', `Sin pagar (${serviciosBase.filter((s) => !s.pagado).length})`],
+          ] as const
+        ).map(([valor, etiqueta]) => (
+          <button
+            key={valor}
+            type="button"
+            onClick={() => props.onFiltroPagado(valor)}
+            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all border ${
+              filtroPagado === valor ? T.filtroActivo + ' border-transparent' : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-600'
+            }`}
+          >
+            {etiqueta}
+          </button>
+        ))}
       </div>
 
       {loading ? (
@@ -202,6 +226,9 @@ export function HistorialServicios(props: Props) {
                       {s.metodo_pago && <span className="text-[10px] text-slate-500">{s.metodo_pago}</span>}
                       {s.es_revision && s.diagnostico && (
                         <span className="text-[10px] text-slate-400 mt-0.5 max-w-[180px]">{s.diagnostico}</span>
+                      )}
+                      {s.nota && (
+                        <span className="text-[10px] text-amber-300/80 italic mt-0.5 max-w-[180px]">📝 {s.nota}</span>
                       )}
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
@@ -342,6 +369,9 @@ export function HistorialServicios(props: Props) {
                       )}
                       {s.es_revision && s.diagnostico && (
                         <span className="block text-[10px] text-slate-400 mt-0.5">{s.diagnostico}</span>
+                      )}
+                      {s.nota && (
+                        <span className="block text-[10px] text-amber-300/80 italic mt-0.5">📝 {s.nota}</span>
                       )}
                     </td>
                     <td className="py-3.5 px-3">

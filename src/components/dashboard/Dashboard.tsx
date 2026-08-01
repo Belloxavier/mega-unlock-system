@@ -30,6 +30,7 @@ import { FinanzasTab } from './FinanzasTab';
 import { GarantiasTab } from './GarantiasTab';
 import { CierreCajaModal } from './CierreCajaModal';
 import { ReporteMensualModal } from './ReporteMensualModal';
+import { PagosPorDiaModal } from './PagosPorDiaModal';
 import { FormularioServicio } from './components/FormularioServicio';
 import { HistorialServicios } from './components/HistorialServicios';
 import { AlertasAtascados } from './components/AlertasAtascados';
@@ -73,6 +74,7 @@ export function Dashboard() {
   const [busqueda, setBusqueda] = useState('');
   const [filtroFecha, setFiltroFecha] = useState('todos');
   const [filtroEstado, setFiltroEstado] = useState('todos');
+  const [filtroPagado, setFiltroPagado] = useState<'todos' | 'pagado' | 'sin_pagar'>('todos');
   const [mostrarMontos, setMostrarMontos] = useState(true);
   const [paginaActual, setPaginaActual] = useState(1);
   const [temaCalido, setTemaCalido] = useState(false);
@@ -108,6 +110,7 @@ export function Dashboard() {
   const [cierreAbierto, setCierreAbierto] = useState(false);
   const [guardandoCierre, setGuardandoCierre] = useState(false);
   const [reporteAbierto, setReporteAbierto] = useState(false);
+  const [pagosDiaAbierto, setPagosDiaAbierto] = useState(false);
 
   useEffect(() => {
     fetchServicios();
@@ -118,7 +121,7 @@ export function Dashboard() {
 
   useEffect(() => {
     setPaginaActual(1);
-  }, [busqueda, filtroFecha, filtroEstado]);
+  }, [busqueda, filtroFecha, filtroEstado, filtroPagado]);
 
   const sugerencias = useMemo(() => {
     const q = nombreCliente.trim().toLowerCase();
@@ -229,6 +232,7 @@ export function Dashboard() {
             monto: eq.monto ? parseFloat(eq.monto) : 0,
             metodo_pago: eq.metodoPago,
             es_revision: eq.esRevision,
+            nota: eq.nota.trim() || null,
           })
           .eq('id', editandoId);
 
@@ -326,6 +330,7 @@ export function Dashboard() {
         estado: 'PENDIENTE',
         metodo_pago: eq.metodoPago,
         es_revision: eq.esRevision,
+        nota: eq.nota.trim() || null,
       }));
 
       const { error: servicioError } = await supabase.from('servicios').insert(filas);
@@ -362,6 +367,7 @@ export function Dashboard() {
         monto: s.monto.toString(),
         metodoPago: s.metodo_pago || 'Efectivo',
         esRevision: s.es_revision || false,
+        nota: s.nota || '',
       },
     ]);
     setVista('inicio');
@@ -451,8 +457,13 @@ export function Dashboard() {
     if (montoFinal !== undefined) cambios.monto = montoFinal;
     if (nuevoEstado === 'ENTREGADO') {
       cambios.entregado_at = new Date().toISOString();
-      cambios.pagado = true;
-      cambios.pagado_at = cambios.entregado_at;
+      // Si ya estaba marcado como pagado (ej. se pagó ayer, se entrega hoy),
+      // no se toca pagado_at — si no, la fecha real de pago se pisaba con
+      // la fecha de hoy cada vez que se cambiaba de estado.
+      if (!servicioActual?.pagado) {
+        cambios.pagado = true;
+        cambios.pagado_at = cambios.entregado_at;
+      }
     }
 
     setAccionId(id);
@@ -932,9 +943,13 @@ export function Dashboard() {
   }, [serviciosBase]);
 
   const serviciosFiltrados = useMemo(() => {
-    if (filtroEstado === 'todos') return serviciosBase;
-    return serviciosBase.filter((s) => s.estado === filtroEstado);
-  }, [serviciosBase, filtroEstado]);
+    return serviciosBase.filter((s) => {
+      if (filtroEstado !== 'todos' && s.estado !== filtroEstado) return false;
+      if (filtroPagado === 'pagado' && !s.pagado) return false;
+      if (filtroPagado === 'sin_pagar' && s.pagado) return false;
+      return true;
+    });
+  }, [serviciosBase, filtroEstado, filtroPagado]);
 
   const totalPaginas = Math.max(1, Math.ceil(serviciosFiltrados.length / PAGE_SIZE));
   const serviciosPaginados = serviciosFiltrados.slice(
@@ -953,6 +968,7 @@ export function Dashboard() {
     porCobrarTotal,
     flujoPorDiaObj,
     maxFlujoDia,
+    conteoPorDiaObj,
     porMetodoMes,
     porTipoMes,
   } = useMemo(() => {
@@ -999,6 +1015,15 @@ export function Dashboard() {
     }, {});
     const maxFlujoDia = Math.max(1, ...DIAS_SEMANA.map((d) => flujoPorDiaObj[d] || 0));
 
+    // Igual que flujoPorDiaObj pero contando trabajos (equipos) en vez de
+    // dinero — el monto por día ya existía, esto agrega "cuántos" además
+    // de "cuánto".
+    const conteoPorDiaObj = pagados.reduce((acc: { [dia: string]: number }, s) => {
+      const dia = getDiaSemana(fechaPago(s));
+      if (DIAS_SEMANA.includes(dia)) acc[dia] = (acc[dia] || 0) + 1;
+      return acc;
+    }, {});
+
     const pagadosMes = pagados.filter((s) => estaEnRango(fechaPago(s), mesIni, mesFin));
     const metodoMap: { [k: string]: number } = {};
     const tipoMap: { [k: string]: number } = {};
@@ -1027,6 +1052,7 @@ export function Dashboard() {
       porCobrarTotal,
       flujoPorDiaObj,
       maxFlujoDia,
+      conteoPorDiaObj,
       porMetodoMes,
       porTipoMes,
     };
@@ -1283,6 +1309,14 @@ export function Dashboard() {
         onCerrar={() => setReporteAbierto(false)}
         fmt={fmt}
       />
+      <PagosPorDiaModal
+        abierto={pagosDiaAbierto}
+        T={T}
+        servicios={servicios}
+        garantias={garantiasList}
+        onCerrar={() => setPagosDiaAbierto(false)}
+        fmt={fmt}
+      />
 
       <div className="max-w-7xl mx-auto relative z-10">
         <div
@@ -1356,6 +1390,13 @@ export function Dashboard() {
             <div className="flex justify-end gap-2 mb-4">
               <button
                 type="button"
+                onClick={() => setPagosDiaAbierto(true)}
+                className="bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wider transition-all"
+              >
+                📅 Pagos por día
+              </button>
+              <button
+                type="button"
                 onClick={() => setReporteAbierto(true)}
                 className="bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wider transition-all"
               >
@@ -1419,6 +1460,7 @@ export function Dashboard() {
                 conteosPorEstado={conteosPorEstado}
                 filtroFecha={filtroFecha}
                 filtroEstado={filtroEstado}
+                filtroPagado={filtroPagado}
                 busqueda={busqueda}
                 paginaActual={paginaActual}
                 totalPaginas={totalPaginas}
@@ -1431,6 +1473,7 @@ export function Dashboard() {
                 botonFiltro={botonFiltro}
                 onFiltroFecha={setFiltroFecha}
                 onFiltroEstado={setFiltroEstado}
+                onFiltroPagado={setFiltroPagado}
                 onBusqueda={setBusqueda}
                 onPagina={setPaginaActual}
                 onImprimirReporte={handleImprimirReporte}
@@ -1483,6 +1526,7 @@ export function Dashboard() {
             totalDevueltoGarantias={totalDevueltoGarantias}
             flujoPorDiaObj={flujoPorDiaObj}
             maxFlujoDia={maxFlujoDia}
+            conteoPorDiaObj={conteoPorDiaObj}
             porMetodoMes={porMetodoMes}
             porTipoMes={porTipoMes}
             fmt={fmt}
