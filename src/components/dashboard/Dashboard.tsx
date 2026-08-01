@@ -31,6 +31,7 @@ import { ImeiTab } from './ImeiTab';
 import { ClientesTab } from './ClientesTab';
 import { FinanzasTab } from './FinanzasTab';
 import { GarantiasTab } from './GarantiasTab';
+import { AreaTrabajoTab } from './AreaTrabajoTab';
 import { CierreCajaModal } from './CierreCajaModal';
 import { ReporteMensualModal } from './ReporteMensualModal';
 import { PagosPorDiaModal } from './PagosPorDiaModal';
@@ -59,7 +60,7 @@ const NIVELES_GARANTIA = [
   'bg-red-600/20 text-red-300 border-red-500/50 shadow-[0_0_8px_rgba(220,38,38,0.4)]',
 ];
 
-type Vista = 'inicio' | 'clientes' | 'finanzas' | 'garantias' | 'imei' | 'cuentas';
+type Vista = 'inicio' | 'area-trabajo' | 'clientes' | 'finanzas' | 'garantias' | 'imei' | 'cuentas';
 
 interface ConfirmState {
   titulo: string;
@@ -1544,6 +1545,7 @@ export function Dashboard() {
           {(
             [
               ['inicio', '🏠 Inicio'],
+              ['area-trabajo', '🔧 Área de Trabajo'],
               ['clientes', '👥 Clientes'],
               ['finanzas', '💰 Finanzas'],
               ['garantias', '🛡️ Garantías'],
@@ -1641,7 +1643,6 @@ export function Dashboard() {
                 loading={loading}
                 serviciosFiltrados={serviciosFiltrados}
                 serviciosPaginados={serviciosPaginados}
-                trabajosOlvidados={trabajosOlvidados}
                 conteosPorEstado={conteosPorEstado}
                 conteosPorPagado={conteosPorPagado}
                 filtroFecha={filtroFecha}
@@ -1665,11 +1666,6 @@ export function Dashboard() {
                 onImprimirReporte={handleImprimirReporte}
                 onToggleEstadoMenu={setEstadoMenuAbierto}
                 onCambiarEstado={handleCambiarEstado}
-                onIniciarTrabajo={handleIniciarTrabajo}
-                onFinalizarTrabajo={handleFinalizarTrabajo}
-                onSilenciarAvisoOlvidado={handleSilenciarAvisoOlvidado}
-                onCorregirHoraTrabajo={handleAbrirCorregirHora}
-                onToggleTiempoValido={handleToggleTiempoValido}
                 onTogglePagado={handleTogglePagado}
                 onAbrirEditorFecha={handleAbrirEditorFechaPago}
                 onCerrarEditorFecha={() => setEditandoFechaPagoId(null)}
@@ -1683,6 +1679,39 @@ export function Dashboard() {
               />
             </div>
           </>
+        )}
+
+        {vista === 'area-trabajo' && (
+          <AreaTrabajoTab
+            T={T}
+            serviciosFiltrados={serviciosFiltrados}
+            serviciosPaginados={serviciosPaginados}
+            conteosPorEstado={conteosPorEstado}
+            conteosPorPagado={conteosPorPagado}
+            filtroFecha={filtroFecha}
+            filtroEstado={filtroEstado}
+            filtroPagado={filtroPagado}
+            busqueda={busqueda}
+            paginaActual={paginaActual}
+            totalPaginas={totalPaginas}
+            accionId={accionId}
+            trabajosOlvidados={trabajosOlvidados}
+            estadoMenuAbierto={estadoMenuAbierto}
+            botonFiltro={botonFiltro}
+            onFiltroFecha={setFiltroFecha}
+            onFiltroEstado={setFiltroEstado}
+            onFiltroPagado={setFiltroPagado}
+            onBusqueda={setBusqueda}
+            onPagina={setPaginaActual}
+            onIniciarTrabajo={handleIniciarTrabajo}
+            onFinalizarTrabajo={handleFinalizarTrabajo}
+            onSilenciarAvisoOlvidado={handleSilenciarAvisoOlvidado}
+            onCorregirHoraTrabajo={handleAbrirCorregirHora}
+            onToggleTiempoValido={handleToggleTiempoValido}
+            onToggleEstadoMenu={setEstadoMenuAbierto}
+            onCambiarEstado={handleCambiarEstado}
+            obtenerEstimacionDificultad={(modelo, tipo) => estimarDificultad(indiceDuraciones, modelo, tipo)}
+          />
         )}
 
         {vista === 'clientes' && (
