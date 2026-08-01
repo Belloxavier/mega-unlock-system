@@ -15,6 +15,18 @@ export const getDiaSemana = (fecha: Date | string) => {
   return nombre.charAt(0).toUpperCase() + nombre.slice(1);
 };
 
+// Fecha corta y legible para mensajes al usuario, ej. "lunes 27/07".
+export const getFechaCorta = (fecha: Date | string) => {
+  const d = typeof fecha === 'string' ? new Date(fecha) : fecha;
+  const dia = getDiaSemana(d).toLowerCase();
+  const diaMes = new Intl.DateTimeFormat('es-CL', {
+    timeZone: ZONA_HORARIA,
+    day: '2-digit',
+    month: '2-digit',
+  }).format(d);
+  return `${dia} ${diaMes}`;
+};
+
 // Desplaza un string "YYYY-MM" por `offset` meses (puede ser negativo).
 export const sumarMeses = (mesStr: string, offset: number) => {
   const [y, m] = mesStr.split('-').map(Number);

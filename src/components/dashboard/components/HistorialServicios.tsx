@@ -3,14 +3,17 @@ import { getFechaLocal } from '../../../lib/date';
 import { getImeiWarning } from '../../../lib/imei';
 import { EstadoControl } from './EstadoControl';
 import { EditorFechaPago } from './EditorFechaPago';
+import { NotaPopover } from './NotaPopover';
+import { TrabajoTiempoControl, type AvisoOlvidado } from './TrabajoTiempoControl';
 
 interface Props {
   T: TemaUI;
   loading: boolean;
-  serviciosBase: Servicio[];
   serviciosFiltrados: Servicio[];
   serviciosPaginados: Servicio[];
+  trabajosOlvidados: { [id: string]: AvisoOlvidado };
   conteosPorEstado: { [estado: string]: number };
+  conteosPorPagado: { pagado: number; sin_pagar: number };
   filtroFecha: string;
   filtroEstado: string;
   filtroPagado: 'todos' | 'pagado' | 'sin_pagar';
@@ -32,6 +35,11 @@ interface Props {
   onImprimirReporte: () => void;
   onToggleEstadoMenu: (id: string | null) => void;
   onCambiarEstado: (id: string, actual: string, nuevo: string) => void;
+  onIniciarTrabajo: (id: string) => void;
+  onFinalizarTrabajo: (id: string) => void;
+  onSilenciarAvisoOlvidado: (id: string) => void;
+  onCorregirHoraTrabajo: (id: string) => void;
+  onToggleTiempoValido: (id: string, actual: boolean) => void;
   onTogglePagado: (id: string, actual: boolean) => void;
   onAbrirEditorFecha: (s: Servicio) => void;
   onCerrarEditorFecha: () => void;
@@ -48,7 +56,6 @@ const ESTADOS_FILTRO = [
   'todos',
   'PENDIENTE',
   'EN PROCESO',
-  'PAUSADO',
   'COMPLETADO',
   'ENTREGADO',
   'NO REALIZADO',
@@ -58,10 +65,11 @@ export function HistorialServicios(props: Props) {
   const {
     T,
     loading,
-    serviciosBase,
     serviciosFiltrados,
     serviciosPaginados,
+    trabajosOlvidados,
     conteosPorEstado,
+    conteosPorPagado,
     filtroFecha,
     filtroEstado,
     filtroPagado,
@@ -116,15 +124,19 @@ export function HistorialServicios(props: Props) {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1.5 mb-5">
+      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Estado</p>
+      <div className="flex flex-wrap gap-1.5 mb-4">
         {ESTADOS_FILTRO.map((est) => {
-          const cantidad = est === 'todos' ? serviciosBase.length : conteosPorEstado[est] || 0;
+          const cantidad =
+            est === 'todos'
+              ? Object.values(conteosPorEstado).reduce((a, b) => a + b, 0)
+              : conteosPorEstado[est] || 0;
           const activo = filtroEstado === est;
           return (
             <button
               key={est}
               type="button"
-              onClick={() => props.onFiltroEstado(est)}
+              onClick={() => props.onFiltroEstado(activo ? 'todos' : est)}
               className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all border ${
                 activo ? T.filtroActivo + ' border-transparent' : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-600'
               }`}
@@ -135,25 +147,28 @@ export function HistorialServicios(props: Props) {
         })}
       </div>
 
+      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Pago</p>
       <div className="flex flex-wrap gap-1.5 mb-5">
         {(
           [
-            ['todos', `Todos (${serviciosBase.length})`],
-            ['pagado', `💰 Pagado (${serviciosBase.filter((s) => s.pagado).length})`],
-            ['sin_pagar', `Sin pagar (${serviciosBase.filter((s) => !s.pagado).length})`],
+            ['pagado', `💰 Pagado (${conteosPorPagado.pagado})`],
+            ['sin_pagar', `Sin pagar (${conteosPorPagado.sin_pagar})`],
           ] as const
-        ).map(([valor, etiqueta]) => (
-          <button
-            key={valor}
-            type="button"
-            onClick={() => props.onFiltroPagado(valor)}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all border ${
-              filtroPagado === valor ? T.filtroActivo + ' border-transparent' : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-600'
-            }`}
-          >
-            {etiqueta}
-          </button>
-        ))}
+        ).map(([valor, etiqueta]) => {
+          const activo = filtroPagado === valor;
+          return (
+            <button
+              key={valor}
+              type="button"
+              onClick={() => props.onFiltroPagado(activo ? 'todos' : valor)}
+              className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all border ${
+                activo ? T.filtroActivo + ' border-transparent' : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-600'
+              }`}
+            >
+              {etiqueta}
+            </button>
+          );
+        })}
       </div>
 
       {loading ? (
@@ -222,13 +237,11 @@ export function HistorialServicios(props: Props) {
                             <span aria-hidden>🔍</span> Revisión
                           </span>
                         )}
+                        {s.nota && <NotaPopover nota={s.nota} alinear="right" />}
                       </span>
                       {s.metodo_pago && <span className="text-[10px] text-slate-500">{s.metodo_pago}</span>}
                       {s.es_revision && s.diagnostico && (
                         <span className="text-[10px] text-slate-400 mt-0.5 max-w-[180px]">{s.diagnostico}</span>
-                      )}
-                      {s.nota && (
-                        <span className="text-[10px] text-amber-300/80 italic mt-0.5 max-w-[180px]">📝 {s.nota}</span>
                       )}
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
@@ -242,6 +255,16 @@ export function HistorialServicios(props: Props) {
                         onCerrar={() => props.onToggleEstadoMenu(null)}
                         onCambiar={(op) => props.onCambiarEstado(s.id, s.estado, op)}
                         disabled={accionId === s.id}
+                      />
+                      <TrabajoTiempoControl
+                        s={s}
+                        disabled={accionId === s.id}
+                        avisoOlvidado={trabajosOlvidados[s.id]}
+                        onIniciar={props.onIniciarTrabajo}
+                        onFinalizar={props.onFinalizarTrabajo}
+                        onSilenciarAviso={props.onSilenciarAvisoOlvidado}
+                        onCorregirHora={props.onCorregirHoraTrabajo}
+                        onToggleValidez={props.onToggleTiempoValido}
                       />
                       <div className="flex items-center gap-1">
                         <button
@@ -364,28 +387,38 @@ export function HistorialServicios(props: Props) {
                           <span aria-hidden>🔍</span> Revisión
                         </span>
                       )}
+                      {s.nota && <NotaPopover nota={s.nota} alinear="left" />}
                       {s.metodo_pago && (
                         <span className="block text-[10px] text-slate-500">{s.metodo_pago}</span>
                       )}
                       {s.es_revision && s.diagnostico && (
                         <span className="block text-[10px] text-slate-400 mt-0.5">{s.diagnostico}</span>
                       )}
-                      {s.nota && (
-                        <span className="block text-[10px] text-amber-300/80 italic mt-0.5">📝 {s.nota}</span>
-                      )}
                     </td>
                     <td className="py-3.5 px-3">
-                      <EstadoControl
-                        s={s}
-                        alinear="left"
-                        abierto={estadoMenuAbierto === s.id}
-                        onToggle={() =>
-                          props.onToggleEstadoMenu(estadoMenuAbierto === s.id ? null : s.id)
-                        }
-                        onCerrar={() => props.onToggleEstadoMenu(null)}
-                        onCambiar={(op) => props.onCambiarEstado(s.id, s.estado, op)}
-                        disabled={accionId === s.id}
-                      />
+                      <div className="flex flex-col items-start gap-1.5">
+                        <EstadoControl
+                          s={s}
+                          alinear="left"
+                          abierto={estadoMenuAbierto === s.id}
+                          onToggle={() =>
+                            props.onToggleEstadoMenu(estadoMenuAbierto === s.id ? null : s.id)
+                          }
+                          onCerrar={() => props.onToggleEstadoMenu(null)}
+                          onCambiar={(op) => props.onCambiarEstado(s.id, s.estado, op)}
+                          disabled={accionId === s.id}
+                        />
+                        <TrabajoTiempoControl
+                          s={s}
+                          disabled={accionId === s.id}
+                          avisoOlvidado={trabajosOlvidados[s.id]}
+                          onIniciar={props.onIniciarTrabajo}
+                          onFinalizar={props.onFinalizarTrabajo}
+                          onSilenciarAviso={props.onSilenciarAvisoOlvidado}
+                          onCorregirHora={props.onCorregirHoraTrabajo}
+                          onToggleValidez={props.onToggleTiempoValido}
+                        />
+                      </div>
                     </td>
                     <td className="py-3.5 px-3">
                       <div className="flex items-center gap-1">

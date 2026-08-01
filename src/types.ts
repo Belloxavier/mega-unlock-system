@@ -31,6 +31,10 @@ export interface Servicio {
   es_revision?: boolean;
   diagnostico?: string | null;
   nota?: string | null;
+  inicio_real?: string | null;
+  fin_real?: string | null;
+  /** false = este tiempo real no debe usarse para aprender (precio/dificultad/carga). Default true. */
+  tiempo_valido?: boolean;
   clientes?: Cliente;
 }
 

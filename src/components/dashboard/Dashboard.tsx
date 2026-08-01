@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../supabase';
 import type { Cliente, Servicio, EquipoForm, Garantia, CuentaBancaria, TemaUI } from '../../types';
 import { equipoVacio, cuentaVacia } from '../../types';
-import { DIAS_SEMANA, getFechaLocal, getDiaSemana } from '../../lib/date';
+import { DIAS_SEMANA, getFechaLocal, getDiaSemana, getFechaCorta } from '../../lib/date';
 import { TIPOS_ESTANDAR, getPrefijo } from '../../lib/folio';
 import { pareceImei } from '../../lib/imei';
 import { escapeHtml } from '../../lib/html';
@@ -23,6 +23,9 @@ import {
 import { validarEquipo } from '../../lib/validacion';
 import { renderPlantilla } from '../../lib/whatsappPlantillas';
 import type { ResumenCierre } from '../../lib/cierreCaja';
+import { construirIndicePrecios, sugerirPrecio } from '../../lib/precioSugerido';
+import { construirIndiceDuraciones, estimarDificultad } from '../../lib/dificultad';
+import { calcularCargaTaller, ETIQUETA_CARGA, ESTILO_CARGA } from '../../lib/cargaTaller';
 import { CuentasTab } from './CuentasTab';
 import { ImeiTab } from './ImeiTab';
 import { ClientesTab } from './ClientesTab';
@@ -34,6 +37,10 @@ import { PagosPorDiaModal } from './PagosPorDiaModal';
 import { FormularioServicio } from './components/FormularioServicio';
 import { HistorialServicios } from './components/HistorialServicios';
 import { AlertasAtascados } from './components/AlertasAtascados';
+import { CompletarRevisionModal } from './components/CompletarRevisionModal';
+import { ResolverGarantiaModal } from './components/ResolverGarantiaModal';
+import { CorregirFinRealModal } from './components/CorregirFinRealModal';
+import type { AvisoOlvidado } from './components/TrabajoTiempoControl';
 import { ToastContainer } from './components/ToastContainer';
 import { ConfirmSheet } from './components/ConfirmSheet';
 import { useToast } from './hooks/useToast';
@@ -111,6 +118,14 @@ export function Dashboard() {
   const [guardandoCierre, setGuardandoCierre] = useState(false);
   const [reporteAbierto, setReporteAbierto] = useState(false);
   const [pagosDiaAbierto, setPagosDiaAbierto] = useState(false);
+  const [revisionPendiente, setRevisionPendiente] = useState<{ id: string; servicio: Servicio } | null>(null);
+  const [garantiaPendiente, setGarantiaPendiente] = useState<Garantia | null>(null);
+  const [corrigiendoFinRealId, setCorrigiendoFinRealId] = useState<string | null>(null);
+  // Trabajos "en curso" cuyo aviso de "¿se te olvidó finalizar?" ya se
+  // descartó ("Sigue en curso") — no vuelve a molestar hasta que pase este
+  // tiempo (guarda hasta cuándo, en epoch ms).
+  const [avisosSilenciados, setAvisosSilenciados] = useState<{ [id: string]: number }>({});
+  const [tickReloj, setTickReloj] = useState(0);
 
   useEffect(() => {
     fetchServicios();
@@ -122,6 +137,14 @@ export function Dashboard() {
   useEffect(() => {
     setPaginaActual(1);
   }, [busqueda, filtroFecha, filtroEstado, filtroPagado]);
+
+  // Refresca cada minuto el cálculo de "¿se te olvidó finalizar?" — un
+  // trabajo puede cruzar el umbral solo por el paso del tiempo, sin que
+  // nadie haga clic en nada.
+  useEffect(() => {
+    const intervalo = setInterval(() => setTickReloj((t) => t + 1), 60000);
+    return () => clearInterval(intervalo);
+  }, []);
 
   const sugerencias = useMemo(() => {
     const q = nombreCliente.trim().toLowerCase();
@@ -397,52 +420,15 @@ export function Dashboard() {
     });
   };
 
-  const handleCambiarEstado = async (id: string, estadoActual: string, nuevoEstado: string) => {
-    if (nuevoEstado === estadoActual) return;
-
-    const servicioActual = servicios.find((s) => s.id === id);
-    const tieneWhatsApp = !!servicioActual?.clientes?.telefono;
-    let ventanaWhatsApp: Window | null = null;
-    let avisarWhatsApp = false;
-
-    let diagnosticoFinal: string | undefined;
-    let montoFinal: number | undefined;
-    if (nuevoEstado === 'COMPLETADO' && servicioActual?.es_revision) {
-      const diagnosticoInput = window.prompt(
-        '¿Qué se encontró o se hizo en la revisión?',
-        servicioActual.diagnostico || ''
-      );
-      if (diagnosticoInput === null || !diagnosticoInput.trim()) return;
-      const precioInput = window.prompt(
-        'Precio final a cobrar:',
-        servicioActual.monto ? servicioActual.monto.toString() : ''
-      );
-      if (precioInput === null) return;
-      const precioParseado = parseFloat(precioInput);
-      if (isNaN(precioParseado) || precioParseado < 0) {
-        toast('Precio inválido', 'error');
-        return;
-      }
-      diagnosticoFinal = diagnosticoInput.trim();
-      montoFinal = precioParseado;
-    }
-
-    if (nuevoEstado === 'COMPLETADO' && tieneWhatsApp) {
-      const otrosPendientes = servicios.filter(
-        (s) =>
-          s.id !== id &&
-          s.clientes?.id &&
-          s.clientes.id === servicioActual?.clientes?.id &&
-          !['COMPLETADO', 'ENTREGADO', 'NO REALIZADO'].includes(s.estado)
-      ).length;
-      avisarWhatsApp = window.confirm(
-        otrosPendientes > 0
-          ? `Este cliente tiene ${otrosPendientes} equipo(s) más sin completar todavía.\n\n¿Enviar WhatsApp avisando que este equipo ya está listo?`
-          : '¿Enviar WhatsApp avisando que el equipo está listo para retirar?'
-      );
-      if (avisarWhatsApp) ventanaWhatsApp = window.open('', '_blank');
-    }
-
+  // Compartido entre el cambio de estado normal y la confirmación del modal
+  // "Completar revisión" (que agrega diagnóstico/monto antes de llamar acá).
+  const aplicarCambioEstado = async (
+    id: string,
+    nuevoEstado: string,
+    servicioActual: Servicio | undefined,
+    diagnosticoFinal?: string,
+    montoFinal?: number
+  ) => {
     const cambios: {
       estado: string;
       completado_at?: string;
@@ -471,7 +457,6 @@ export function Dashboard() {
     setAccionId(null);
 
     if (error) {
-      ventanaWhatsApp?.close();
       toast(`No se pudo cambiar el estado: ${error.message}`, 'error');
       return;
     }
@@ -479,31 +464,76 @@ export function Dashboard() {
     fetchServicios();
     toast(`Estado → ${nuevoEstado}`, 'success');
 
-    if (avisarWhatsApp && servicioActual && ventanaWhatsApp) {
-      const numero = limpiarNumero(servicioActual.clientes?.telefono || '');
-      const linkPago =
-        cuentasList.length > 0 ? `\n\nDatos para transferencia: ${window.location.origin}/pago` : '';
-      const mensaje =
-        diagnosticoFinal !== undefined
-          ? renderPlantilla('equipoListoRevision', {
-              nombre: servicioActual.clientes?.nombre || '',
-              modelo: servicioActual.modelo_equipo,
-              folio: servicioActual.folio || undefined,
-              diagnostico: diagnosticoFinal,
-              monto: montoFinal ?? 0,
-              linkPago,
-            })
-          : renderPlantilla('equipoListo', {
-              nombre: servicioActual.clientes?.nombre || '',
-              modelo: servicioActual.modelo_equipo,
-              folio: servicioActual.folio || undefined,
-              monto: servicioActual.monto,
-              linkPago,
-            });
-      ventanaWhatsApp.location.href = `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
-    } else {
-      ventanaWhatsApp?.close();
+    // El envío de WhatsApp es un paso aparte y opcional — el cambio de
+    // estado ya quedó guardado se confirme o no el aviso.
+    const tieneWhatsApp = !!servicioActual?.clientes?.telefono;
+    if (nuevoEstado === 'COMPLETADO' && tieneWhatsApp && servicioActual) {
+      const otrosPendientes = servicios.filter(
+        (s) =>
+          s.id !== id &&
+          s.clientes?.id &&
+          s.clientes.id === servicioActual.clientes?.id &&
+          !['COMPLETADO', 'ENTREGADO', 'NO REALIZADO'].includes(s.estado)
+      ).length;
+      setConfirm({
+        titulo: 'Enviar WhatsApp',
+        mensaje:
+          otrosPendientes > 0
+            ? `Este cliente tiene ${otrosPendientes} equipo(s) más sin completar todavía.\n\n¿Enviar WhatsApp avisando que este equipo ya está listo?`
+            : '¿Enviar WhatsApp avisando que el equipo está listo para retirar?',
+        confirmLabel: 'Enviar',
+        onConfirm: () => {
+          setConfirm(null);
+          // Debe abrirse aquí, sincrónico con el clic del usuario en el
+          // botón "Enviar" del ConfirmSheet — si no, Safari/Chrome bloquean
+          // el popup por no venir de un gesto directo del usuario.
+          const ventanaWhatsApp = window.open('', '_blank');
+          const numero = limpiarNumero(servicioActual.clientes?.telefono || '');
+          const linkPago =
+            cuentasList.length > 0 ? `\n\nDatos para transferencia: ${window.location.origin}/pago` : '';
+          const mensaje =
+            diagnosticoFinal !== undefined
+              ? renderPlantilla('equipoListoRevision', {
+                  nombre: servicioActual.clientes?.nombre || '',
+                  modelo: servicioActual.modelo_equipo,
+                  folio: servicioActual.folio || undefined,
+                  diagnostico: diagnosticoFinal,
+                  monto: montoFinal ?? 0,
+                  linkPago,
+                })
+              : renderPlantilla('equipoListo', {
+                  nombre: servicioActual.clientes?.nombre || '',
+                  modelo: servicioActual.modelo_equipo,
+                  folio: servicioActual.folio || undefined,
+                  monto: servicioActual.monto,
+                  linkPago,
+                });
+          if (ventanaWhatsApp) {
+            ventanaWhatsApp.location.href = `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
+          }
+        },
+      });
     }
+  };
+
+  const handleCambiarEstado = async (id: string, estadoActual: string, nuevoEstado: string) => {
+    if (nuevoEstado === estadoActual) return;
+
+    const servicioActual = servicios.find((s) => s.id === id);
+
+    if (nuevoEstado === 'COMPLETADO' && servicioActual?.es_revision) {
+      setRevisionPendiente({ id, servicio: servicioActual });
+      return;
+    }
+
+    await aplicarCambioEstado(id, nuevoEstado, servicioActual);
+  };
+
+  const handleConfirmarRevision = async (diagnostico: string, monto: number) => {
+    if (!revisionPendiente) return;
+    const { id, servicio } = revisionPendiente;
+    setRevisionPendiente(null);
+    await aplicarCambioEstado(id, 'COMPLETADO', servicio, diagnostico, monto);
   };
 
   const handleTogglePagado = async (id: string, pagadoActual: boolean) => {
@@ -523,9 +553,18 @@ export function Dashboard() {
     };
 
     if (pagadoActual) {
+      // Si se pagó otro día, desmarcarlo afecta la caja de ESE día (no la de
+      // hoy) — el aviso lo deja explícito para no desmarcar por error un
+      // pago de un cierre ya pasado. Si se pagó hoy mismo, no hay ningún
+      // cierre pasado en juego, así que basta la confirmación simple.
+      const servicio = servicios.find((s) => s.id === id);
+      const esOtroDia = !!servicio?.pagado_at && getFechaLocal(servicio.pagado_at) !== hoyStr;
+
       setConfirm({
         titulo: 'Desmarcar pago',
-        mensaje: '¿Desmarcar como pagado? Se perderá la fecha real en que se pagó.',
+        mensaje: esOtroDia
+          ? `Este trabajo se pagó el ${getFechaCorta(servicio!.pagado_at!)}. Al desmarcarlo se pierde ese registro y afecta la caja de ese día. ¿Confirmas?`
+          : '¿Desmarcar como pagado? Se perderá la fecha real en que se pagó.',
         peligro: true,
         confirmLabel: 'Desmarcar',
         onConfirm: () => {
@@ -582,6 +621,9 @@ export function Dashboard() {
 
   const handleReactivar = async (id: string) => {
     setAccionId(id);
+    // El pago es un hecho real con fecha real, independiente del estado del
+    // trabajo — no se toca pagado/pagado_at al reactivar, para no perder el
+    // día real en que se cobró (mismo motivo que en el flujo de ENTREGADO).
     const { error } = await supabase
       .from('servicios')
       .update({ estado: 'PENDIENTE', completado_at: null, entregado_at: null })
@@ -710,51 +752,39 @@ export function Dashboard() {
     });
   };
 
-  const handleResolverGarantia = async (g: Garantia) => {
+  const handleResolverGarantia = (g: Garantia) => {
     if (g.resuelta) {
-      const { error } = await supabase
-        .from('garantias')
-        .update({ resuelta: false, resuelta_at: null })
-        .eq('id', g.id);
-      if (!error) {
-        fetchGarantias();
-        toast('Garantía reabierta', 'info');
-      } else toast(error.message, 'error');
+      void reabrirGarantia(g.id);
       return;
     }
+    setGarantiaPendiente(g);
+  };
 
-    const nota = window.prompt(
-      '¿Qué se hizo para resolverla? (ej. reparado sin costo, se cambió pieza, se devolvió dinero)'
-    );
-    if (nota === null) return;
+  const reabrirGarantia = async (id: string) => {
+    const { error } = await supabase
+      .from('garantias')
+      .update({ resuelta: false, resuelta_at: null })
+      .eq('id', id);
+    if (!error) {
+      fetchGarantias();
+      toast('Garantía reabierta', 'info');
+    } else toast(error.message, 'error');
+  };
 
-    let montoDevuelto: number | null = null;
-    if (window.confirm('¿Hubo que devolver dinero al cliente?')) {
-      const montoTexto = window.prompt('¿Cuánto se devolvió? ($)');
-      const parsed = montoTexto ? parseFloat(montoTexto) : NaN;
-      if (!isNaN(parsed) && parsed > 0) montoDevuelto = parsed;
-    }
-
-    const telefono = g.servicios?.clientes?.telefono;
-    let avisarWhatsApp = false;
-    let ventanaWhatsApp: Window | null = null;
-    if (telefono) {
-      avisarWhatsApp = window.confirm(
-        '¿Enviar WhatsApp al cliente avisando que su garantía quedó resuelta?'
-      );
-      if (avisarWhatsApp) ventanaWhatsApp = window.open('', '_blank');
-    }
+  const handleConfirmarResolucionGarantia = async (nota: string, montoDevuelto: number | null) => {
+    if (!garantiaPendiente) return;
+    const g = garantiaPendiente;
+    setGarantiaPendiente(null);
 
     const cambios = {
       resuelta: true,
       resuelta_at: new Date().toISOString(),
-      nota_resolucion: nota.trim() || null,
+      nota_resolucion: nota || null,
       monto_devuelto: montoDevuelto,
     };
     const { error } = await supabase.from('garantias').update(cambios).eq('id', g.id);
 
     if (error) {
-      ventanaWhatsApp?.close();
       toast(`No se pudo actualizar la garantía: ${error.message}`, 'error');
       return;
     }
@@ -762,15 +792,27 @@ export function Dashboard() {
     fetchGarantias();
     toast('Garantía resuelta', 'success');
 
-    if (avisarWhatsApp && ventanaWhatsApp) {
-      const numero = limpiarNumero(telefono || '');
-      const mensaje = renderPlantilla('garantiaResuelta', {
-        nombre: g.servicios?.clientes?.nombre || '',
-        folio: g.folio,
+    // El envío de WhatsApp es un paso aparte y opcional — la garantía ya
+    // quedó guardada como resuelta se confirme o no el aviso.
+    const telefono = g.servicios?.clientes?.telefono;
+    if (telefono) {
+      setConfirm({
+        titulo: 'Enviar WhatsApp',
+        mensaje: '¿Enviar WhatsApp al cliente avisando que su garantía quedó resuelta?',
+        confirmLabel: 'Enviar',
+        onConfirm: () => {
+          setConfirm(null);
+          const ventanaWhatsApp = window.open('', '_blank');
+          const numero = limpiarNumero(telefono);
+          const mensaje = renderPlantilla('garantiaResuelta', {
+            nombre: g.servicios?.clientes?.nombre || '',
+            folio: g.folio,
+          });
+          if (ventanaWhatsApp) {
+            ventanaWhatsApp.location.href = `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
+          }
+        },
       });
-      ventanaWhatsApp.location.href = `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
-    } else {
-      ventanaWhatsApp?.close();
     }
   };
 
@@ -806,6 +848,76 @@ export function Dashboard() {
       fetchServicios();
       toast(`IMEI marcado: ${estado}`, 'success');
     } else toast(`No se pudo guardar: ${error.message}`, 'error');
+  };
+
+  // Reloj real de trabajo (independiente del estado PENDIENTE/EN PROCESO/
+  // ENTREGADO) — inicio_real/fin_real son la fuente de datos para precio
+  // sugerido, dificultad automática y carga del taller.
+  const handleIniciarTrabajo = async (id: string) => {
+    setAccionId(id);
+    const { error } = await supabase
+      .from('servicios')
+      .update({ inicio_real: new Date().toISOString() })
+      .eq('id', id);
+    setAccionId(null);
+    if (!error) {
+      fetchServicios();
+      toast('Trabajo iniciado — el tiempo real está corriendo', 'success');
+    } else {
+      toast(`No se pudo iniciar: ${error.message}`, 'error');
+    }
+  };
+
+  const handleFinalizarTrabajo = async (id: string) => {
+    setAccionId(id);
+    const { error } = await supabase
+      .from('servicios')
+      .update({ fin_real: new Date().toISOString() })
+      .eq('id', id);
+    setAccionId(null);
+    if (!error) {
+      fetchServicios();
+      toast('Trabajo finalizado — tiempo real registrado', 'success');
+    } else {
+      toast(`No se pudo finalizar: ${error.message}`, 'error');
+    }
+  };
+
+  // "Sigue en curso": no toca la base de datos, solo deja de mostrar el
+  // aviso por un rato para no molestar de nuevo enseguida.
+  const handleSilenciarAvisoOlvidado = (id: string) => {
+    setAvisosSilenciados((prev) => ({ ...prev, [id]: Date.now() + 30 * 60 * 1000 }));
+  };
+
+  const handleAbrirCorregirHora = (id: string) => {
+    setCorrigiendoFinRealId(id);
+  };
+
+  const handleGuardarFinRealManual = async (finRealIso: string) => {
+    if (!corrigiendoFinRealId) return;
+    const id = corrigiendoFinRealId;
+    setCorrigiendoFinRealId(null);
+    setAccionId(id);
+    const { error } = await supabase.from('servicios').update({ fin_real: finRealIso }).eq('id', id);
+    setAccionId(null);
+    if (!error) {
+      fetchServicios();
+      toast('Hora de término corregida', 'success');
+    } else {
+      toast(`No se pudo guardar: ${error.message}`, 'error');
+    }
+  };
+
+  // Excluye/vuelve a incluir un tiempo real puntual del aprendizaje, sin
+  // borrar el trabajo — para cuando se detecta un dato malo después.
+  const handleToggleTiempoValido = async (id: string, actual: boolean) => {
+    const { error } = await supabase.from('servicios').update({ tiempo_valido: !actual }).eq('id', id);
+    if (!error) {
+      fetchServicios();
+      toast(actual ? 'Tiempo excluido del aprendizaje' : 'Tiempo incluido en el aprendizaje', 'success');
+    } else {
+      toast(`No se pudo actualizar: ${error.message}`, 'error');
+    }
   };
 
   const limpiarFormularioCuenta = () => {
@@ -934,13 +1046,29 @@ export function Dashboard() {
     });
   }, [servicios, busqueda, filtroFecha, hoyStr, mesActualStr]);
 
+  // Los conteos de cada chip reflejan el OTRO filtro ya activo (no solo
+  // fecha/búsqueda) — si no, mostrar "Pagado" mientras ya filtras por
+  // "PENDIENTE" daba un número que no calzaba con lo que en realidad se
+  // veía en la tabla al combinar ambos.
   const conteosPorEstado = useMemo(() => {
+    const base =
+      filtroPagado === 'todos'
+        ? serviciosBase
+        : serviciosBase.filter((s) => (filtroPagado === 'pagado' ? s.pagado : !s.pagado));
     const counts: { [estado: string]: number } = {};
-    serviciosBase.forEach((s) => {
+    base.forEach((s) => {
       counts[s.estado] = (counts[s.estado] || 0) + 1;
     });
     return counts;
-  }, [serviciosBase]);
+  }, [serviciosBase, filtroPagado]);
+
+  const conteosPorPagado = useMemo(() => {
+    const base = filtroEstado === 'todos' ? serviciosBase : serviciosBase.filter((s) => s.estado === filtroEstado);
+    return {
+      pagado: base.filter((s) => s.pagado).length,
+      sin_pagar: base.filter((s) => !s.pagado).length,
+    };
+  }, [serviciosBase, filtroEstado]);
 
   const serviciosFiltrados = useMemo(() => {
     return serviciosBase.filter((s) => {
@@ -1057,6 +1185,39 @@ export function Dashboard() {
       porTipoMes,
     };
   }, [servicios, hoyStr]);
+
+  // Índices de aprendizaje: se recalculan solo cuando cambia `servicios`,
+  // no en cada tecla — las funciones de sugerencia hacen una búsqueda O(1)
+  // sobre esto en vez de recorrer todo el historial cada vez.
+  const indicePrecios = useMemo(() => construirIndicePrecios(servicios), [servicios]);
+  const indiceDuraciones = useMemo(() => construirIndiceDuraciones(servicios), [servicios]);
+  const cargaTaller = useMemo(() => calcularCargaTaller(servicios), [servicios]);
+
+  // Trabajos con el reloj corriendo (inicio_real sin fin_real) que llevan
+  // más de 3x el tiempo típico de su combinación (o 2h genéricas si todavía
+  // no hay historial suficiente) — probablemente alguien se olvidó de
+  // apretar "Finalizar".
+  const UMBRAL_OLVIDO_GENERICO_MIN = 120;
+  const trabajosOlvidados = useMemo(() => {
+    void tickReloj; // fuerza recalcular con el paso del tiempo, no solo con cambios de datos
+    const ahora = Date.now();
+    const mapa: { [id: string]: AvisoOlvidado } = {};
+    servicios.forEach((s) => {
+      if (!s.inicio_real || s.fin_real) return;
+      const silenciadoHasta = avisosSilenciados[s.id];
+      if (silenciadoHasta && ahora < silenciadoHasta) return;
+      const minutosTranscurridos = (ahora - new Date(s.inicio_real).getTime()) / 60000;
+      const estimacion = estimarDificultad(indiceDuraciones, s.modelo_equipo, s.tipo_trabajo);
+      const umbral = estimacion ? estimacion.tiempoTipicoMinutos * 3 : UMBRAL_OLVIDO_GENERICO_MIN;
+      if (minutosTranscurridos > umbral) {
+        mapa[s.id] = {
+          minutosTranscurridos,
+          minutosTipicos: estimacion?.tiempoTipicoMinutos ?? null,
+        };
+      }
+    });
+    return mapa;
+  }, [servicios, indiceDuraciones, avisosSilenciados, tickReloj]);
 
   const trabajosAtascados = useMemo(() => {
     const enTallerEstados = ['PENDIENTE', 'EN PROCESO', 'COMPLETADO'];
@@ -1317,6 +1478,26 @@ export function Dashboard() {
         onCerrar={() => setPagosDiaAbierto(false)}
         fmt={fmt}
       />
+      <CompletarRevisionModal
+        abierto={!!revisionPendiente}
+        T={T}
+        diagnosticoInicial={revisionPendiente?.servicio.diagnostico || ''}
+        montoInicial={revisionPendiente?.servicio.monto ? String(revisionPendiente.servicio.monto) : ''}
+        onCancelar={() => setRevisionPendiente(null)}
+        onConfirmar={handleConfirmarRevision}
+      />
+      <ResolverGarantiaModal
+        abierto={!!garantiaPendiente}
+        T={T}
+        onCancelar={() => setGarantiaPendiente(null)}
+        onConfirmar={handleConfirmarResolucionGarantia}
+      />
+      <CorregirFinRealModal
+        abierto={!!corrigiendoFinRealId}
+        T={T}
+        onCancelar={() => setCorrigiendoFinRealId(null)}
+        onConfirmar={handleGuardarFinRealManual}
+      />
 
       <div className="max-w-7xl mx-auto relative z-10">
         <div
@@ -1387,21 +1568,7 @@ export function Dashboard() {
           <>
             <AlertasAtascados trabajos={trabajosAtascados} onRecordar={handleRecordarWhatsApp} />
 
-            <div className="flex justify-end gap-2 mb-4">
-              <button
-                type="button"
-                onClick={() => setPagosDiaAbierto(true)}
-                className="bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wider transition-all"
-              >
-                📅 Pagos por día
-              </button>
-              <button
-                type="button"
-                onClick={() => setReporteAbierto(true)}
-                className="bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wider transition-all"
-              >
-                📊 Reporte mensual
-              </button>
+            <div className="flex justify-end mb-4">
               <button
                 type="button"
                 onClick={handleAbrirCierreCaja}
@@ -1411,7 +1578,7 @@ export function Dashboard() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-8">
               <div className="bg-gradient-to-br from-slate-900/90 to-emerald-950/40 border border-emerald-500/30 p-5 rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.07)] backdrop-blur-md flex justify-between items-center">
                 <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest">Caja de Hoy</p>
                 <span className="font-black text-emerald-300 text-2xl">{fmt(cajaHoy)}</span>
@@ -1421,6 +1588,22 @@ export function Dashboard() {
                   Por Cobrar (Total)
                 </p>
                 <span className="font-black text-amber-300 text-2xl">{fmt(porCobrarTotal)}</span>
+              </div>
+              <div
+                className={`bg-gradient-to-br ${cargaTaller ? ESTILO_CARGA[cargaTaller.nivel].gradiente : 'from-slate-900/90 to-slate-800/40'} border ${cargaTaller ? ESTILO_CARGA[cargaTaller.nivel].borde : 'border-slate-700'} p-5 rounded-2xl shadow-lg backdrop-blur-md flex justify-between items-center`}
+              >
+                <p
+                  className={`text-xs font-bold uppercase tracking-widest ${cargaTaller ? ESTILO_CARGA[cargaTaller.nivel].titulo : 'text-slate-400'}`}
+                >
+                  Carga del Taller
+                </p>
+                {cargaTaller ? (
+                  <span className={`font-black text-2xl ${ESTILO_CARGA[cargaTaller.nivel].valor}`}>
+                    {ETIQUETA_CARGA[cargaTaller.nivel]} {cargaTaller.horas.toFixed(1)}h
+                  </span>
+                ) : (
+                  <span className="font-bold text-slate-400 text-sm">🧠 Aprendiendo</span>
+                )}
               </div>
             </div>
 
@@ -1449,15 +1632,18 @@ export function Dashboard() {
                 onEscanearImei={handleEscanearImei}
                 onSubmit={handleGuardarServicio}
                 onCancelarEdicion={limpiarFormulario}
+                obtenerSugerenciaPrecio={(modelo, tipo) => sugerirPrecio(indicePrecios, modelo, tipo)}
+                obtenerEstimacionDificultad={(modelo, tipo) => estimarDificultad(indiceDuraciones, modelo, tipo)}
               />
 
               <HistorialServicios
                 T={T}
                 loading={loading}
-                serviciosBase={serviciosBase}
                 serviciosFiltrados={serviciosFiltrados}
                 serviciosPaginados={serviciosPaginados}
+                trabajosOlvidados={trabajosOlvidados}
                 conteosPorEstado={conteosPorEstado}
+                conteosPorPagado={conteosPorPagado}
                 filtroFecha={filtroFecha}
                 filtroEstado={filtroEstado}
                 filtroPagado={filtroPagado}
@@ -1479,6 +1665,11 @@ export function Dashboard() {
                 onImprimirReporte={handleImprimirReporte}
                 onToggleEstadoMenu={setEstadoMenuAbierto}
                 onCambiarEstado={handleCambiarEstado}
+                onIniciarTrabajo={handleIniciarTrabajo}
+                onFinalizarTrabajo={handleFinalizarTrabajo}
+                onSilenciarAvisoOlvidado={handleSilenciarAvisoOlvidado}
+                onCorregirHoraTrabajo={handleAbrirCorregirHora}
+                onToggleTiempoValido={handleToggleTiempoValido}
                 onTogglePagado={handleTogglePagado}
                 onAbrirEditorFecha={handleAbrirEditorFechaPago}
                 onCerrarEditorFecha={() => setEditandoFechaPagoId(null)}
@@ -1530,6 +1721,8 @@ export function Dashboard() {
             porMetodoMes={porMetodoMes}
             porTipoMes={porTipoMes}
             fmt={fmt}
+            onAbrirReporteMensual={() => setReporteAbierto(true)}
+            onAbrirPagosPorDia={() => setPagosDiaAbierto(true)}
           />
         )}
 

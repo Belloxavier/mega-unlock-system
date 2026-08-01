@@ -20,6 +20,8 @@ interface Props {
   /** Desglose por tipo de trabajo (pagados del mes actual). */
   porTipoMes: { tipo: string; monto: number }[];
   fmt: (n: number) => string;
+  onAbrirReporteMensual: () => void;
+  onAbrirPagosPorDia: () => void;
 }
 
 export function FinanzasTab({
@@ -38,9 +40,28 @@ export function FinanzasTab({
   porMetodoMes,
   porTipoMes,
   fmt,
+  onAbrirReporteMensual,
+  onAbrirPagosPorDia,
 }: Props) {
   return (
     <div className="space-y-6">
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onAbrirPagosPorDia}
+          className="bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wider transition-all"
+        >
+          📅 Pagos por día
+        </button>
+        <button
+          type="button"
+          onClick={onAbrirReporteMensual}
+          className="bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wider transition-all"
+        >
+          📊 Reporte mensual
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         <div className="bg-gradient-to-br from-slate-900/90 to-emerald-950/40 border border-emerald-500/30 p-5 md:p-6 rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.07)] backdrop-blur-md">
           <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-3">
