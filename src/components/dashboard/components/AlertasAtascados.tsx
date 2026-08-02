@@ -1,4 +1,5 @@
 import type { Servicio } from '../../../types';
+import { tieneTelefonoValido } from '../../../lib/phone';
 
 interface Props {
   trabajos: Servicio[];
@@ -24,7 +25,7 @@ export function AlertasAtascados({ trabajos, onRecordar }: Props) {
               {s.folio && <span className="font-mono mr-1.5">{s.folio}</span>}
               {s.clientes?.nombre || 'General'} · {s.modelo_equipo}
             </span>
-            {s.clientes?.telefono && (
+            {tieneTelefonoValido(s.clientes?.telefono) && (
               <button
                 type="button"
                 onClick={() => onRecordar(s)}

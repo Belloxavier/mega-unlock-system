@@ -1,20 +1,35 @@
-// Alerta diaria de MEGA UNLOCK: revisa qué lleva más de 48 horas sin
-// resolverse y avisa por correo con nombre de cliente y folio, para no
-// perder el hilo del negocio. Se ejecuta automáticamente (ver cron en
-// supabase/migrations/0006_schedule_alertas_pendientes.sql) y solo envía
-// correo si de verdad hay algo pendiente.
+// Resumen diario de MEGA UNLOCK: todas las noches a las 22:00 hora de
+// Chile manda un correo con el estado ACTUAL de lo pendiente (equipos
+// listos sin cobrar/retirar, equipos sin ni siquiera empezar, garantías sin
+// resolver), para no perder el hilo del negocio antes de cerrar el día.
+//
+// El cron (ver supabase/migrations/0018_alertas_pendientes_diario_22h.sql)
+// dispara esta función CADA HORA — la función misma revisa la hora local
+// de Chile y solo envía si son las 22h, para no desfasarse con el cambio
+// de horario de verano/invierno (pg_cron siempre corre en UTC).
+//
+// Antes se enviaba solo cuando algo llevaba 48h+ pendiente; se eliminó ese
+// umbral porque el correo simplemente no estaba llegando (revisado spam, no
+// aparecía) — un envío fijo y diario es más fácil de confirmar que un
+// disparo condicional.
 //
 // Usa los mismos secretos que weekly-report (GMAIL_USER, GMAIL_APP_PASSWORD,
-// REPORT_RECIPIENTS) — no hace falta configurar nada nuevo.
+// REPORT_RECIPIENTS, CRON_SHARED_SECRET) — no hace falta configurar nada
+// nuevo aparte de CRON_SHARED_SECRET (ver 0020_proteger_cron_edge_functions.sql).
+//
+// Está desplegada con --no-verify-jwt, así que la única barrera real contra
+// invocaciones externas es CRON_SHARED_SECRET: exige el header
+// X-Cron-Secret y lo compara contra este secreto antes de hacer nada.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
 
 const ZONA_HORARIA = 'America/Santiago';
 const DEFAULT_RECIPIENTS = ['belloxavier22@gmail.com', 'moratinosandrea@gmail.com'];
-// Configurable con el secreto HORAS_LIMITE_ALERTA sin necesidad de redesplegar.
-const horasEnv = Number(Deno.env.get('HORAS_LIMITE_ALERTA'));
-const HORAS_LIMITE = Number.isFinite(horasEnv) && horasEnv >= 0 ? horasEnv : 48;
+const HORA_ENVIO_CHILE = 22;
+
+const horaEnChile = (d: Date) =>
+  Number(new Intl.DateTimeFormat('en-US', { timeZone: ZONA_HORARIA, hour: '2-digit', hour12: false }).format(d));
 
 const fmtFecha = (d: Date) => new Intl.DateTimeFormat('es-CL', { timeZone: ZONA_HORARIA, dateStyle: 'long' }).format(d);
 
@@ -68,7 +83,7 @@ function construirHtml(stats: {
 
   return `
   <div style="font-family:Arial,sans-serif;background:#070B19;color:#e2e8f0;padding:24px;max-width:640px;margin:0 auto;">
-    <h1 style="color:#f59e0b;font-size:20px;margin-bottom:0;">⚠️ MEGA UNLOCK — Pendientes de más de ${HORAS_LIMITE}h</h1>
+    <h1 style="color:#f59e0b;font-size:20px;margin-bottom:0;">📋 MEGA UNLOCK — Resumen diario de pendientes</h1>
     <p style="color:#94a3b8;font-size:12px;margin-top:4px;">${fmtFecha(ahora)}</p>
 
     ${stats.completadosSinCobrar.length > 0 ? `
@@ -83,11 +98,28 @@ function construirHtml(stats: {
     <h3 style="color:#fb7185;font-size:13px;text-transform:uppercase;margin-top:20px;">🛡️ Garantías sin resolver</h3>
     <ul style="font-size:13px;padding-left:20px;margin:8px 0;">${stats.garantiasSinResolver.map(filaGarantia).join('')}</ul>` : ''}
 
-    <p style="color:#475569;font-size:11px;margin-top:24px;">Generado automáticamente por Mega Unlock Manager. No se envía si no hay nada pendiente.</p>
+    <p style="color:#475569;font-size:11px;margin-top:24px;">Generado automáticamente todos los días a las 22:00. No se envía si no hay nada pendiente.</p>
   </div>`;
 }
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  const secretoEsperado = Deno.env.get('CRON_SHARED_SECRET');
+  if (!secretoEsperado || req.headers.get('x-cron-secret') !== secretoEsperado) {
+    return new Response(JSON.stringify({ error: 'No autorizado' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const ahora = new Date();
+
+  if (horaEnChile(ahora) !== HORA_ENVIO_CHILE) {
+    return new Response(
+      JSON.stringify({ ok: true, enviado: false, motivo: `No es la hora programada (${HORA_ENVIO_CHILE}h Chile)` }),
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const gmailUser = Deno.env.get('GMAIL_USER')!;
@@ -96,11 +128,8 @@ Deno.serve(async () => {
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-  const ahora = new Date();
-  const hace48h = new Date(ahora.getTime() - HORAS_LIMITE * 60 * 60 * 1000).toISOString();
-
-  // Las 3 consultas son independientes — se disparan en paralelo en vez de
-  // una tras otra, para no sumar sus latencias de red.
+  // Snapshot del estado ACTUAL — ya no se filtra por antigüedad, se manda
+  // igual todos los días a la misma hora.
   const [
     { data: completadosSinCobrar, error: e1 },
     { data: pendientesSinEmpezar, error: e2 },
@@ -110,18 +139,15 @@ Deno.serve(async () => {
       .from('servicios')
       .select('folio, modelo_equipo, created_at, completado_at, clientes ( nombre )')
       .eq('estado', 'COMPLETADO')
-      .eq('pagado', false)
-      .lt('completado_at', hace48h),
+      .eq('pagado', false),
     supabase
       .from('servicios')
       .select('folio, modelo_equipo, created_at, completado_at, clientes ( nombre )')
-      .eq('estado', 'PENDIENTE')
-      .lt('created_at', hace48h),
+      .eq('estado', 'PENDIENTE'),
     supabase
       .from('garantias')
       .select('folio, descripcion, created_at, servicios ( clientes ( nombre ) )')
-      .eq('resuelta', false)
-      .lt('created_at', hace48h),
+      .eq('resuelta', false),
   ]);
 
   const error = e1 || e2 || e3;
@@ -158,7 +184,7 @@ Deno.serve(async () => {
   await client.send({
     from: `Mega Unlock Manager <${gmailUser}>`,
     to: recipients,
-    subject: `⚠️ Mega Unlock — ${total} pendiente(s) de más de ${HORAS_LIMITE}h`,
+    subject: `📋 Mega Unlock — Resumen diario: ${total} pendiente(s)`,
     html,
   });
   await client.close();

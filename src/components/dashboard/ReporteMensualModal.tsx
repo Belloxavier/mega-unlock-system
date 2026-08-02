@@ -81,9 +81,14 @@ export function ReporteMensualModal({
           ))}
         </select>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
           {[
-            { label: 'Cobrado', value: fmt(reporte.cobradoTotal), sub: `${reporte.nCobros} cobros` },
+            {
+              label: 'Facturado (bruto)',
+              value: fmt(reporte.cobradoTotal),
+              sub: `${reporte.nCobros} cobros`,
+            },
+            { label: 'Ganancia neta', value: fmt(reporte.gananciaNeta), sub: 'ya restado el repuesto' },
             { label: 'Altas', value: String(reporte.altasDelMes), sub: 'registrados' },
             { label: 'Entregados', value: String(reporte.entregadosDelMes), sub: 'en el mes' },
             {
@@ -145,8 +150,9 @@ export function ReporteMensualModal({
         </div>
 
         <p className="text-[10px] text-slate-500 mb-3">
-          Cobrado = por fecha de pago del mes. Por cobrar = saldo actual (no histórico del fin de
-          mes).
+          Facturado/Ganancia neta = por fecha de pago del mes (la neta ya resta el costo de
+          repuestos de clientes normales). Por cobrar = saldo actual (no histórico del fin de mes).
+          Los rankings de método/tipo/clientes siguen en bruto.
         </p>
 
         <button

@@ -7,6 +7,7 @@ interface CuentasTabProps {
   formCuenta: ReturnType<typeof cuentaVacia>;
   setFormCuenta: React.Dispatch<React.SetStateAction<ReturnType<typeof cuentaVacia>>>;
   editandoCuentaId: string | null;
+  guardandoCuenta: boolean;
   limpiarFormularioCuenta: () => void;
   handleGuardarCuenta: (e: React.FormEvent) => void;
   handleEditarCuenta: (c: CuentaBancaria) => void;
@@ -21,6 +22,7 @@ export function CuentasTab({
   formCuenta,
   setFormCuenta,
   editandoCuentaId,
+  guardandoCuenta,
   limpiarFormularioCuenta,
   handleGuardarCuenta,
   handleEditarCuenta,
@@ -106,8 +108,12 @@ export function CuentasTab({
               className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
             />
           </div>
-          <button type="submit" className={`w-full py-3.5 md:py-3 rounded-xl text-xs md:text-sm uppercase tracking-wider font-black transition-all ${editandoCuentaId ? 'bg-amber-400 hover:bg-amber-300 text-slate-950' : T.submit}`}>
-            {editandoCuentaId ? 'Actualizar Cuenta' : 'Agregar Cuenta'}
+          <button
+            type="submit"
+            disabled={guardandoCuenta}
+            className={`w-full py-3.5 md:py-3 rounded-xl text-xs md:text-sm uppercase tracking-wider font-black transition-all disabled:opacity-60 ${editandoCuentaId ? 'bg-amber-400 hover:bg-amber-300 text-slate-950' : T.submit}`}
+          >
+            {guardandoCuenta ? 'Guardando…' : editandoCuentaId ? 'Actualizar Cuenta' : 'Agregar Cuenta'}
           </button>
         </form>
       </div>

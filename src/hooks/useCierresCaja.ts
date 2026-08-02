@@ -4,6 +4,7 @@ import type { CierreGuardado } from '../lib/cierreCaja';
 
 export function useCierresCaja() {
   const [cierresList, setCierresList] = useState<CierreGuardado[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchCierres = useCallback(async () => {
     const { data, error } = await supabase
@@ -11,8 +12,13 @@ export function useCierresCaja() {
       .select('*')
       .order('fecha', { ascending: false })
       .limit(60);
-    if (!error && data) setCierresList(data as unknown as CierreGuardado[]);
+    if (error) {
+      setError(error.message);
+    } else {
+      setError(null);
+      setCierresList((data || []) as unknown as CierreGuardado[]);
+    }
   }, []);
 
-  return { cierresList, fetchCierres };
+  return { cierresList, error, fetchCierres };
 }

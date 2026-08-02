@@ -16,6 +16,8 @@ export interface Cliente {
 export interface Servicio {
   id: string;
   modelo_equipo: string;
+  /** modelo_equipo normalizado (sin marca, minúsculas) — usado por precio sugerido/dificultad/carga del taller, nunca mostrado en pantalla. */
+  modelo_normalizado?: string | null;
   imei_serie?: string;
   tipo_trabajo: string;
   folio?: string;
@@ -31,6 +33,8 @@ export interface Servicio {
   es_revision?: boolean;
   diagnostico?: string | null;
   nota?: string | null;
+  /** Costo del repuesto/insumo (solo clientes normales) — ganancia = monto - costo_repuesto. */
+  costo_repuesto?: number | null;
   inicio_real?: string | null;
   fin_real?: string | null;
   /** false = este tiempo real no debe usarse para aprender (precio/dificultad/carga). Default true. */
@@ -47,6 +51,8 @@ export interface EquipoForm {
   metodoPago: string;
   esRevision: boolean;
   nota: string;
+  /** Costo del repuesto/insumo — solo se usa/muestra para clientes normales. */
+  costoRepuesto: string;
 }
 
 export const equipoVacio = (): EquipoForm => ({
@@ -58,6 +64,7 @@ export const equipoVacio = (): EquipoForm => ({
   metodoPago: 'Efectivo',
   esRevision: false,
   nota: '',
+  costoRepuesto: '',
 });
 
 export interface Garantia {

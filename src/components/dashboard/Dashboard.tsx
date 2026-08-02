@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../supabase';
 import type { Cliente, Servicio, EquipoForm, Garantia, CuentaBancaria, TemaUI } from '../../types';
 import { equipoVacio, cuentaVacia } from '../../types';
 import { DIAS_SEMANA, getFechaLocal, getDiaSemana, getFechaCorta } from '../../lib/date';
 import { TIPOS_ESTANDAR, getPrefijo } from '../../lib/folio';
+import { normalizarModelo } from '../../lib/normalizarTexto';
 import { pareceImei } from '../../lib/imei';
 import { escapeHtml } from '../../lib/html';
-import { limpiarNumero } from '../../lib/phone';
+import { limpiarNumero, tieneTelefonoValido } from '../../lib/phone';
 import { getTema } from '../../lib/theme';
 import { formatearMonto } from '../../lib/moneda';
 import {
@@ -38,6 +39,7 @@ import { PagosPorDiaModal } from './PagosPorDiaModal';
 import { FormularioServicio } from './components/FormularioServicio';
 import { HistorialServicios } from './components/HistorialServicios';
 import { AlertasAtascados } from './components/AlertasAtascados';
+import { AlertasFiados } from './components/AlertasFiados';
 import { CompletarRevisionModal } from './components/CompletarRevisionModal';
 import { ResolverGarantiaModal } from './components/ResolverGarantiaModal';
 import { CorregirFinRealModal } from './components/CorregirFinRealModal';
@@ -71,11 +73,20 @@ interface ConfirmState {
 }
 
 export function Dashboard() {
-  const { servicios, loading, fetchServicios } = useServicios();
-  const { clientesList, fetchClientes } = useClientes();
-  const { garantiasList, fetchGarantias } = useGarantias();
-  const { cuentasList, fetchCuentas } = useCuentasBancarias();
-  const { cierresList, fetchCierres } = useCierresCaja();
+  const {
+    servicios,
+    error: errorServicios,
+    fetchServicios,
+    serviciosPagina,
+    totalServiciosPagina,
+    loadingPagina,
+    errorPagina,
+    fetchServiciosPagina,
+  } = useServicios();
+  const { error: errorClientes, buscarClientes, buscarClientePorNombreExacto } = useClientes();
+  const { garantiasList, error: errorGarantias, fetchGarantias } = useGarantias();
+  const { cuentasList, error: errorCuentas, fetchCuentas } = useCuentasBancarias();
+  const { cierresList, error: errorCierres, fetchCierres } = useCierresCaja();
   const { toasts, toast, dismiss } = useToast();
 
   const [vista, setVista] = useState<Vista>('inicio');
@@ -109,6 +120,7 @@ export function Dashboard() {
 
   const [formCuenta, setFormCuenta] = useState(cuentaVacia());
   const [editandoCuentaId, setEditandoCuentaId] = useState<string | null>(null);
+  const [guardandoCuenta, setGuardandoCuenta] = useState(false);
 
   const [accionId, setAccionId] = useState<string | null>(null);
   const [guardandoForm, setGuardandoForm] = useState(false);
@@ -130,14 +142,69 @@ export function Dashboard() {
 
   useEffect(() => {
     fetchServicios();
-    fetchClientes();
     fetchGarantias();
     fetchCuentas();
-  }, [fetchServicios, fetchClientes, fetchGarantias, fetchCuentas]);
+  }, [fetchServicios, fetchGarantias, fetchCuentas]);
+
+  // Los errores de carga ya no se silencian — antes un fallo de red/RLS al
+  // cargar dejaba el dashboard "vacío" sin ningún aviso.
+  useEffect(() => {
+    if (errorServicios) toast(`No se pudieron cargar los servicios: ${errorServicios}`, 'error');
+  }, [errorServicios, toast]);
+  useEffect(() => {
+    if (errorPagina) toast(`No se pudo cargar el historial: ${errorPagina}`, 'error');
+  }, [errorPagina, toast]);
+  useEffect(() => {
+    if (errorClientes) toast(`No se pudo buscar clientes: ${errorClientes}`, 'error');
+  }, [errorClientes, toast]);
+  useEffect(() => {
+    if (errorGarantias) toast(`No se pudieron cargar las garantías: ${errorGarantias}`, 'error');
+  }, [errorGarantias, toast]);
+  useEffect(() => {
+    if (errorCuentas) toast(`No se pudieron cargar las cuentas bancarias: ${errorCuentas}`, 'error');
+  }, [errorCuentas, toast]);
+  useEffect(() => {
+    if (errorCierres) toast(`No se pudo cargar el historial de cierres: ${errorCierres}`, 'error');
+  }, [errorCierres, toast]);
 
   useEffect(() => {
     setPaginaActual(1);
   }, [busqueda, filtroFecha, filtroEstado, filtroPagado]);
+
+  // Búsqueda con debounce (~300ms): el input reacciona al toque, pero la
+  // consulta al servidor espera a que el usuario deje de escribir, para no
+  // disparar una query por cada letra.
+  const [busquedaDebounced, setBusquedaDebounced] = useState('');
+  useEffect(() => {
+    const id = window.setTimeout(() => setBusquedaDebounced(busqueda), 300);
+    return () => window.clearTimeout(id);
+  }, [busqueda]);
+
+  const filtrosPaginaActuales = useMemo(
+    () => ({
+      page: paginaActual,
+      pageSize: PAGE_SIZE,
+      search: busquedaDebounced,
+      filtroFecha,
+      filtroEstado,
+      filtroPagado,
+    }),
+    [paginaActual, busquedaDebounced, filtroFecha, filtroEstado, filtroPagado]
+  );
+
+  // Trae la página del Historial/Área de Trabajo cada vez que cambian
+  // filtros, página o el término de búsqueda (ya debounced).
+  useEffect(() => {
+    fetchServiciosPagina(filtrosPaginaActuales);
+  }, [filtrosPaginaActuales, fetchServiciosPagina]);
+
+  // Refresca AMBAS fuentes tras una mutación: la tabla completa (Finanzas/
+  // aprendizaje) y la página visible del Historial — reemplaza los
+  // fetchServicios() sueltos que había antes en cada handler.
+  const recargarServicios = useCallback(() => {
+    fetchServicios();
+    fetchServiciosPagina(filtrosPaginaActuales);
+  }, [fetchServicios, fetchServiciosPagina, filtrosPaginaActuales]);
 
   // Refresca cada minuto el cálculo de "¿se te olvidó finalizar?" — un
   // trabajo puede cruzar el umbral solo por el paso del tiempo, sin que
@@ -147,11 +214,48 @@ export function Dashboard() {
     return () => clearInterval(intervalo);
   }, []);
 
-  const sugerencias = useMemo(() => {
-    const q = nombreCliente.trim().toLowerCase();
-    if (!q) return [];
-    return clientesList.filter((c) => c.nombre.toLowerCase().includes(q)).slice(0, 6);
-  }, [nombreCliente, clientesList]);
+  // Antes filtraba clientesList (toda la tabla) en memoria; ahora busca en
+  // el servidor con debounce — evita traer 100.000 clientes al navegador
+  // solo para autocompletar 6 sugerencias.
+  const [sugerencias, setSugerencias] = useState<Cliente[]>([]);
+  useEffect(() => {
+    const q = nombreCliente.trim();
+    if (!q) {
+      setSugerencias([]);
+      return;
+    }
+    let cancelado = false;
+    const id = window.setTimeout(async () => {
+      const resultados = await buscarClientes(q);
+      if (!cancelado) setSugerencias(resultados);
+    }, 300);
+    return () => {
+      cancelado = true;
+      window.clearTimeout(id);
+    };
+  }, [nombreCliente, buscarClientes]);
+
+  // Un modelo original (tal como se escribió) por cada modelo_normalizado
+  // ya visto en el historial — para sugerir mientras se escribe, sin
+  // agregar otra consulta al servidor (ya tenemos `servicios` completo en
+  // memoria para Finanzas/aprendizaje).
+  const modelosConocidos = useMemo(() => {
+    const vistos = new Map<string, string>();
+    servicios.forEach((s) => {
+      const norm = s.modelo_normalizado || normalizarModelo(s.modelo_equipo);
+      if (norm && !vistos.has(norm)) vistos.set(norm, s.modelo_equipo);
+    });
+    return Array.from(vistos.entries());
+  }, [servicios]);
+
+  const obtenerSugerenciasModelo = (texto: string): string[] => {
+    const q = normalizarModelo(texto);
+    if (q.length < 2) return [];
+    return modelosConocidos
+      .filter(([normalizado]) => normalizado.includes(q))
+      .map(([, original]) => original)
+      .slice(0, 6);
+  };
 
   const sugerenciasFolio = useMemo(() => {
     const q = folioGarantia.trim().toLowerCase();
@@ -257,6 +361,8 @@ export function Dashboard() {
             metodo_pago: eq.metodoPago,
             es_revision: eq.esRevision,
             nota: eq.nota.trim() || null,
+            costo_repuesto: tipoContacto === 'cliente' && eq.costoRepuesto.trim() ? parseFloat(eq.costoRepuesto) : null,
+            modelo_normalizado: normalizarModelo(eq.modelo),
           })
           .eq('id', editandoId);
 
@@ -265,8 +371,7 @@ export function Dashboard() {
           return;
         }
         limpiarFormulario();
-        fetchServicios();
-        fetchClientes();
+        recargarServicios();
         toast('Servicio actualizado', 'success');
       } finally {
         setGuardandoForm(false);
@@ -292,9 +397,7 @@ export function Dashboard() {
       let clienteId = clienteIdAsociado;
       let clienteEsNuevo = false;
       if (!clienteId) {
-        const existente = clientesList.find(
-          (c) => c.nombre.trim().toLowerCase() === nombreCliente.trim().toLowerCase()
-        );
+        const existente = await buscarClientePorNombreExacto(nombreCliente);
         if (existente) {
           clienteId = existente.id;
         } else {
@@ -347,6 +450,7 @@ export function Dashboard() {
       const filas = equiposValidos.map((eq, idx) => ({
         cliente_id: clienteId,
         modelo_equipo: eq.modelo,
+        modelo_normalizado: normalizarModelo(eq.modelo),
         imei_serie: eq.imeiSerie || null,
         tipo_trabajo: tiposTrabajoFinal[idx],
         folio: (foliosAsignados as string[])[idx],
@@ -355,6 +459,7 @@ export function Dashboard() {
         metodo_pago: eq.metodoPago,
         es_revision: eq.esRevision,
         nota: eq.nota.trim() || null,
+        costo_repuesto: tipoContacto === 'cliente' && eq.costoRepuesto.trim() ? parseFloat(eq.costoRepuesto) : null,
       }));
 
       const { error: servicioError } = await supabase.from('servicios').insert(filas);
@@ -363,8 +468,7 @@ export function Dashboard() {
         return;
       }
       limpiarFormulario();
-      fetchServicios();
-      fetchClientes();
+      recargarServicios();
       toast(
         equiposValidos.length > 1
           ? `${equiposValidos.length} equipos registrados`
@@ -392,6 +496,7 @@ export function Dashboard() {
         metodoPago: s.metodo_pago || 'Efectivo',
         esRevision: s.es_revision || false,
         nota: s.nota || '',
+        costoRepuesto: s.costo_repuesto != null ? String(s.costo_repuesto) : '',
       },
     ]);
     setVista('inicio');
@@ -400,7 +505,7 @@ export function Dashboard() {
 
   const handleRecordarWhatsApp = (s: Servicio) => {
     const telefono = s.clientes?.telefono;
-    if (!telefono) return;
+    if (!tieneTelefonoValido(telefono)) return;
     const nombre = s.clientes?.nombre || 'el cliente';
     setConfirm({
       titulo: 'Recordatorio WhatsApp',
@@ -462,12 +567,12 @@ export function Dashboard() {
       return;
     }
 
-    fetchServicios();
+    recargarServicios();
     toast(`Estado → ${nuevoEstado}`, 'success');
 
     // El envío de WhatsApp es un paso aparte y opcional — el cambio de
     // estado ya quedó guardado se confirme o no el aviso.
-    const tieneWhatsApp = !!servicioActual?.clientes?.telefono;
+    const tieneWhatsApp = tieneTelefonoValido(servicioActual?.clientes?.telefono);
     if (nuevoEstado === 'COMPLETADO' && tieneWhatsApp && servicioActual) {
       const otrosPendientes = servicios.filter(
         (s) =>
@@ -546,7 +651,7 @@ export function Dashboard() {
       const { error } = await supabase.from('servicios').update(cambios).eq('id', id);
       setAccionId(null);
       if (!error) {
-        fetchServicios();
+        recargarServicios();
         toast(pagadoActual ? 'Marcado sin pagar' : 'Marcado como pagado', 'success');
       } else {
         toast(`No se pudo actualizar el pago: ${error.message}`, 'error');
@@ -594,7 +699,7 @@ export function Dashboard() {
     setAccionId(null);
     if (!error) {
       setEditandoFechaPagoId(null);
-      fetchServicios();
+      recargarServicios();
       toast('Fecha de pago guardada', 'success');
     } else {
       toast(`No se pudo guardar la fecha: ${error.message}`, 'error');
@@ -613,7 +718,7 @@ export function Dashboard() {
         const { error } = await supabase.from('servicios').update({ estado: 'NO REALIZADO' }).eq('id', id);
         setAccionId(null);
         if (!error) {
-          fetchServicios();
+          recargarServicios();
           toast('Marcado como no realizado', 'success');
         } else toast(error.message, 'error');
       },
@@ -631,7 +736,7 @@ export function Dashboard() {
       .eq('id', id);
     setAccionId(null);
     if (!error) {
-      fetchServicios();
+      recargarServicios();
       toast('Trabajo reactivado', 'success');
     }
   };
@@ -649,7 +754,7 @@ export function Dashboard() {
         setAccionId(null);
         if (!error) {
           if (editandoId === id) limpiarFormulario();
-          fetchServicios();
+          recargarServicios();
           toast('Registro eliminado', 'success');
         } else toast(error.message, 'error');
       },
@@ -796,7 +901,7 @@ export function Dashboard() {
     // El envío de WhatsApp es un paso aparte y opcional — la garantía ya
     // quedó guardada como resuelta se confirme o no el aviso.
     const telefono = g.servicios?.clientes?.telefono;
-    if (telefono) {
+    if (tieneTelefonoValido(telefono)) {
       setConfirm({
         titulo: 'Enviar WhatsApp',
         mensaje: '¿Enviar WhatsApp al cliente avisando que su garantía quedó resuelta?',
@@ -844,9 +949,11 @@ export function Dashboard() {
     id: string,
     estado: 'limpio' | 'reportado' | 'bloqueado'
   ) => {
+    setAccionId(id);
     const { error } = await supabase.from('servicios').update({ imei_estado: estado }).eq('id', id);
+    setAccionId(null);
     if (!error) {
-      fetchServicios();
+      recargarServicios();
       toast(`IMEI marcado: ${estado}`, 'success');
     } else toast(`No se pudo guardar: ${error.message}`, 'error');
   };
@@ -862,7 +969,7 @@ export function Dashboard() {
       .eq('id', id);
     setAccionId(null);
     if (!error) {
-      fetchServicios();
+      recargarServicios();
       toast('Trabajo iniciado — el tiempo real está corriendo', 'success');
     } else {
       toast(`No se pudo iniciar: ${error.message}`, 'error');
@@ -877,7 +984,7 @@ export function Dashboard() {
       .eq('id', id);
     setAccionId(null);
     if (!error) {
-      fetchServicios();
+      recargarServicios();
       toast('Trabajo finalizado — tiempo real registrado', 'success');
     } else {
       toast(`No se pudo finalizar: ${error.message}`, 'error');
@@ -902,7 +1009,7 @@ export function Dashboard() {
     const { error } = await supabase.from('servicios').update({ fin_real: finRealIso }).eq('id', id);
     setAccionId(null);
     if (!error) {
-      fetchServicios();
+      recargarServicios();
       toast('Hora de término corregida', 'success');
     } else {
       toast(`No se pudo guardar: ${error.message}`, 'error');
@@ -914,7 +1021,7 @@ export function Dashboard() {
   const handleToggleTiempoValido = async (id: string, actual: boolean) => {
     const { error } = await supabase.from('servicios').update({ tiempo_valido: !actual }).eq('id', id);
     if (!error) {
-      fetchServicios();
+      recargarServicios();
       toast(actual ? 'Tiempo excluido del aprendizaje' : 'Tiempo incluido en el aprendizaje', 'success');
     } else {
       toast(`No se pudo actualizar: ${error.message}`, 'error');
@@ -944,6 +1051,7 @@ export function Dashboard() {
       toast('Banco, número y titular son obligatorios', 'warning');
       return;
     }
+    if (guardandoCuenta) return; // ya hay un guardado en curso — evita duplicar la cuenta con doble clic
 
     const datos = {
       banco: formCuenta.banco.trim(),
@@ -954,9 +1062,11 @@ export function Dashboard() {
       email: formCuenta.email.trim() || null,
     };
 
+    setGuardandoCuenta(true);
     const { error } = editandoCuentaId
       ? await supabase.from('cuentas_bancarias').update(datos).eq('id', editandoCuentaId)
       : await supabase.from('cuentas_bancarias').insert([{ ...datos, orden: cuentasList.length }]);
+    setGuardandoCuenta(false);
 
     if (!error) {
       limpiarFormularioCuenta();
@@ -1071,6 +1181,11 @@ export function Dashboard() {
     };
   }, [serviciosBase, filtroEstado]);
 
+  // Se mantiene calculado en el cliente (igual que antes) SOLO para el PDF
+  // ("exportar todo lo filtrado", que necesita el listado completo, no una
+  // página) — la tabla que se ve en pantalla y su paginación ya no salen de
+  // acá, vienen del servidor (fetchServiciosPagina) para no tener que traer
+  // ni recorrer todos los servicios solo para mostrar 10 filas.
   const serviciosFiltrados = useMemo(() => {
     return serviciosBase.filter((s) => {
       if (filtroEstado !== 'todos' && s.estado !== filtroEstado) return false;
@@ -1080,11 +1195,8 @@ export function Dashboard() {
     });
   }, [serviciosBase, filtroEstado, filtroPagado]);
 
-  const totalPaginas = Math.max(1, Math.ceil(serviciosFiltrados.length / PAGE_SIZE));
-  const serviciosPaginados = serviciosFiltrados.slice(
-    (paginaActual - 1) * PAGE_SIZE,
-    paginaActual * PAGE_SIZE
-  );
+  const totalPaginas = Math.max(1, Math.ceil(totalServiciosPagina / PAGE_SIZE));
+  const serviciosPaginados = serviciosPagina;
 
   const {
     cajaHoy,
@@ -1102,6 +1214,12 @@ export function Dashboard() {
     porTipoMes,
   } = useMemo(() => {
     const fechaPago = (s: Servicio) => s.pagado_at || s.entregado_at || s.created_at;
+    // Ganancia real del taller: a técnicos/mayoristas se les cobra solo
+    // instalación (ya es neto), a clientes normales se les resta el costo
+    // del repuesto si se registró. El ranking de clientes (más abajo) sigue
+    // usando el monto bruto a propósito — ahí interesa cuánto factura cada
+    // cliente, no la ganancia.
+    const ganancia = (s: Servicio) => (s.monto || 0) - (s.costo_repuesto || 0);
     const ahora = new Date();
     const semIni = inicioSemana(ahora);
     const semFin = finSemana(ahora);
@@ -1116,19 +1234,19 @@ export function Dashboard() {
 
     const cajaHoy = pagados
       .filter((s) => getFechaLocal(fechaPago(s)) === hoyStr)
-      .reduce((acc, c) => acc + (c.monto || 0), 0);
+      .reduce((acc, c) => acc + ganancia(c), 0);
     const cajaSemana = pagados
       .filter((s) => estaEnRango(fechaPago(s), semIni, semFin))
-      .reduce((acc, c) => acc + (c.monto || 0), 0);
+      .reduce((acc, c) => acc + ganancia(c), 0);
     const cajaSemanaPasada = pagados
       .filter((s) => estaEnRango(fechaPago(s), semPasIni, semPasFin))
-      .reduce((acc, c) => acc + (c.monto || 0), 0);
+      .reduce((acc, c) => acc + ganancia(c), 0);
     const cajaMes = pagados
       .filter((s) => estaEnRango(fechaPago(s), mesIni, mesFin))
-      .reduce((acc, c) => acc + (c.monto || 0), 0);
+      .reduce((acc, c) => acc + ganancia(c), 0);
     const cajaMesPasado = pagados
       .filter((s) => estaEnRango(fechaPago(s), mesPasIni, mesPasFin))
-      .reduce((acc, c) => acc + (c.monto || 0), 0);
+      .reduce((acc, c) => acc + ganancia(c), 0);
 
     const deltaSemana = cajaSemana - cajaSemanaPasada;
     const deltaMes = cajaMes - cajaMesPasado;
@@ -1139,7 +1257,7 @@ export function Dashboard() {
 
     const flujoPorDiaObj = pagados.reduce((acc: { [dia: string]: number }, s) => {
       const dia = getDiaSemana(fechaPago(s));
-      if (DIAS_SEMANA.includes(dia)) acc[dia] = (acc[dia] || 0) + (s.monto || 0);
+      if (DIAS_SEMANA.includes(dia)) acc[dia] = (acc[dia] || 0) + ganancia(s);
       return acc;
     }, {});
     const maxFlujoDia = Math.max(1, ...DIAS_SEMANA.map((d) => flujoPorDiaObj[d] || 0));
@@ -1158,9 +1276,9 @@ export function Dashboard() {
     const tipoMap: { [k: string]: number } = {};
     pagadosMes.forEach((s) => {
       const m = s.metodo_pago || 'Sin método';
-      metodoMap[m] = (metodoMap[m] || 0) + (s.monto || 0);
+      metodoMap[m] = (metodoMap[m] || 0) + ganancia(s);
       const t = s.tipo_trabajo || 'General';
-      tipoMap[t] = (tipoMap[t] || 0) + (s.monto || 0);
+      tipoMap[t] = (tipoMap[t] || 0) + ganancia(s);
     });
     const porMetodoMes = Object.entries(metodoMap)
       .map(([metodo, monto]) => ({ metodo, monto }))
@@ -1228,6 +1346,19 @@ export function Dashboard() {
       return horas > 24;
     });
   }, [servicios]);
+
+  // Trabajos fiados: ya se le entregó el equipo al cliente pero sigue sin
+  // pagar hace más de 3 horas — se recalcula con tickReloj para que el
+  // aviso aparezca solo por el paso del tiempo, sin necesitar ninguna acción.
+  const UMBRAL_FIADO_HORAS = 3;
+  const trabajosFiados = useMemo(() => {
+    void tickReloj;
+    return servicios.filter((s) => {
+      if (s.estado !== 'ENTREGADO' || s.pagado || !s.entregado_at) return false;
+      const horas = (Date.now() - new Date(s.entregado_at).getTime()) / (1000 * 60 * 60);
+      return horas >= UMBRAL_FIADO_HORAS;
+    });
+  }, [servicios, tickReloj]);
 
   const imeisPendientes = useMemo(
     () =>
@@ -1417,7 +1548,7 @@ export function Dashboard() {
             <thead>
               <tr><th>Folio</th><th>Cliente</th><th>Equipo</th><th>Servicio</th><th>Estado</th><th>Pagado</th><th>Monto</th><th>Fecha</th></tr>
             </thead>
-            <tbody>${filasHtml}</tbody>
+            <tbody>${filasHtml || '<tr><td colspan="8">Sin registros que coincidan con la búsqueda/filtros.</td></tr>'}</tbody>
           </table>
           <div class="totales">Total: ${formatearMonto(totalDinero)}</div>
           <script>window.print();</script>
@@ -1569,6 +1700,7 @@ export function Dashboard() {
         {vista === 'inicio' && (
           <>
             <AlertasAtascados trabajos={trabajosAtascados} onRecordar={handleRecordarWhatsApp} />
+            <AlertasFiados trabajos={trabajosFiados} />
 
             <div className="flex justify-end mb-4">
               <button
@@ -1636,12 +1768,13 @@ export function Dashboard() {
                 onCancelarEdicion={limpiarFormulario}
                 obtenerSugerenciaPrecio={(modelo, tipo) => sugerirPrecio(indicePrecios, modelo, tipo)}
                 obtenerEstimacionDificultad={(modelo, tipo) => estimarDificultad(indiceDuraciones, modelo, tipo)}
+                obtenerSugerenciasModelo={obtenerSugerenciasModelo}
               />
 
               <HistorialServicios
                 T={T}
-                loading={loading}
-                serviciosFiltrados={serviciosFiltrados}
+                loading={loadingPagina}
+                totalFiltrados={totalServiciosPagina}
                 serviciosPaginados={serviciosPaginados}
                 conteosPorEstado={conteosPorEstado}
                 conteosPorPagado={conteosPorPagado}
@@ -1684,7 +1817,8 @@ export function Dashboard() {
         {vista === 'area-trabajo' && (
           <AreaTrabajoTab
             T={T}
-            serviciosFiltrados={serviciosFiltrados}
+            loading={loadingPagina}
+            totalFiltrados={totalServiciosPagina}
             serviciosPaginados={serviciosPaginados}
             conteosPorEstado={conteosPorEstado}
             conteosPorPagado={conteosPorPagado}
@@ -1788,6 +1922,7 @@ export function Dashboard() {
             T={T}
             imeisPendientes={imeisPendientes}
             imeiCopiadoId={imeiCopiadoId}
+            accionId={accionId}
             handleAbrirVerificadorImei={handleAbrirVerificadorImei}
             handleCopiarImei={handleCopiarImei}
             handleMarcarImeiEstado={handleMarcarImeiEstado}
@@ -1801,6 +1936,7 @@ export function Dashboard() {
             formCuenta={formCuenta}
             setFormCuenta={setFormCuenta}
             editandoCuentaId={editandoCuentaId}
+            guardandoCuenta={guardandoCuenta}
             limpiarFormularioCuenta={limpiarFormularioCuenta}
             handleGuardarCuenta={handleGuardarCuenta}
             handleEditarCuenta={handleEditarCuenta}

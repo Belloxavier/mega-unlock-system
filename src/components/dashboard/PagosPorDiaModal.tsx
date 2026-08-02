@@ -59,7 +59,7 @@ export function PagosPorDiaModal({ abierto, T, servicios, garantias, onCerrar, f
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3">
             <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">
-              Cobrado ese día
+              Cobrado ese día (neto)
             </p>
             <p className="text-xl font-black text-emerald-300">{fmt(resumen.cobradoTotal)}</p>
           </div>

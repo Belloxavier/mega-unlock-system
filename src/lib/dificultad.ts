@@ -40,7 +40,9 @@ export function construirIndiceDuraciones(servicios: Servicio[]): IndiceDuracion
     if (s.tiempo_valido === false) return; // excluido a mano (dato conocido como malo)
     const minutos = (new Date(s.fin_real).getTime() - new Date(s.inicio_real).getTime()) / 60000;
     if (!(minutos > 0)) return;
-    const key = claveCombo(s.modelo_equipo, s.tipo_trabajo);
+    // Igual que en precioSugerido.ts: agrupa por modelo_normalizado
+    // guardado, no por el texto libre.
+    const key = claveCombo(s.modelo_normalizado || s.modelo_equipo, s.tipo_trabajo);
     const arr = crudo.get(key);
     if (arr) arr.push(minutos);
     else crudo.set(key, [minutos]);

@@ -6,6 +6,7 @@ interface ImeiTabProps {
   T: Tema;
   imeisPendientes: Servicio[];
   imeiCopiadoId: string | null;
+  accionId: string | null;
   handleAbrirVerificadorImei: (url: string) => void;
   handleCopiarImei: (id: string, imei: string) => void;
   handleMarcarImeiEstado: (id: string, estado: 'limpio' | 'reportado' | 'bloqueado') => void;
@@ -17,6 +18,7 @@ export function ImeiTab({
   T,
   imeisPendientes,
   imeiCopiadoId,
+  accionId,
   handleAbrirVerificadorImei,
   handleCopiarImei,
   handleMarcarImeiEstado,
@@ -92,22 +94,25 @@ export function ImeiTab({
                   <div className="grid grid-cols-3 gap-1.5 flex-shrink-0">
                     <button
                       type="button"
+                      disabled={accionId === s.id}
                       onClick={() => handleMarcarImeiEstado(s.id, 'limpio')}
-                      className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold text-[10px] uppercase tracking-wider py-2 rounded-lg transition-all"
+                      className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold text-[10px] uppercase tracking-wider py-2 rounded-lg transition-all disabled:opacity-50"
                     >
                       Limpio
                     </button>
                     <button
                       type="button"
+                      disabled={accionId === s.id}
                       onClick={() => handleMarcarImeiEstado(s.id, 'reportado')}
-                      className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 font-bold text-[10px] uppercase tracking-wider py-2 rounded-lg transition-all"
+                      className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 font-bold text-[10px] uppercase tracking-wider py-2 rounded-lg transition-all disabled:opacity-50"
                     >
                       Reportado
                     </button>
                     <button
                       type="button"
+                      disabled={accionId === s.id}
                       onClick={() => handleMarcarImeiEstado(s.id, 'bloqueado')}
-                      className="bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold text-[10px] uppercase tracking-wider py-2 rounded-lg transition-all"
+                      className="bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold text-[10px] uppercase tracking-wider py-2 rounded-lg transition-all disabled:opacity-50"
                     >
                       Bloqueado
                     </button>

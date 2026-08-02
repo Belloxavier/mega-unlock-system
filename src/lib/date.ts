@@ -27,6 +27,51 @@ export const getFechaCorta = (fecha: Date | string) => {
   return `${dia} ${diaMes}`;
 };
 
+// Offset horario de Chile (en minutos, ej. -240) en el instante `fecha` —
+// cambia entre horario de verano/invierno, por eso se calcula en vez de
+// asumir uno fijo.
+const offsetChileMinutos = (fecha: Date): number => {
+  const partes = new Intl.DateTimeFormat('en-US', {
+    timeZone: ZONA_HORARIA,
+    timeZoneName: 'shortOffset',
+  }).formatToParts(fecha);
+  const tz = partes.find((p) => p.type === 'timeZoneName')?.value || 'GMT-4';
+  const match = tz.match(/GMT([+-]\d+)/);
+  return (match ? parseInt(match[1], 10) : -4) * 60;
+};
+
+// Instante UTC (ISO) que corresponde a las 00:00 hora de Chile del día que
+// contiene `ref` — para filtrar created_at del lado del servidor con el
+// mismo criterio de "hoy" que ya usa getFechaLocal. En el día exacto del
+// cambio de horario puede desviarse hasta 1h (mismo límite ya aceptado en
+// el resto del proyecto, ver weekly-report).
+export const inicioDiaChileISO = (ref: Date = new Date()): string => {
+  const [y, m, d] = getFechaLocal(ref).split('-').map(Number);
+  const medianocheUtcIngenua = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+  const offset = offsetChileMinutos(medianocheUtcIngenua);
+  return new Date(medianocheUtcIngenua.getTime() - offset * 60000).toISOString();
+};
+
+// Igual que inicioDiaChileISO pero del día SIGUIENTE — se usa como límite
+// exclusivo (.lt) para evitar líos de milisegundos con "fin de día".
+export const finDiaChileISOExclusivo = (ref: Date = new Date()): string => {
+  const siguiente = new Date(ref);
+  siguiente.setDate(siguiente.getDate() + 1);
+  return inicioDiaChileISO(siguiente);
+};
+
+export const inicioMesChileISO = (ref: Date = new Date()): string => {
+  const [y, m] = getFechaLocal(ref).split('-').map(Number);
+  return inicioDiaChileISO(new Date(Date.UTC(y, m - 1, 1, 12)));
+};
+
+// Igual que inicioMesChileISO pero del mes SIGUIENTE — límite exclusivo (.lt).
+export const finMesChileISOExclusivo = (ref: Date = new Date()): string => {
+  const [y, m] = getFechaLocal(ref).split('-').map(Number);
+  const siguienteMes = new Date(Date.UTC(y, m, 1, 12));
+  return inicioDiaChileISO(siguienteMes);
+};
+
 // Desplaza un string "YYYY-MM" por `offset` meses (puede ser negativo).
 export const sumarMeses = (mesStr: string, offset: number) => {
   const [y, m] = mesStr.split('-').map(Number);

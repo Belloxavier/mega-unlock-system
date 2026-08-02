@@ -45,6 +45,7 @@ export interface EquipoFormLike {
   tipoTrabajo: string;
   tipoTrabajoOtro: string;
   imeiSerie?: string;
+  costoRepuesto?: string;
 }
 
 // El aviso de IMEI (mensajeImeiInvalido) es SOLO informativo — el campo
@@ -63,6 +64,10 @@ export function validarEquipo(eq: EquipoFormLike, esPrimero: boolean): string | 
   if (eq.monto.trim()) {
     const n = parseFloat(eq.monto);
     if (isNaN(n) || n < 0) return 'Monto inválido.';
+  }
+  if (eq.costoRepuesto?.trim()) {
+    const n = parseFloat(eq.costoRepuesto);
+    if (isNaN(n) || n < 0) return 'Costo de repuesto inválido.';
   }
   if (eq.tipoTrabajo === 'Otros' && !eq.tipoTrabajoOtro.trim()) {
     return 'Escribe el tipo de servicio en "Otros".';

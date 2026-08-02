@@ -7,8 +7,14 @@
 //   GMAIL_USER          -> cuenta de Gmail que envía el correo
 //   GMAIL_APP_PASSWORD  -> "contraseña de aplicación" de esa cuenta (no la contraseña normal)
 //   REPORT_RECIPIENTS   -> opcional, correos separados por coma. Por defecto usa los dos de abajo.
+//   CRON_SHARED_SECRET  -> secreto compartido con el cron (ver 0020_proteger_cron_edge_functions.sql)
 //
 // SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY los inyecta Supabase automáticamente.
+//
+// Está desplegada con --no-verify-jwt (el cron la llama sin loguearse como
+// un usuario), así que la única barrera real contra invocaciones externas
+// es CRON_SHARED_SECRET: la función exige el header X-Cron-Secret y lo
+// compara contra este secreto antes de hacer nada.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
@@ -104,7 +110,15 @@ function construirHtml(stats: {
   </div>`;
 }
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  const secretoEsperado = Deno.env.get('CRON_SHARED_SECRET');
+  if (!secretoEsperado || req.headers.get('x-cron-secret') !== secretoEsperado) {
+    return new Response(JSON.stringify({ error: 'No autorizado' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const gmailUser = Deno.env.get('GMAIL_USER')!;

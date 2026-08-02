@@ -8,7 +8,8 @@ import { FiltrosEstadoPago } from './FiltrosEstadoPago';
 interface Props {
   T: TemaUI;
   loading: boolean;
-  serviciosFiltrados: Servicio[];
+  /** Total de registros que calzan con los filtros (viene del servidor, no es serviciosPaginados.length). */
+  totalFiltrados: number;
   serviciosPaginados: Servicio[];
   conteosPorEstado: { [estado: string]: number };
   conteosPorPagado: { pagado: number; sin_pagar: number };
@@ -49,7 +50,7 @@ export function HistorialServicios(props: Props) {
   const {
     T,
     loading,
-    serviciosFiltrados,
+    totalFiltrados,
     serviciosPaginados,
     conteosPorEstado,
     conteosPorPagado,
@@ -119,7 +120,7 @@ export function HistorialServicios(props: Props) {
 
       {loading ? (
         <p className="text-sm text-slate-400 py-8 text-center">Cargando base de datos...</p>
-      ) : serviciosFiltrados.length === 0 ? (
+      ) : totalFiltrados === 0 ? (
         <p className="text-sm text-slate-400 py-8 text-center">
           No se encontraron registros que coincidan con la búsqueda.
         </p>
@@ -249,8 +250,9 @@ export function HistorialServicios(props: Props) {
                   {s.estado === 'NO REALIZADO' ? (
                     <button
                       type="button"
+                      disabled={accionId === s.id}
                       onClick={() => props.onReactivar(s.id)}
-                      className="flex-1 text-amber-400 bg-amber-500/10 py-2.5 rounded-xl text-xs font-semibold"
+                      className="flex-1 text-amber-400 bg-amber-500/10 py-2.5 rounded-xl text-xs font-semibold disabled:opacity-50"
                     >
                       ↺ Activar
                     </button>
@@ -401,9 +403,10 @@ export function HistorialServicios(props: Props) {
                           {s.estado === 'NO REALIZADO' ? (
                             <button
                               type="button"
+                              disabled={accionId === s.id}
                               onClick={() => props.onReactivar(s.id)}
                               title="Reactivar trabajo"
-                              className="text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors"
+                              className="text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
                             >
                               ↺
                             </button>
@@ -439,7 +442,7 @@ export function HistorialServicios(props: Props) {
           {totalPaginas > 1 && (
             <div className="flex items-center justify-between mt-5 pt-4 border-t border-slate-800/60">
               <span className="text-[11px] text-slate-500">
-                Página {paginaActual} de {totalPaginas} · {serviciosFiltrados.length} registros
+                Página {paginaActual} de {totalPaginas} · {totalFiltrados} registros
               </span>
               <div className="flex gap-2">
                 <button

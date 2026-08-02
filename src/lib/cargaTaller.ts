@@ -35,7 +35,7 @@ export function calcularCargaTaller(servicios: Servicio[]): CargaTaller | null {
   const promedioGlobal = todasLasMuestras.reduce((a, b) => a + b, 0) / todasLasMuestras.length;
 
   const totalMinutos = pendientes.reduce((acc, s) => {
-    const est = estimarDificultad(indice, s.modelo_equipo, s.tipo_trabajo);
+    const est = estimarDificultad(indice, s.modelo_normalizado || s.modelo_equipo, s.tipo_trabajo);
     return acc + (est ? est.tiempoTipicoMinutos : promedioGlobal);
   }, 0);
 

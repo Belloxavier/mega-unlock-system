@@ -4,14 +4,20 @@ import type { CuentaBancaria } from '../types';
 
 export function useCuentasBancarias() {
   const [cuentasList, setCuentasList] = useState<CuentaBancaria[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchCuentas = useCallback(async () => {
     const { data, error } = await supabase
       .from('cuentas_bancarias')
       .select('id, banco, tipo_cuenta, numero_cuenta, titular, rut, email, orden')
       .order('orden', { ascending: true });
-    if (!error && data) setCuentasList(data);
+    if (error) {
+      setError(error.message);
+    } else {
+      setError(null);
+      setCuentasList(data || []);
+    }
   }, []);
 
-  return { cuentasList, fetchCuentas };
+  return { cuentasList, error, fetchCuentas };
 }

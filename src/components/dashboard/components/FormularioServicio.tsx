@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Cliente, EquipoForm, TemaUI } from '../../../types';
 import { mensajeImeiInvalido } from '../../../lib/validacion';
 import { formatearMonto } from '../../../lib/moneda';
@@ -33,6 +34,8 @@ interface Props {
   obtenerSugerenciaPrecio: (modelo: string, tipoTrabajo: string) => SugerenciaPrecio | null;
   /** Tiempo real promedio para modelo+servicio, o null si aún no hay suficiente historial. */
   obtenerEstimacionDificultad: (modelo: string, tipoTrabajo: string) => EstimacionDificultad | null;
+  /** Modelos ya usados (texto original) cuyo modelo normalizado calza con lo que se está escribiendo. */
+  obtenerSugerenciasModelo: (texto: string) => string[];
 }
 
 export function FormularioServicio({
@@ -61,7 +64,12 @@ export function FormularioServicio({
   onCancelarEdicion,
   obtenerSugerenciaPrecio,
   obtenerEstimacionDificultad,
+  obtenerSugerenciasModelo,
 }: Props) {
+  // Cuál fila de equipo tiene el foco en "Modelo" ahora mismo — el
+  // dropdown de sugerencias es puramente visual, no necesita vivir en
+  // Dashboard.tsx.
+  const [modeloFocoIdx, setModeloFocoIdx] = useState<number | null>(null);
   return (
     <div className={`bg-slate-900/80 border ${T.borde} p-5 md:p-6 rounded-2xl shadow-xl backdrop-blur-md h-fit transition-colors`}>
       <div className="flex justify-between items-center mb-5">
@@ -181,7 +189,7 @@ export function FormularioServicio({
                   </button>
                 </div>
               )}
-              <div>
+              <div className="relative">
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
                   Modelo del Equipo
                 </label>
@@ -189,10 +197,33 @@ export function FormularioServicio({
                   type="text"
                   value={eq.modelo}
                   onChange={(e) => onCambiarEquipo(idx, 'modelo', e.target.value)}
+                  onFocus={() => setModeloFocoIdx(idx)}
+                  onBlur={() => setTimeout(() => setModeloFocoIdx((v) => (v === idx ? null : v)), 150)}
                   required={idx === 0}
+                  autoComplete="off"
                   placeholder="Ej. Xiaomi Redmi Note 12"
                   className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
                 />
+                {modeloFocoIdx === idx && (() => {
+                  const sugerenciasModelo = obtenerSugerenciasModelo(eq.modelo);
+                  return sugerenciasModelo.length > 0 ? (
+                    <div className={`absolute z-20 mt-1 w-full bg-slate-950 border ${T.sugerenciaBorde} rounded-xl overflow-hidden shadow-xl`}>
+                      {sugerenciasModelo.map((modelo) => (
+                        <button
+                          type="button"
+                          key={modelo}
+                          onClick={() => {
+                            onCambiarEquipo(idx, 'modelo', modelo);
+                            setModeloFocoIdx(null);
+                          }}
+                          className={`w-full text-left px-4 py-3 text-sm text-slate-200 ${T.sugerenciaHover} transition-colors`}
+                        >
+                          {modelo}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null;
+                })()}
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
@@ -328,6 +359,24 @@ export function FormularioServicio({
                   className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
                 />
               </div>
+              {tipoContacto === 'cliente' && (
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
+                    Costo del repuesto ($)
+                    <span className="text-slate-500 font-normal"> — opcional, para tu ganancia neta</span>
+                  </label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    value={eq.costoRepuesto}
+                    onChange={(e) => onCambiarEquipo(idx, 'costoRepuesto', e.target.value)}
+                    placeholder="Ej. 300000 (deja vacío si no hay repuesto)"
+                    className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-sm text-white focus:outline-none ${T.focoInput} transition-all`}
+                  />
+                </div>
+              )}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
                   Método de Pago

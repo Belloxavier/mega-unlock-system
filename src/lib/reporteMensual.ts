@@ -23,7 +23,10 @@ export interface RankingItem {
 export interface ReporteMensual {
   mes: string; // YYYY-MM
   labelMes: string;
+  /** Bruto — total facturado, sin restar costo de repuestos. */
   cobradoTotal: number;
+  /** Neto (cobradoTotal - costo_repuesto de cada cobro) — cuánto quedó realmente. */
+  gananciaNeta: number;
   nCobros: number;
   porMetodo: RankingItem[];
   porTipoTrabajo: RankingItem[];
@@ -73,9 +76,11 @@ export function calcularReporteMensual(
   const clienteMap: { [k: string]: RankingItem } = {};
 
   let cobradoTotal = 0;
+  let gananciaNeta = 0;
   pagadosMes.forEach((s) => {
     const monto = s.monto || 0;
     cobradoTotal += monto;
+    gananciaNeta += monto - (s.costo_repuesto || 0);
 
     const metodo = s.metodo_pago || 'Sin método';
     if (!metodoMap[metodo]) metodoMap[metodo] = { nombre: metodo, monto: 0, cantidad: 0 };
@@ -130,6 +135,7 @@ export function calcularReporteMensual(
     mes,
     labelMes: labelMes(mes),
     cobradoTotal,
+    gananciaNeta,
     nCobros: pagadosMes.length,
     porMetodo: Object.values(metodoMap).sort(sortRank),
     porTipoTrabajo: Object.values(tipoMap).sort(sortRank),
@@ -224,7 +230,8 @@ export function imprimirReporteMensual(r: ReporteMensual): void {
         <h1>MEGA UNLOCK — Reporte mensual</h1>
         <p class="sub">${esc(r.labelMes)} · Generado ${esc(getFechaLocal(new Date()))}</p>
         <div class="kpi">
-          <div>Cobrado<strong>${esc(formatearMonto(r.cobradoTotal))}</strong></div>
+          <div>Facturado (bruto)<strong>${esc(formatearMonto(r.cobradoTotal))}</strong></div>
+          <div>Ganancia neta<strong>${esc(formatearMonto(r.gananciaNeta))}</strong></div>
           <div>Cobros<strong>${r.nCobros}</strong></div>
           <div>Altas<strong>${r.altasDelMes}</strong></div>
           <div>Completados<strong>${r.completadosDelMes}</strong></div>

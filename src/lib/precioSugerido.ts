@@ -17,7 +17,10 @@ export function construirIndicePrecios(servicios: Servicio[]): IndicePrecios {
   const idx: IndicePrecios = new Map();
   servicios.forEach((s) => {
     if (!s.monto || s.monto <= 0) return;
-    const key = claveCombo(s.modelo_equipo, s.tipo_trabajo);
+    // Se agrupa por modelo_normalizado (ya calculado y guardado al
+    // registrar/editar el trabajo), no por el texto libre — así "Xiaomi
+    // Redmi 14C" y "redmi 14c" cuentan como el mismo modelo.
+    const key = claveCombo(s.modelo_normalizado || s.modelo_equipo, s.tipo_trabajo);
     const arr = idx.get(key);
     if (arr) arr.push(s.monto);
     else idx.set(key, [s.monto]);

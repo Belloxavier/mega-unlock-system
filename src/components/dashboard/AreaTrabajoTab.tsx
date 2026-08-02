@@ -8,7 +8,9 @@ import { FiltrosEstadoPago } from './components/FiltrosEstadoPago';
 
 interface Props {
   T: TemaUI;
-  serviciosFiltrados: Servicio[];
+  loading: boolean;
+  /** Total de registros que calzan con los filtros (viene del servidor, no es serviciosPaginados.length). */
+  totalFiltrados: number;
   serviciosPaginados: Servicio[];
   conteosPorEstado: { [estado: string]: number };
   conteosPorPagado: { pagado: number; sin_pagar: number };
@@ -42,7 +44,8 @@ interface Props {
 // acá se refleja allá y viceversa, sin ninguna lógica de filtrado propia.
 export function AreaTrabajoTab({
   T,
-  serviciosFiltrados,
+  loading,
+  totalFiltrados,
   serviciosPaginados,
   conteosPorEstado,
   conteosPorPagado,
@@ -109,7 +112,9 @@ export function AreaTrabajoTab({
         onFiltroPagado={onFiltroPagado}
       />
 
-      {serviciosFiltrados.length === 0 ? (
+      {loading ? (
+        <p className="text-sm text-slate-400 py-8 text-center">Cargando base de datos...</p>
+      ) : totalFiltrados === 0 ? (
         <p className="text-sm text-slate-400 py-8 text-center">
           No se encontraron trabajos que coincidan con la búsqueda.
         </p>
@@ -173,7 +178,7 @@ export function AreaTrabajoTab({
       {totalPaginas > 1 && (
         <div className="flex items-center justify-between mt-5 pt-4 border-t border-slate-800/60">
           <span className="text-[11px] text-slate-500">
-            Página {paginaActual} de {totalPaginas} · {serviciosFiltrados.length} trabajos
+            Página {paginaActual} de {totalPaginas} · {totalFiltrados} trabajos
           </span>
           <div className="flex gap-2">
             <button

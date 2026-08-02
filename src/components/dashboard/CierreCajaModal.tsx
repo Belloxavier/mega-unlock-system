@@ -94,7 +94,7 @@ export function CierreCajaModal({
       </style></head><body>
         <h1>MEGA UNLOCK — Cierre de caja</h1>
         <p class="sub">Fecha ${escapeHtml(resumen.fecha)}</p>
-        <p class="tot">Cobrado: ${formatearMonto(resumen.cobradoTotal)} · ${resumen.nCobros} cobros</p>
+        <p class="tot">Cobrado (neto): ${formatearMonto(resumen.cobradoTotal)} · ${resumen.nCobros} cobros</p>
         <ul>${metodos}</ul>
         <p>Por cobrar (acumulado): ${formatearMonto(resumen.porCobrar)}</p>
         <p>Devuelto garantías hoy: ${formatearMonto(resumen.devueltoGarantias)}</p>
@@ -163,7 +163,7 @@ export function CierreCajaModal({
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3">
                 <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">
-                  Cobrado hoy
+                  Cobrado hoy (neto)
                 </p>
                 <p className="text-xl font-black text-emerald-300">{fmt(resumen.cobradoTotal)}</p>
                 <p className="text-[10px] text-slate-500">{resumen.nCobros} cobros</p>

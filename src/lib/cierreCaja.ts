@@ -8,11 +8,13 @@ export interface CobroDetalle {
   folio?: string;
   cliente: string;
   metodo: string;
+  /** Neto (monto - costo_repuesto) — lo que de verdad quedó en la mano por este cobro. */
   monto: number;
 }
 
 export interface ResumenCierre {
   fecha: string; // YYYY-MM-DD local
+  /** Neto (monto - costo_repuesto de cada cobro), no lo facturado bruto — así cuadra con la plata real del día. */
   cobradoTotal: number;
   porMetodo: { metodo: string; monto: number; cantidad: number }[];
   efectivo: number;
@@ -20,6 +22,7 @@ export interface ResumenCierre {
   tarjeta: number;
   otrosMetodos: number;
   nCobros: number;
+  /** Bruto a propósito: es deuda pendiente del cliente, no ganancia pendiente. */
   porCobrar: number;
   devueltoGarantias: number;
   nAltas: number;
@@ -37,6 +40,15 @@ function horaLocal(iso: string): string {
   } catch {
     return '';
   }
+}
+
+// El costo del repuesto casi siempre sale de la misma plata que el cliente
+// acaba de pagar (se compra el mismo día) — el cierre de caja tiene que
+// reflejar lo que de verdad queda en la mano, no lo cobrado bruto. A
+// técnicos/mayoristas nunca se les registra costo_repuesto, así que para
+// esos trabajos ganancia === monto (sin cambio).
+function ganancia(s: Servicio): number {
+  return (s.monto || 0) - (s.costo_repuesto || 0);
 }
 
 /** Calcula el resumen de cierre para una fecha local (default: hoy). */
@@ -60,21 +72,21 @@ export function calcularCierre(
   pagadosHoy.forEach((s) => {
     const m = (s.metodo_pago || 'Sin método').trim() || 'Sin método';
     if (!metodoMap[m]) metodoMap[m] = { monto: 0, cantidad: 0 };
-    metodoMap[m].monto += s.monto || 0;
+    metodoMap[m].monto += ganancia(s);
     metodoMap[m].cantidad += 1;
 
     const key = m.toLowerCase();
-    if (key.includes('efectivo')) efectivo += s.monto || 0;
-    else if (key.includes('transfer')) transferencia += s.monto || 0;
-    else if (key.includes('tarjeta')) tarjeta += s.monto || 0;
-    else otrosMetodos += s.monto || 0;
+    if (key.includes('efectivo')) efectivo += ganancia(s);
+    else if (key.includes('transfer')) transferencia += ganancia(s);
+    else if (key.includes('tarjeta')) tarjeta += ganancia(s);
+    else otrosMetodos += ganancia(s);
   });
 
   const porMetodo = Object.entries(metodoMap)
     .map(([metodo, v]) => ({ metodo, monto: v.monto, cantidad: v.cantidad }))
     .sort((a, b) => b.monto - a.monto);
 
-  const cobradoTotal = pagadosHoy.reduce((a, s) => a + (s.monto || 0), 0);
+  const cobradoTotal = pagadosHoy.reduce((a, s) => a + ganancia(s), 0);
 
   const cobros: CobroDetalle[] = pagadosHoy
     .map((s) => ({
@@ -83,7 +95,7 @@ export function calcularCierre(
       folio: s.folio,
       cliente: s.clientes?.nombre || 'General',
       metodo: s.metodo_pago || '—',
-      monto: s.monto || 0,
+      monto: ganancia(s),
     }))
     .sort((a, b) => a.hora.localeCompare(b.hora));
 
@@ -119,7 +131,7 @@ export function textoResumenWhatsApp(
 ): string {
   const lineas = [
     `Cierre ${r.fecha}`,
-    `Cobrado: $${formatearNumero(r.cobradoTotal)} (${r.nCobros} cobros)`,
+    `Cobrado (neto): $${formatearNumero(r.cobradoTotal)} (${r.nCobros} cobros)`,
     `Efectivo $${formatearNumero(r.efectivo)} · Transfer $${formatearNumero(r.transferencia)} · Tarjeta $${formatearNumero(r.tarjeta)}`,
   ];
   if (r.otrosMetodos > 0) lineas.push(`Otros: $${formatearNumero(r.otrosMetodos)}`);
