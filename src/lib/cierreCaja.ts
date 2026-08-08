@@ -1,6 +1,7 @@
 import type { Servicio, Garantia } from '../types';
 import { getFechaLocal } from './date';
 import { formatearNumero } from './moneda';
+import { estaEnRango } from './fechaFinanzas';
 
 export interface CobroDetalle {
   id: string;
@@ -169,4 +170,114 @@ export interface CierreGuardado {
   diferencia_efectivo: number | null;
   nota: string | null;
   detalle?: CobroDetalle[] | null;
+}
+
+export interface DiaMonto {
+  fecha: string;
+  monto: number;
+}
+
+export interface RankingMonto {
+  nombre: string;
+  monto: number;
+  cantidad: number;
+}
+
+export interface ComparacionFinancieraPeriodo {
+  dias: number;
+  /** Ganancia neta del período (fecha real de pago, no created_at). */
+  totalIngresos: number;
+  totalPagos: number;
+  diasConCobro: number;
+  promedioPorDiaConCobro: number;
+  mejorDia: DiaMonto | null;
+  peorDia: DiaMonto | null;
+  totalAnterior: number;
+  /** null si el período anterior no tuvo cobros (no hay base para comparar). */
+  tendenciaPct: number | null;
+  porMetodo: RankingMonto[];
+  porTipo: RankingMonto[];
+}
+
+/**
+ * Compara los últimos `dias` días contra los `dias` inmediatamente
+ * anteriores — igual criterio que calcularComparacionPeriodo (estadísticas
+ * operativas) pero en dinero: todo por fecha real de pago (fechaPagoIso),
+ * nunca por created_at.
+ */
+export function calcularComparacionFinanciera(servicios: Servicio[], dias: number): ComparacionFinancieraPeriodo {
+  const ahora = new Date();
+  const finActual = ahora;
+  const iniActual = new Date(ahora);
+  iniActual.setDate(iniActual.getDate() - dias + 1);
+  iniActual.setHours(0, 0, 0, 0);
+
+  const finAnterior = new Date(iniActual.getTime() - 1);
+  const iniAnterior = new Date(finAnterior);
+  iniAnterior.setDate(iniAnterior.getDate() - dias + 1);
+  iniAnterior.setHours(0, 0, 0, 0);
+
+  const pagadosActual = servicios.filter((s) => s.pagado && estaEnRango(fechaPagoIso(s), iniActual, finActual));
+
+  const porDiaMap = new Map<string, number>();
+  pagadosActual.forEach((s) => {
+    const f = getFechaLocal(fechaPagoIso(s));
+    porDiaMap.set(f, (porDiaMap.get(f) || 0) + ganancia(s));
+  });
+  const porDia: DiaMonto[] = Array.from(porDiaMap.entries()).map(([fecha, monto]) => ({ fecha, monto }));
+
+  const totalIngresos = porDia.reduce((a, d) => a + d.monto, 0);
+  const diasConCobro = porDia.length;
+  const mejorDia = [...porDia].sort((a, b) => b.monto - a.monto)[0] || null;
+
+  // Mismo criterio que la comparación de trabajos: no dejar que el día en
+  // curso (todavía no cerrado) gane el título de "peor día" solo por estar
+  // a medio transcurrir.
+  const hoyStr = getFechaLocal(ahora);
+  const diasCompletos = porDia.filter((d) => d.fecha !== hoyStr);
+  const candidatosPeor = diasCompletos.length > 0 ? diasCompletos : porDia;
+  const peorDia = [...candidatosPeor].sort((a, b) => a.monto - b.monto)[0] || null;
+
+  const totalAnterior = servicios
+    .filter((s) => s.pagado && estaEnRango(fechaPagoIso(s), iniAnterior, finAnterior))
+    .reduce((a, s) => a + ganancia(s), 0);
+  const tendenciaPct = totalAnterior > 0 ? ((totalIngresos - totalAnterior) / totalAnterior) * 100 : null;
+
+  const metodoMap = new Map<string, { monto: number; cantidad: number }>();
+  const tipoMap = new Map<string, { monto: number; cantidad: number }>();
+  pagadosActual.forEach((s) => {
+    const m = (s.metodo_pago || 'Sin método').trim() || 'Sin método';
+    const mEntry = metodoMap.get(m) || { monto: 0, cantidad: 0 };
+    mEntry.monto += ganancia(s);
+    mEntry.cantidad += 1;
+    metodoMap.set(m, mEntry);
+
+    const t = s.tipo_trabajo || 'General';
+    const tEntry = tipoMap.get(t) || { monto: 0, cantidad: 0 };
+    tEntry.monto += ganancia(s);
+    tEntry.cantidad += 1;
+    tipoMap.set(t, tEntry);
+  });
+
+  const porMetodo = Array.from(metodoMap.entries())
+    .map(([nombre, v]) => ({ nombre, monto: v.monto, cantidad: v.cantidad }))
+    .sort((a, b) => b.monto - a.monto);
+  const porTipo = Array.from(tipoMap.entries())
+    .map(([nombre, v]) => ({ nombre, monto: v.monto, cantidad: v.cantidad }))
+    .sort((a, b) => b.monto - a.monto)
+    .slice(0, 8);
+
+  return {
+    dias,
+    totalIngresos,
+    totalPagos: pagadosActual.length,
+    diasConCobro,
+    promedioPorDiaConCobro: diasConCobro > 0 ? totalIngresos / diasConCobro : 0,
+    mejorDia,
+    peorDia,
+    totalAnterior,
+    tendenciaPct,
+    porMetodo,
+    porTipo,
+  };
 }

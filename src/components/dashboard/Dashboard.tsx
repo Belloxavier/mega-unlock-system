@@ -1372,6 +1372,32 @@ export function Dashboard() {
     });
   }, [servicios, tickReloj]);
 
+  // Cola activa (PENDIENTE/EN PROCESO) agrupada por cliente normalizado —
+  // para la vista "Agrupar por cliente" de Área de Trabajo. Sale de la
+  // tabla completa en memoria (no de serviciosPagina) porque este set es
+  // chico (lo que de verdad hay hoy en el taller) y necesita verse
+  // completo, no paginado. Ordenado por cantidad de trabajos (más primero)
+  // y, en empate, por el trabajo más antiguo del cliente (el que lleva más
+  // esperando).
+  const trabajosActivosAgrupados = useMemo(() => {
+    const activos = servicios.filter((s) => s.estado === 'PENDIENTE' || s.estado === 'EN PROCESO');
+    const grupos = new Map<string, { nombre: string; telefono?: string; trabajos: Servicio[] }>();
+    activos.forEach((s) => {
+      const nombreOriginal = s.clientes?.nombre || 'Sin cliente';
+      const clave = normalizarNombre(nombreOriginal);
+      if (!grupos.has(clave)) {
+        grupos.set(clave, { nombre: nombreOriginal, telefono: s.clientes?.telefono, trabajos: [] });
+      }
+      grupos.get(clave)!.trabajos.push(s);
+    });
+    return Array.from(grupos.values()).sort((a, b) => {
+      if (b.trabajos.length !== a.trabajos.length) return b.trabajos.length - a.trabajos.length;
+      const masAntiguo = (g: { trabajos: Servicio[] }) =>
+        Math.min(...g.trabajos.map((t) => new Date(t.created_at).getTime()));
+      return masAntiguo(a) - masAntiguo(b);
+    });
+  }, [servicios]);
+
   const imeisPendientes = useMemo(
     () =>
       servicios.filter(
@@ -1842,6 +1868,7 @@ export function Dashboard() {
             loading={loadingPagina}
             totalFiltrados={totalServiciosPagina}
             serviciosPaginados={serviciosPaginados}
+            trabajosActivosAgrupados={trabajosActivosAgrupados}
             conteosPorEstado={conteosPorEstado}
             conteosPorPagado={conteosPorPagado}
             filtroFecha={filtroFecha}
@@ -1892,6 +1919,7 @@ export function Dashboard() {
         {vista === 'finanzas' && (
           <FinanzasTab
             T={T}
+            servicios={servicios}
             cajaSemana={cajaSemana}
             cajaSemanaPasada={cajaSemanaPasada}
             cajaMes={cajaMes}

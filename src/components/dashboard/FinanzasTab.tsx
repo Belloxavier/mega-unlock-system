@@ -1,8 +1,22 @@
-import type { TemaUI } from '../../types';
+import { useMemo, useState } from 'react';
+import type { Servicio, TemaUI } from '../../types';
 import { DIAS_SEMANA } from '../../lib/date';
+import { calcularComparacionFinanciera } from '../../lib/cierreCaja';
+import { formatearPorcentaje } from '../../lib/moneda';
+import { BarChart } from './components/BarChart';
+
+const OPCIONES_DIAS = [7, 30, 90, 180, 365] as const;
+
+// Fecha YYYY-MM-DD → "15/07", para etiquetas compactas dentro de tarjetas.
+function formatearFechaCorta(fechaStr: string): string {
+  const [, m, d] = fechaStr.split('-');
+  return `${d}/${m}`;
+}
 
 interface Props {
   T: TemaUI;
+  /** Tabla completa (no paginada) — solo para la Comparación por Período de acá abajo. */
+  servicios: Servicio[];
   cajaSemana: number;
   cajaSemanaPasada: number;
   cajaMes: number;
@@ -26,6 +40,7 @@ interface Props {
 
 export function FinanzasTab({
   T,
+  servicios,
   cajaSemana,
   cajaSemanaPasada,
   cajaMes,
@@ -43,6 +58,12 @@ export function FinanzasTab({
   onAbrirReporteMensual,
   onAbrirPagosPorDia,
 }: Props) {
+  const [diasComparacion, setDiasComparacion] = useState<number>(30);
+  const comparacion = useMemo(
+    () => calcularComparacionFinanciera(servicios, diasComparacion),
+    [servicios, diasComparacion]
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex justify-end gap-2">
@@ -109,6 +130,111 @@ export function FinanzasTab({
           >
             {deltaMes >= 0 ? '▲' : '▼'} {fmt(Math.abs(deltaMes))} {deltaMes >= 0 ? 'más' : 'menos'} que el
             mes anterior
+          </div>
+        </div>
+      </div>
+
+      <div className={`bg-slate-900/80 border ${T.borde} p-5 md:p-6 rounded-2xl shadow-xl backdrop-blur-md`}>
+        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <h3 className={`text-xs font-bold ${T.texto} uppercase tracking-widest`}>
+            📊 Comparación por Período
+          </h3>
+          <div className="flex gap-1.5 bg-slate-950/80 border border-slate-800 rounded-xl p-1 flex-wrap">
+            {OPCIONES_DIAS.map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDiasComparacion(d)}
+                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
+                  diasComparacion === d ? T.filtroActivo : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {d}d
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-2.5">
+          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+              Ingresos (neto)
+            </p>
+            <p className={`text-base font-black ${T.texto}`}>{fmt(comparacion.totalIngresos)}</p>
+          </div>
+          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Pagos</p>
+            <p className={`text-base font-black ${T.texto}`}>{comparacion.totalPagos}</p>
+          </div>
+          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+              Días con cobro
+            </p>
+            <p className={`text-base font-black ${T.texto}`}>
+              {comparacion.diasConCobro}/{comparacion.dias}
+            </p>
+          </div>
+          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+              Promedio/día con cobro
+            </p>
+            <p className={`text-base font-black ${T.texto}`}>{fmt(Math.round(comparacion.promedioPorDiaConCobro))}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-4">
+          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Mejor día</p>
+            <p className="text-sm font-black text-emerald-400">
+              {comparacion.mejorDia
+                ? `${formatearFechaCorta(comparacion.mejorDia.fecha)} · ${fmt(comparacion.mejorDia.monto)}`
+                : 'Sin datos'}
+            </p>
+          </div>
+          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Peor día</p>
+            <p className="text-sm font-black text-amber-400">
+              {comparacion.peorDia
+                ? `${formatearFechaCorta(comparacion.peorDia.fecha)} · ${fmt(comparacion.peorDia.monto)}`
+                : 'Sin datos'}
+            </p>
+          </div>
+          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+              Tendencia vs. período anterior
+            </p>
+            <p
+              className={`text-sm font-black ${
+                comparacion.tendenciaPct == null
+                  ? 'text-slate-500'
+                  : comparacion.tendenciaPct >= 0
+                    ? 'text-emerald-400'
+                    : 'text-rose-400'
+              }`}
+            >
+              {comparacion.tendenciaPct == null ? 'Sin datos previos' : formatearPorcentaje(comparacion.tendenciaPct)}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+              💳 Por método (período)
+            </p>
+            <BarChart
+              items={comparacion.porMetodo}
+              fmt={fmt}
+              barraClass={
+                T.barraGradiente ? `bg-gradient-to-r ${T.barraGradiente}` : 'bg-gradient-to-r from-cyan-500 to-emerald-400'
+              }
+            />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+              🔧 Por tipo de trabajo (período)
+            </p>
+            <BarChart items={comparacion.porTipo} fmt={fmt} barraClass="bg-gradient-to-r from-violet-500 to-fuchsia-400" />
           </div>
         </div>
       </div>

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Servicio, TemaUI } from '../../types';
 import { getDotColor } from '../../lib/estado';
 import { getFechaLocal, sumarDias } from '../../lib/date';
+import { formatearPorcentaje } from '../../lib/moneda';
 import {
   calcularSnapshotEstados,
   calcularVolumen,
@@ -52,8 +53,6 @@ function formatearFechaCorta(fechaStr: string): string {
   const [, m, d] = fechaStr.split('-');
   return `${d}/${m}`;
 }
-
-const formatearPct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1).replace('.', ',')}%`;
 
 function BarraCantidad({
   nombre,
@@ -309,7 +308,7 @@ export function EstadisticasTab({ T, servicios, fmt }: Props) {
             valor={
               comparacionPeriodo.tendenciaPct == null
                 ? 'Sin datos previos'
-                : formatearPct(comparacionPeriodo.tendenciaPct)
+                : formatearPorcentaje(comparacionPeriodo.tendenciaPct)
             }
             T={T}
             colorClass={
