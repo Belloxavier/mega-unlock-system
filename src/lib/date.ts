@@ -78,3 +78,13 @@ export const sumarMeses = (mesStr: string, offset: number) => {
   const d = new Date(y, m - 1 + offset, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
+
+// Desplaza un string "YYYY-MM-DD" por `dias` (puede ser negativo). Trabaja
+// solo con los componentes de calendario (sin pasar por Date+ISO), así que
+// no hay riesgo de que un huso horario desfase el día.
+export const sumarDias = (fechaStr: string, dias: number): string => {
+  const [y, m, d] = fechaStr.split('-').map(Number);
+  const fecha = new Date(y, m - 1, d);
+  fecha.setDate(fecha.getDate() + dias);
+  return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+};

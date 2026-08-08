@@ -12,14 +12,20 @@ export type PlantillaKey =
   | 'garantiaResuelta';
 
 const DEFAULTS: Record<PlantillaKey, string> = {
+  // Sin saludo con nombre a propósito: el nombre guardado en el cliente a
+  // veces lleva una nota interna para diferenciar clientes con el mismo
+  // nombre real (ej. "Oscar trabajador de Clíder") y no debe filtrarse al
+  // WhatsApp del cliente. Tampoco lleva el monto — cuando un mismo cliente
+  // deja varios equipos a la vez, mostrar el monto de uno solo confundía
+  // (¿es el total o solo de ese equipo?); el monto se coordina al retirar.
   equipoListo:
-    'Hola {{nombre}}, tu equipo {{modelo}}{{folio}} ya está listo. El total a pagar es ${{monto}}. Puedes pasar a retirarlo.{{linkPago}}',
+    'Hola, tu equipo {{modelo}}{{folio}} ya está listo. Puedes pasar a retirarlo.{{linkPago}}',
   equipoListoRevision:
-    'Hola {{nombre}}, ya revisamos tu equipo {{modelo}}{{folio}}.\n\nDiagnóstico: {{diagnostico}}\nPrecio: ${{monto}}\n\nPuedes pasar a retirarlo.{{linkPago}}',
+    'Hola, ya revisamos tu equipo {{modelo}}{{folio}}.\n\nDiagnóstico: {{diagnostico}}\n\nPuedes pasar a retirarlo.{{linkPago}}',
   recordatorio24h:
-    'Hola {{nombre}} 👋, te escribimos de Mega Unlock para recordarte que tu equipo {{modelo}}{{folio}} sigue esperando por ti en el taller. Cuando puedas, pasa a retirarlo. ¡Saludos!',
+    'Hola 👋, te escribimos de Mega Unlock para recordarte que tu equipo {{modelo}}{{folio}} sigue esperando por ti en el taller. Cuando puedas, pasa a retirarlo. ¡Saludos!',
   garantiaResuelta:
-    'Hola {{nombre}}, tu garantía{{folio}} quedó resuelta. Cualquier cosa, avísanos.',
+    'Hola, tu garantía{{folio}} quedó resuelta. Cualquier cosa, avísanos.',
 };
 
 const STORAGE_KEY = 'mega-unlock-wa-plantillas';

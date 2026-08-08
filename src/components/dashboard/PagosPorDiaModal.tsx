@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Servicio, Garantia, TemaUI } from '../../types';
 import { calcularCierre } from '../../lib/cierreCaja';
-import { getFechaLocal } from '../../lib/date';
+import { getFechaLocal, sumarDias } from '../../lib/date';
 
 interface Props {
   abierto: boolean;
@@ -16,6 +16,7 @@ interface Props {
 // vez de "hoy" — mismo cálculo de cobros por día, sin duplicar lógica.
 export function PagosPorDiaModal({ abierto, T, servicios, garantias, onCerrar, fmt }: Props) {
   const [fecha, setFecha] = useState(() => getFechaLocal(new Date()));
+  const hoy = getFechaLocal(new Date());
 
   const resumen = useMemo(
     () => calcularCierre(servicios, garantias, fecha),
@@ -49,12 +50,40 @@ export function PagosPorDiaModal({ abierto, T, servicios, garantias, onCerrar, f
         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
           Fecha
         </label>
-        <input
-          type="date"
-          value={fecha}
-          onChange={(e) => setFecha(e.target.value)}
-          className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white mb-4 focus:outline-none focus:border-cyan-400"
-        />
+        <div className="flex items-center gap-2 mb-4">
+          <button
+            type="button"
+            onClick={() => setFecha((f) => sumarDias(f, -1))}
+            aria-label="Día anterior"
+            className="flex-shrink-0 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white hover:border-cyan-400 transition-colors"
+          >
+            ←
+          </button>
+          <input
+            type="date"
+            value={fecha}
+            onChange={(e) => setFecha(e.target.value)}
+            className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-400"
+          />
+          <button
+            type="button"
+            onClick={() => setFecha((f) => sumarDias(f, 1))}
+            disabled={fecha >= hoy}
+            aria-label="Día siguiente"
+            className="flex-shrink-0 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white hover:border-cyan-400 transition-colors disabled:opacity-30 disabled:hover:border-slate-700"
+          >
+            →
+          </button>
+          {fecha !== hoy && (
+            <button
+              type="button"
+              onClick={() => setFecha(hoy)}
+              className="flex-shrink-0 bg-slate-800/60 border border-slate-700 rounded-xl px-3 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider hover:bg-slate-800 transition-colors"
+            >
+              Hoy
+            </button>
+          )}
+        </div>
 
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3">

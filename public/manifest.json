@@ -1,0 +1,12 @@
+{
+  "name": "Mega Unlock Manager",
+  "short_name": "Mega Unlock",
+  "description": "Sistema de gestión del taller Mega Unlock",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#070B19",
+  "theme_color": "#070B19",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

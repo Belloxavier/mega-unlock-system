@@ -29,7 +29,11 @@ export interface ResumenCierre {
   cobros: CobroDetalle[];
 }
 
-function fechaPagoIso(s: Servicio): string {
+/** Fecha real del pago (pagado_at, editable desde el Historial) — nunca
+ * created_at. Exportada para que otros cálculos (estadísticas operativas,
+ * comparaciones de período) contabilicen el dinero en el día en que
+ * realmente se cobró, no en el día en que se creó el registro. */
+export function fechaPagoIso(s: Servicio): string {
   return s.pagado_at || s.entregado_at || s.created_at;
 }
 
@@ -47,7 +51,7 @@ function horaLocal(iso: string): string {
 // reflejar lo que de verdad queda en la mano, no lo cobrado bruto. A
 // técnicos/mayoristas nunca se les registra costo_repuesto, así que para
 // esos trabajos ganancia === monto (sin cambio).
-function ganancia(s: Servicio): number {
+export function ganancia(s: Servicio): number {
   return (s.monto || 0) - (s.costo_repuesto || 0);
 }
 

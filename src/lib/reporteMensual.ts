@@ -1,6 +1,7 @@
 import type { Servicio, Garantia } from '../types';
 import { getFechaLocal } from './date';
 import { formatearMonto } from './moneda';
+import { normalizarNombre } from './normalizarTexto';
 
 export interface LineaCobro {
   fecha: string;
@@ -92,10 +93,13 @@ export function calcularReporteMensual(
     tipoMap[tipo].monto += monto;
     tipoMap[tipo].cantidad += 1;
 
-    const cliente = s.clientes?.nombre || 'General';
-    if (!clienteMap[cliente]) clienteMap[cliente] = { nombre: cliente, monto: 0, cantidad: 0 };
-    clienteMap[cliente].monto += monto;
-    clienteMap[cliente].cantidad += 1;
+    const clienteOriginal = s.clientes?.nombre || 'General';
+    // Agrupa por nombre normalizado (sin acentos) — "maria jose" y "María
+    // José" no deben aparecer como dos clientes distintos en el ranking.
+    const claveCliente = normalizarNombre(clienteOriginal);
+    if (!clienteMap[claveCliente]) clienteMap[claveCliente] = { nombre: clienteOriginal, monto: 0, cantidad: 0 };
+    clienteMap[claveCliente].monto += monto;
+    clienteMap[claveCliente].cantidad += 1;
   });
 
   const sortRank = (a: RankingItem, b: RankingItem) => b.monto - a.monto;

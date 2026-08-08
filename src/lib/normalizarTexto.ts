@@ -1,8 +1,40 @@
-// Normaliza modelo/tipo de servicio (mayúsculas, espacios extra) para
-// agrupar combinaciones equivalentes al buscar precios y tiempos
+// Normaliza modelo/tipo de servicio (mayúsculas, espacios extra, acentos)
+// para agrupar combinaciones equivalentes al buscar precios y tiempos
 // históricos — "similar" en Fase 1 significa esto, no coincidencia
 // aproximada por typos (eso queda para una fase futura si hace falta).
-export const normalizarTexto = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+// Quita tildes vía descomposición Unicode (NFD) antes de comparar, así
+// "Reparación" y "reparacion" cuentan como el mismo tipo de trabajo.
+const MARCAS_DIACRITICAS = /[̀-ͯ]/g;
+
+export const normalizarTexto = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(MARCAS_DIACRITICAS, '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+
+/**
+ * Normaliza el nombre de un cliente para reconocer "maria jose" y
+ * "María José" como la misma persona en búsqueda y agrupaciones/rankings.
+ * El nombre tal como lo escribió el usuario (con sus acentos) nunca se
+ * toca — esto solo alimenta comparaciones internas, igual que
+ * modelo_normalizado con el modelo del equipo.
+ *
+ * Mismo criterio de respaldo que normalizarModelo: si el nombre es puro
+ * símbolos/emoji y queda vacío tras normalizar, se conserva el original en
+ * minúsculas en vez de un '' que agruparía a cualquiera con nombre "raro"
+ * como si fueran la misma persona.
+ */
+export function normalizarNombre(nombre: string): string {
+  const original = (nombre || '').trim().toLowerCase();
+  const sinAcentos = original
+    .normalize('NFD')
+    .replace(MARCAS_DIACRITICAS, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return sinAcentos || original;
+}
 
 // Prefijos de marca/línea que se ignoran al normalizar el modelo — lista
 // abierta, se puede ampliar sin romper nada (los registros ya guardados no

@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { supabase } from '../supabase';
 import type { Cliente } from '../types';
 import { escaparComodinesLike } from '../lib/postgrestFiltro';
+import { normalizarNombre } from '../lib/normalizarTexto';
 
 const SELECT_CLIENTE = 'id, nombre, telefono, tipo_contacto';
 
@@ -15,14 +16,18 @@ const SELECT_CLIENTE = 'id, nombre, telefono, tipo_contacto';
 export function useClientes() {
   const [error, setError] = useState<string | null>(null);
 
+  // Busca por nombre_normalizado (sin acentos, minúsculas) en vez de
+  // `nombre` crudo — así "maria" encuentra "María" y viceversa. ILIKE de
+  // Postgres no quita tildes solo, por eso se compara contra la columna ya
+  // normalizada en vez de confiar en el ILIKE de `nombre`.
   const buscarClientes = useCallback(async (query: string, limite = 6): Promise<Cliente[]> => {
     const q = query.trim();
     if (!q) return [];
-    const patron = `%${escaparComodinesLike(q)}%`;
+    const patron = `%${escaparComodinesLike(normalizarNombre(q))}%`;
     const { data, error } = await supabase
       .from('clientes')
       .select(SELECT_CLIENTE)
-      .ilike('nombre', patron)
+      .ilike('nombre_normalizado', patron)
       .order('nombre')
       .limit(limite);
     if (error) {
@@ -33,15 +38,17 @@ export function useClientes() {
     return data || [];
   }, []);
 
-  // Coincidencia exacta (sin distinguir mayúsculas) — reemplaza el antiguo
-  // `clientesList.find(...)` en memoria al crear/editar un trabajo.
+  // Coincidencia exacta por nombre_normalizado — reemplaza el antiguo
+  // `clientesList.find(...)` en memoria al crear/editar un trabajo. Antes
+  // usaba ILIKE sobre `nombre` crudo, así que "maria jose" no encontraba a
+  // "María José" ya existente y creaba un cliente duplicado.
   const buscarClientePorNombreExacto = useCallback(async (nombre: string): Promise<Cliente | null> => {
-    const n = nombre.trim();
+    const n = normalizarNombre(nombre);
     if (!n) return null;
     const { data, error } = await supabase
       .from('clientes')
       .select(SELECT_CLIENTE)
-      .ilike('nombre', escaparComodinesLike(n))
+      .eq('nombre_normalizado', n)
       .limit(1)
       .maybeSingle();
     if (error) {

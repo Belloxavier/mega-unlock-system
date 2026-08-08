@@ -4,7 +4,7 @@ import type { Cliente, Servicio, EquipoForm, Garantia, CuentaBancaria, TemaUI } 
 import { equipoVacio, cuentaVacia } from '../../types';
 import { DIAS_SEMANA, getFechaLocal, getDiaSemana, getFechaCorta } from '../../lib/date';
 import { TIPOS_ESTANDAR, getPrefijo } from '../../lib/folio';
-import { normalizarModelo } from '../../lib/normalizarTexto';
+import { normalizarModelo, normalizarNombre } from '../../lib/normalizarTexto';
 import { pareceImei } from '../../lib/imei';
 import { escapeHtml } from '../../lib/html';
 import { limpiarNumero, tieneTelefonoValido } from '../../lib/phone';
@@ -31,6 +31,7 @@ import { CuentasTab } from './CuentasTab';
 import { ImeiTab } from './ImeiTab';
 import { ClientesTab } from './ClientesTab';
 import { FinanzasTab } from './FinanzasTab';
+import { EstadisticasTab } from './EstadisticasTab';
 import { GarantiasTab } from './GarantiasTab';
 import { AreaTrabajoTab } from './AreaTrabajoTab';
 import { CierreCajaModal } from './CierreCajaModal';
@@ -62,7 +63,15 @@ const NIVELES_GARANTIA = [
   'bg-red-600/20 text-red-300 border-red-500/50 shadow-[0_0_8px_rgba(220,38,38,0.4)]',
 ];
 
-type Vista = 'inicio' | 'area-trabajo' | 'clientes' | 'finanzas' | 'garantias' | 'imei' | 'cuentas';
+type Vista =
+  | 'inicio'
+  | 'area-trabajo'
+  | 'clientes'
+  | 'finanzas'
+  | 'estadisticas'
+  | 'garantias'
+  | 'imei'
+  | 'cuentas';
 
 interface ConfirmState {
   titulo: string;
@@ -346,6 +355,7 @@ export function Dashboard() {
             .from('clientes')
             .update({
               nombre: nombreCliente,
+              nombre_normalizado: normalizarNombre(nombreCliente),
               telefono: telefonoCliente || null,
               tipo_contacto: tipoContacto,
             })
@@ -406,6 +416,7 @@ export function Dashboard() {
             .insert([
               {
                 nombre: nombreCliente,
+                nombre_normalizado: normalizarNombre(nombreCliente),
                 telefono: telefonoCliente || null,
                 tipo_contacto: tipoContacto,
               },
@@ -427,6 +438,7 @@ export function Dashboard() {
           .from('clientes')
           .update({
             nombre: nombreCliente,
+            nombre_normalizado: normalizarNombre(nombreCliente),
             telefono: telefonoCliente || null,
             tipo_contacto: tipoContacto,
           })
@@ -783,7 +795,7 @@ export function Dashboard() {
         <body>
           <div class="folio">${escapeHtml(s.folio)}</div>
           <div class="linea"></div>
-          <div class="dato"><b>Cliente:</b> ${escapeHtml(s.clientes?.nombre)}</div>
+          <div class="dato">Equipo dejado en MEGA UNLOCK</div>
           <div class="dato"><b>Equipo:</b> ${escapeHtml(s.modelo_equipo)}</div>
           <div class="dato"><b>Servicio:</b> ${escapeHtml(s.tipo_trabajo)}</div>
           <div class="dato"><b>Fecha:</b> ${escapeHtml(fecha)}</div>
@@ -1392,7 +1404,11 @@ export function Dashboard() {
     const rankingClientesTabObj = serviciosClientesTab.reduce(
       (acc: { [key: string]: { nombre: string; dinero: number; visitas: number } }, curr) => {
         const nombreOriginal = curr.clientes?.nombre || 'General';
-        const clave = nombreOriginal.trim().toLowerCase();
+        // Agrupa por nombre normalizado (sin acentos) para que "maria jose" y
+        // "María José" cuenten como la misma persona en el ranking, aunque se
+        // haya escrito distinto en cada registro — se muestra el primer
+        // nombre "tal cual" visto para esa clave, no el normalizado.
+        const clave = normalizarNombre(nombreOriginal);
         if (!acc[clave]) acc[clave] = { nombre: nombreOriginal.trim(), dinero: 0, visitas: 0 };
         acc[clave].dinero += curr.monto || 0;
         acc[clave].visitas += 1;
@@ -1485,15 +1501,20 @@ export function Dashboard() {
 
   const rankingClientesGarantiasMes = useMemo(() => {
     const mesActual = hoyStr.slice(0, 7);
-    const obj: { [nombre: string]: number } = {};
+    // Igual que rankingClientesTabObj: se agrupa por nombre normalizado
+    // (sin acentos) pero se muestra el primer nombre visto "tal cual".
+    const obj: { [clave: string]: { nombre: string; cantidad: number } } = {};
     garantiasList.forEach((g) => {
       if (g.created_at.slice(0, 7) !== mesActual) return;
-      const nombre = g.servicios?.clientes?.nombre || 'Sin cliente';
-      obj[nombre] = (obj[nombre] || 0) + 1;
+      const nombreOriginal = g.servicios?.clientes?.nombre || 'Sin cliente';
+      const clave = normalizarNombre(nombreOriginal);
+      if (!obj[clave]) obj[clave] = { nombre: nombreOriginal, cantidad: 0 };
+      obj[clave].cantidad += 1;
     });
-    return Object.entries(obj)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
+    return Object.values(obj)
+      .sort((a, b) => b.cantidad - a.cantidad)
+      .slice(0, 5)
+      .map((v): [string, number] => [v.nombre, v.cantidad]);
   }, [garantiasList, hoyStr]);
 
   const totalDevueltoGarantias = useMemo(
@@ -1679,6 +1700,7 @@ export function Dashboard() {
               ['area-trabajo', '🔧 Área de Trabajo'],
               ['clientes', '👥 Clientes'],
               ['finanzas', '💰 Finanzas'],
+              ['estadisticas', '📈 Estadísticas'],
               ['garantias', '🛡️ Garantías'],
               ['imei', '📡 IMEI'],
               ['cuentas', '💳 Cuentas'],
@@ -1888,6 +1910,8 @@ export function Dashboard() {
             onAbrirPagosPorDia={() => setPagosDiaAbierto(true)}
           />
         )}
+
+        {vista === 'estadisticas' && <EstadisticasTab T={T} servicios={servicios} fmt={fmt} />}
 
         {vista === 'garantias' && (
           <GarantiasTab

@@ -9,6 +9,9 @@ export type { Tema as TemaUI } from './lib/theme';
 export interface Cliente {
   id: string;
   nombre: string;
+  /** nombre normalizado (sin acentos, minúsculas) — usado para búsqueda y
+   * detección de duplicados, nunca mostrado en pantalla. */
+  nombre_normalizado?: string | null;
   telefono?: string;
   tipo_contacto?: string; // 'tecnico' | 'cliente'
 }
