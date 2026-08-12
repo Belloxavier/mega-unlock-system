@@ -98,7 +98,7 @@ export function CierreCajaModal({
         <ul>${metodos}</ul>
         <p>Por cobrar (acumulado): ${formatearMonto(resumen.porCobrar)}</p>
         <p>Devuelto garantías hoy: ${formatearMonto(resumen.devueltoGarantias)}</p>
-        <p>Altas del día: ${resumen.nAltas}</p>
+        <p>Trabajos nuevos hoy (equipos registrados, no cobros): ${resumen.nAltas}</p>
         ${
           diferencia != null
             ? `<p>Efectivo contado: ${formatearMonto(contadoNum!)} · Diferencia: ${formatearMonto(diferencia)}</p>`
@@ -196,9 +196,12 @@ export function CierreCajaModal({
                   <span className="font-black text-rose-300">{fmt(resumen.devueltoGarantias)}</span>
                 </div>
               )}
-              <div className="flex justify-between text-xs pt-1 border-t border-slate-800">
-                <span className="text-slate-500">Altas del día</span>
-                <span className="font-bold text-slate-300">{resumen.nAltas}</span>
+              <div className="flex justify-between items-end text-xs pt-1 border-t border-slate-800">
+                <div>
+                  <p className="text-slate-500">Trabajos nuevos hoy</p>
+                  <p className="text-[9px] text-slate-600">Equipos registrados hoy — no son cobros ni clientes nuevos</p>
+                </div>
+                <span className="font-bold text-slate-300 flex-shrink-0">{resumen.nAltas}</span>
               </div>
             </div>
 
@@ -328,7 +331,7 @@ export function CierreCajaModal({
                   <div>
                     <p className="font-mono font-bold text-sm text-slate-100">{h.fecha}</p>
                     <p className="text-[10px] text-slate-500">
-                      {h.n_cobros} cobros · Altas {h.n_altas}
+                      {h.n_cobros} cobros · {h.n_altas} trabajos nuevos
                       {h.nota ? ` · ${h.nota}` : ''}
                     </p>
                   </div>

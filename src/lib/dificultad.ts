@@ -25,6 +25,17 @@ export const MIN_MUESTRAS_DIFICULTAD = 3;
 const OUTLIER_RATIO_MIN = 0.2;
 const OUTLIER_RATIO_MAX = 5;
 
+// Este filtro por ratio no alcanza cuando una combinación todavía tiene
+// pocas muestras (ej. 1 o 2) — un solo dato arruinado no tiene con qué
+// "compararse" para detectarse como outlier, y de paso arrastra el
+// promedio global (el respaldo que usa carga del taller cuando todavía no
+// hay historial propio de esa combinación). Ningún trabajo de este taller
+// toma más de 4 horas de trabajo activo real — si inicio_real→fin_real
+// marca más que eso, es casi seguro un "se me olvidó darle Finalizar", no
+// un trabajo realmente largo. Se descarta acá, antes de agrupar por
+// combinación, para que ni siquiera alcance a inflar el promedio global.
+const DURACION_MAXIMA_PLAUSIBLE_MIN = 240;
+
 function mediana(valores: number[]): number {
   const ordenados = [...valores].sort((a, b) => a - b);
   const mitad = Math.floor(ordenados.length / 2);
@@ -39,7 +50,7 @@ export function construirIndiceDuraciones(servicios: Servicio[]): IndiceDuracion
     if (!s.inicio_real || !s.fin_real) return;
     if (s.tiempo_valido === false) return; // excluido a mano (dato conocido como malo)
     const minutos = (new Date(s.fin_real).getTime() - new Date(s.inicio_real).getTime()) / 60000;
-    if (!(minutos > 0)) return;
+    if (!(minutos > 0) || minutos > DURACION_MAXIMA_PLAUSIBLE_MIN) return;
     // Igual que en precioSugerido.ts: agrupa por modelo_normalizado
     // guardado, no por el texto libre.
     const key = claveCombo(s.modelo_normalizado || s.modelo_equipo, s.tipo_trabajo);

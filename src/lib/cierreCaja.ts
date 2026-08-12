@@ -142,7 +142,7 @@ export function textoResumenWhatsApp(
   if (r.otrosMetodos > 0) lineas.push(`Otros: $${formatearNumero(r.otrosMetodos)}`);
   lineas.push(`Por cobrar: $${formatearNumero(r.porCobrar)}`);
   if (r.devueltoGarantias > 0) lineas.push(`Devuelto garantías: $${formatearNumero(r.devueltoGarantias)}`);
-  lineas.push(`Altas del día: ${r.nAltas}`);
+  lineas.push(`Trabajos nuevos hoy: ${r.nAltas}`);
   if (opts?.efectivoContado != null && !isNaN(opts.efectivoContado)) {
     const dif = opts.efectivoContado - r.efectivo;
     lineas.push(

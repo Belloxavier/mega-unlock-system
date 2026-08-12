@@ -89,7 +89,7 @@ export function ReporteMensualModal({
               sub: `${reporte.nCobros} cobros`,
             },
             { label: 'Ganancia neta', value: fmt(reporte.gananciaNeta), sub: 'ya restado el repuesto' },
-            { label: 'Altas', value: String(reporte.altasDelMes), sub: 'registrados' },
+            { label: 'Trabajos nuevos', value: String(reporte.altasDelMes), sub: 'equipos, no cobros' },
             { label: 'Entregados', value: String(reporte.entregadosDelMes), sub: 'en el mes' },
             {
               label: 'Devuelto',

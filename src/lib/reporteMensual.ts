@@ -237,7 +237,7 @@ export function imprimirReporteMensual(r: ReporteMensual): void {
           <div>Facturado (bruto)<strong>${esc(formatearMonto(r.cobradoTotal))}</strong></div>
           <div>Ganancia neta<strong>${esc(formatearMonto(r.gananciaNeta))}</strong></div>
           <div>Cobros<strong>${r.nCobros}</strong></div>
-          <div>Altas<strong>${r.altasDelMes}</strong></div>
+          <div>Trabajos nuevos<strong>${r.altasDelMes}</strong></div>
           <div>Completados<strong>${r.completadosDelMes}</strong></div>
           <div>Entregados<strong>${r.entregadosDelMes}</strong></div>
           <div>Por cobrar<strong>${esc(formatearMonto(r.porCobrarFinMes))}</strong></div>
