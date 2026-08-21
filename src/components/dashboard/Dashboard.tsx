@@ -133,8 +133,9 @@ export function Dashboard() {
   const [guardandoForm, setGuardandoForm] = useState(false);
   const [guardandoGarantia, setGuardandoGarantia] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
-  // Vive acá (no dentro de AvisosPendientes) para sobrevivir cambios de pestaña: el componente se desmonta al salir de Inicio.
+  // Vive acá (no dentro de AvisosPendientes/AlertasAtascados) para sobrevivir cambios de pestaña: esos componentes se desmontan al salir de Inicio.
   const [avisosAbierto, setAvisosAbierto] = useState(false);
+  const [atascadosAbierto, setAtascadosAbierto] = useState(false);
 
   const [cierreAbierto, setCierreAbierto] = useState(false);
   const [guardandoCierre, setGuardandoCierre] = useState(false);
@@ -1747,7 +1748,12 @@ export function Dashboard() {
 
         {vista === 'inicio' && (
           <>
-            <AlertasAtascados trabajos={trabajosAtascados} onRecordar={handleRecordarWhatsApp} />
+            <AlertasAtascados
+              trabajos={trabajosAtascados}
+              onRecordar={handleRecordarWhatsApp}
+              abierto={atascadosAbierto}
+              onToggle={() => setAtascadosAbierto((v) => !v)}
+            />
             <AlertasFiados trabajos={trabajosFiados} />
             <AvisosPendientes
               grupos={avisosPendientesPorCliente}
