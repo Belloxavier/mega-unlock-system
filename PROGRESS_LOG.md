@@ -83,3 +83,35 @@
 - Git: commit `5386d1d` en `main`, pusheado a `origin/main` (`3373118..5386d1d`). Working tree limpio tras el push.
 - Supabase: migración `0023` (`avisado_at` en `servicios`) aplicada y verificada vía Management API.
 ---
+
+---
+## [2026-08-21 00:30] Aviso de trabajos atascados (24h) también colapsable
+
+### Instrucción recibida
+El usuario pidió aplicar el mismo tratamiento de colapsable/acordeón (recién hecho para `AvisosPendientes`) al banner "X trabajos llevan más de 24h sin entregarse" en Inicio, para que no ocupe espacio siempre visible.
+
+### Comandos ejecutados (todos, en orden)
+- `Grep "24h|24 h|sin entregar|más de 24|24 horas"` en `src/` → ubicó `src/components/dashboard/components/AlertasAtascados.tsx` como el componente correcto.
+- `Read src/components/dashboard/components/AlertasAtascados.tsx` (completo) → confirmó estructura idéntica a `AvisosPendientes.tsx` (mismo patrón, sin estado de colapso).
+- `Grep "AlertasAtascados" src/components/dashboard/Dashboard.tsx` → ubicó el render actual (línea ~1750, dentro del bloque `vista === 'inicio'`).
+- Edit en `src/components/dashboard/components/AlertasAtascados.tsx` → agregó props `abierto`/`onToggle`, header tocable con resumen + flecha ▲/▼, lista de trabajos solo visible si `abierto`.
+- Edit en `src/components/dashboard/Dashboard.tsx` → agregó `const [atascadosAbierto, setAtascadosAbierto] = useState(false)` (estado independiente del de `avisosAbierto`) y lo conectó a `<AlertasAtascados />`.
+- `npx tsc --noEmit -p tsconfig.app.json && npm run build && npm run lint` → los tres limpios, sin errores.
+- (Usuario confirmó vía pregunta: "Sí, sube")
+- `git add src/components/dashboard/components/AlertasAtascados.tsx src/components/dashboard/Dashboard.tsx` → staging.
+- `git status` → verificado, solo esos 2 archivos.
+- `git commit -m "Hace colapsable el aviso de trabajos atascados (24h sin entregar)"` → commit `8e84a03`.
+- `git push origin main` → `e2e1ee2..8e84a03 main -> main`, subido.
+
+### Archivos tocados (todos)
+- `src/components/dashboard/components/AlertasAtascados.tsx` — modificado — agregó props `abierto`/`onToggle`, header tocable, contenido colapsable (mismo patrón que `AvisosPendientes.tsx`).
+- `src/components/dashboard/Dashboard.tsx` — modificado — agregó estado `atascadosAbierto` y lo conectó al componente.
+
+### Hallazgos y decisiones
+- Se usó un `useState` separado (`atascadosAbierto`) en vez de reutilizar `avisosAbierto`, porque son dos banners independientes (uno para "clientes sin avisar", otro para "trabajos atascados 24h") y el usuario podría querer expandir uno sin el otro.
+- No se tocó `AlertasFiados` (el tercer banner de Inicio, trabajos fiados) — el usuario solo pidió el de "24h sin entregarse"; se deja igual hasta que se pida explícitamente.
+
+### Estado final
+- Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso (408ms), `npm run lint` sin errores.
+- Git: commit `8e84a03` en `main`, pusheado a `origin/main`. Working tree limpio.
+---
