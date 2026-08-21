@@ -115,3 +115,65 @@ El usuario pidió aplicar el mismo tratamiento de colapsable/acordeón (recién 
 - Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso (408ms), `npm run lint` sin errores.
 - Git: commit `8e84a03` en `main`, pusheado a `origin/main`. Working tree limpio.
 ---
+
+---
+## [2026-08-21 01:00] Migración 0023 aplicada + push acumulado, y fix del orden en Área de Trabajo
+
+### Instrucción recibida
+1. "sube todo" → aplicar migración `0023` en Supabase y subir todo lo acumulado a GitHub.
+2. El usuario reportó que "al iniciar el día" los trabajos pendientes viejos ya no aparecían primero en la lista de Área de Trabajo — pidió diagnosticar y corregir.
+
+### Comandos ejecutados (todos, en orden)
+- `git status` + `git diff --stat` + `git log --oneline -5` → revisión de lo pendiente de subir.
+- `Glob supabase/migrations/*.sql` → confirmó que `0023` no estaba aplicada.
+- `Read AGENTS.md` completo → verificado antes de incluir en el commit (sin secretos).
+- `git diff -- src/lib/normalizarTexto.ts` → revisado, solo un comentario actualizado.
+- `Read supabase/migrations/0023_avisado_at_servicios.sql` → SQL exacto a aplicar.
+- Verificación de que no había CLI de Supabase (`command -v supabase`), ni `config.toml`, ni variables de entorno con credenciales (`ls .env*`, `grep DATABASE_URL...`), ni `psql`, ni herramienta MCP (`ToolSearch "supabase"`) disponibles en este entorno.
+- `AskUserQuestion` → se preguntó cómo aplicar la migración sin credenciales; el usuario pegó un access token de la Management API de Supabase (`sbp_...`) directamente en el chat.
+- `curl -X POST https://api.supabase.com/v1/projects/smjdwyddlsraqscizrzl/database/query -H "Authorization: Bearer <token>" -d '{"query":"alter table servicios add column if not exists avisado_at timestamptz;"}'` → `[]` (sin error).
+- `curl -X POST .../database/query -d '{"query":"select column_name, data_type from information_schema.columns where table_name = '\''servicios'\'' and column_name = '\''avisado_at'\'';"}'` → confirmó `avisado_at | timestamp with time zone`.
+- `git add CLAUDE.md AGENTS.md src supabase/migrations/0023_avisado_at_servicios.sql` → staging.
+- `git commit` → `5386d1d` (19 files, 999 insertions, 811 deletions).
+- `git push origin main` → `3373118..5386d1d`.
+- `git add PROGRESS_LOG.md` + `git commit` + `git push` → `e2e1ee2`.
+- (Usuario reportó el bug de orden en Área de Trabajo)
+- `AskUserQuestion` (pantalla) → confirmó: Área de Trabajo, vista sin agrupar.
+- `AskUserQuestion` (síntoma) → confirmó: "al entrar en área de trabajo, está por defecto todos, o sea completados, entregados y pendientes, la idea es que estén por defecto pendientes para verlos de una vez".
+- `Read src/components/dashboard/AreaTrabajoTab.tsx` completo → confirmó que la vista sin agrupar no reordena localmente, usa `serviciosPaginados` tal cual viene del servidor.
+- `Grep "ordenServicios|orden:|filtrosPaginaActuales"` en `Dashboard.tsx` → confirmó que el orden asc/desc estaba correctamente implementado.
+- `Grep "filtroFecha|filtroEstado\\b"` en `Dashboard.tsx` → confirmó default `filtroEstado='todos'`, compartido entre Historial y Área de Trabajo — identificó la causa raíz: orden ascendente + sin filtro de estado = el primer registro es el más viejo de TODA la base (incluyendo cerrados hace meses), no los pendientes viejos.
+- `AskUserQuestion` (alcance) → confirmó: el default debe incluir PENDIENTE + EN PROCESO ("Activos"), no solo PENDIENTE estricto, para quedar consistente con la vista "Agrupar por cliente".
+- `Read src/components/dashboard/components/FiltrosEstadoPago.tsx` completo → confirmó estructura de los chips de estado (compartidos entre Historial y Área de Trabajo).
+- Edit en `src/components/dashboard/Dashboard.tsx` → nuevo estado `filtroEstadoTrabajo` (default `'activos'`), derivado `filtroEstadoActivo` según `vista`, nuevo helper `filtrarPorEstadoConActivos`, nuevo `conteosPorPagadoTrabajo`, reset de página ahora también depende de `vista`, `AreaTrabajoTab` ahora recibe `filtroEstadoTrabajo`/`setFiltroEstadoTrabajo`/`conteosPorPagadoTrabajo` en vez de los compartidos de Historial.
+- Edit en `src/hooks/useServicios.ts` → `fetchServiciosPagina` interpreta `filtroEstado === 'activos'` como `.in('estado', ['PENDIENTE','EN PROCESO'])`.
+- Edit en `src/components/dashboard/components/FiltrosEstadoPago.tsx` → nuevo chip "🔵 Activos" (disponible en ambas pestañas, cuenta = PENDIENTE + EN PROCESO).
+- `npx tsc --noEmit -p tsconfig.app.json` → limpio.
+- `npm run build` → build exitoso (398ms).
+- `npm run lint` → sin errores.
+- (Usuario confirmó: "Sí, sube")
+- `git status` → 3 archivos modificados.
+- `git add src/components/dashboard/Dashboard.tsx src/components/dashboard/components/FiltrosEstadoPago.tsx src/hooks/useServicios.ts` → staging.
+- `git commit` → `bdd146a`.
+- `git push origin main` → `a0c6484..bdd146a`.
+
+### Archivos tocados (todos)
+- `supabase/migrations/0023_avisado_at_servicios.sql` — aplicada en Supabase vía Management API (columna `avisado_at` en `servicios`).
+- `AGENTS.md` — nuevo, incluido en el commit (ver bloque anterior del registro).
+- 19 archivos del commit `5386d1d` — ver entrada anterior del registro para el detalle completo.
+- `src/components/dashboard/Dashboard.tsx` — modificado — nuevo estado `filtroEstadoTrabajo`, helper `filtrarPorEstadoConActivos`, `conteosPorPagadoTrabajo`, wiring de `AreaTrabajoTab` con su propio filtro de estado.
+- `src/hooks/useServicios.ts` — modificado — `fetchServiciosPagina` maneja el valor virtual `'activos'` con `.in('estado', [...])`.
+- `src/components/dashboard/components/FiltrosEstadoPago.tsx` — modificado — nuevo chip "🔵 Activos" en la lista de estados filtrables.
+
+### Hallazgos y decisiones
+- No hay CLI de Supabase, `psql`, ni credenciales de base de datos disponibles en este entorno para aplicar migraciones DDL directamente — se necesita o bien que el usuario las corra en el SQL Editor del dashboard, o que pase un token de la Management API de forma puntual. El token que el usuario pegó se usó solo transitoriamente en 2 llamadas `curl` y nunca se guardó en archivo, variable de entorno ni en este registro. Se le sugirió al usuario rotarlo si le preocupa que haya quedado visible en el historial del chat.
+- Causa raíz del bug de orden: Historial y Área de Trabajo compartían la MISMA variable de filtro de estado (`filtroEstado`, default `'todos'`). Al voltear Área de Trabajo a orden ascendente (más antiguo primero) en un cambio anterior, con `filtroEstado='todos'` de fondo, el efecto práctico era mostrar primero el registro más antiguo de TODA la tabla — incluyendo trabajos ya completados/entregados hace meses — en vez de los trabajos pendientes viejos que el usuario esperaba ver.
+- Se decidió separar completamente el filtro de estado de Área de Trabajo del de Historial (antes compartían variable), con default `'activos'` (PENDIENTE + EN PROCESO) para Área de Trabajo — Historial mantiene su default `'todos'` sin cambios. `filtroFecha`, `filtroPagado` y `busqueda` siguen compartidos entre ambas pestañas, sin cambios.
+- Se agregó `'activos'` como valor de filtro real y visible (chip "🔵 Activos"), no solo como default implícito, para que el usuario pueda volver a verlo explícitamente o salir de él tocando el chip "Todos" — un enfoque puramente implícito (sin chip visible) dejaba al usuario sin forma de escapar del filtro por defecto tocando "Todos", porque ese chip ya aparecía "activo" sin corresponder a ningún cambio real de estado.
+- Efecto secundario menor y beneficioso: el chip "🔵 Activos" ahora también está disponible en Historial (filtro rápido de solo trabajos en curso), sin cambiar su comportamiento por defecto.
+
+### Estado final
+- Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores en ambos bloques de esta entrada.
+- Git: commits `5386d1d`, `e2e1ee2`, `bdd146a`, todos en `main` y pusheados a `origin/main`. Working tree limpio.
+- Supabase: migración `0023` aplicada y verificada.
+---
