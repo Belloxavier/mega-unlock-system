@@ -13,16 +13,18 @@ export interface FiltrosServiciosPagina {
   filtroFecha?: string; // 'todos' | 'hoy' | 'mes'
   filtroEstado?: string; // 'todos' | uno de ESTADOS_PROGRESO/NO REALIZADO
   filtroPagado?: 'todos' | 'pagado' | 'sin_pagar';
+  /** 'desc' (más nuevo primero, default — Historial) o 'asc' (más antiguo primero — Área de Trabajo, para atender primero al que lleva más tiempo esperando). */
+  orden?: 'asc' | 'desc';
 }
 
 // Centraliza el estado + fetch de `servicios`. Hay DOS fuentes de datos
 // intencionalmente separadas:
 //
 // 1. `servicios` / `fetchServicios()` — la tabla COMPLETA, sin paginar.
-//    Sigue existiendo porque Finanzas, el aprendizaje (precio/dificultad/
-//    carga del taller), los avisos de trabajos olvidados/atascados/fiados y
-//    el reporte imprimible todavía calculan todo en el cliente — mover eso
-//    a agregados en el servidor es la fase siguiente, no esta.
+//    Sigue existiendo porque Finanzas, el aprendizaje de precio, los avisos
+//    de trabajos atascados/fiados y el reporte imprimible todavía calculan
+//    todo en el cliente — mover eso a agregados en el servidor es la fase
+//    siguiente, no esta.
 // 2. `serviciosPagina` / `fetchServiciosPagina()` — SOLO la página visible
 //    del Historial/Área de Trabajo, con búsqueda y filtros resueltos en el
 //    servidor (.range/.ilike/.eq) en vez de traer todo para filtrar en JS.
@@ -119,7 +121,9 @@ export function useServicios() {
 
       const desde = (filtros.page - 1) * filtros.pageSize;
       const hasta = desde + filtros.pageSize - 1;
-      const { data, error, count } = await query.order('created_at', { ascending: false }).range(desde, hasta);
+      const { data, error, count } = await query
+        .order('created_at', { ascending: filtros.orden === 'asc' })
+        .range(desde, hasta);
 
       if (miId !== idPaginaRef.current) return; // idem — respuesta vieja, se descarta
 

@@ -19,7 +19,7 @@ export interface Cliente {
 export interface Servicio {
   id: string;
   modelo_equipo: string;
-  /** modelo_equipo normalizado (sin marca, minúsculas) — usado por precio sugerido/dificultad/carga del taller, nunca mostrado en pantalla. */
+  /** modelo_equipo normalizado (sin marca, minúsculas) — usado por precio sugerido, nunca mostrado en pantalla. */
   modelo_normalizado?: string | null;
   imei_serie?: string;
   tipo_trabajo: string;
@@ -38,10 +38,8 @@ export interface Servicio {
   nota?: string | null;
   /** Costo del repuesto/insumo (solo clientes normales) — ganancia = monto - costo_repuesto. */
   costo_repuesto?: number | null;
-  inicio_real?: string | null;
-  fin_real?: string | null;
-  /** false = este tiempo real no debe usarse para aprender (precio/dificultad/carga). Default true. */
-  tiempo_valido?: boolean;
+  /** Cuándo se avisó al cliente que este equipo (ya Completado) está listo. Null = todavía no avisado. */
+  avisado_at?: string | null;
   clientes?: Cliente;
 }
 

@@ -60,7 +60,7 @@ function limpiarModelo(valor: string): string {
 /**
  * Normaliza el modelo de un equipo para que distintas formas de escribirlo
  * ("Xiaomi Redmi 14C", "redmi 14c", "14c") se agrupen igual en precio
- * sugerido, dificultad, carga del taller y rankings. modelo_equipo (lo que
+ * sugerido. modelo_equipo (lo que
  * escribió el usuario) nunca se toca — esto solo alimenta
  * modelo_normalizado. Determinista: mismo texto de entrada, siempre el
  * mismo resultado. Es idempotente (normalizar algo ya normalizado da lo

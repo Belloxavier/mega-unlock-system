@@ -267,6 +267,14 @@ export function HistorialServicios(props: Props) {
                       </button>
                     )
                   )}
+                  <button
+                    type="button"
+                    disabled={accionId === s.id}
+                    onClick={() => props.onDelete(s.id)}
+                    className="flex-1 text-rose-400 bg-rose-500/10 py-2.5 rounded-xl text-xs font-semibold disabled:opacity-50"
+                  >
+                    🗑️ Eliminar
+                  </button>
                 </div>
               </div>
             ))}

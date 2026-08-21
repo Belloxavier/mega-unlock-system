@@ -2,9 +2,7 @@ import { useState } from 'react';
 import type { Cliente, EquipoForm, TemaUI } from '../../../types';
 import { mensajeImeiInvalido } from '../../../lib/validacion';
 import { formatearMonto } from '../../../lib/moneda';
-import { formatearDuracionMin } from '../../../lib/tiempo';
 import type { SugerenciaPrecio } from '../../../lib/precioSugerido';
-import { ETIQUETA_DIFICULTAD, MIN_MUESTRAS_DIFICULTAD, type EstimacionDificultad } from '../../../lib/dificultad';
 
 interface Props {
   T: TemaUI;
@@ -32,8 +30,6 @@ interface Props {
   onCancelarEdicion: () => void;
   /** Precio más frecuente cobrado para modelo+servicio, o null si no hay historial. */
   obtenerSugerenciaPrecio: (modelo: string, tipoTrabajo: string) => SugerenciaPrecio | null;
-  /** Tiempo real promedio para modelo+servicio, o null si aún no hay suficiente historial. */
-  obtenerEstimacionDificultad: (modelo: string, tipoTrabajo: string) => EstimacionDificultad | null;
   /** Modelos ya usados (texto original) cuyo modelo normalizado calza con lo que se está escribiendo. */
   obtenerSugerenciasModelo: (texto: string) => string[];
 }
@@ -63,7 +59,6 @@ export function FormularioServicio({
   onSubmit,
   onCancelarEdicion,
   obtenerSugerenciaPrecio,
-  obtenerEstimacionDificultad,
   obtenerSugerenciasModelo,
 }: Props) {
   // Cuál fila de equipo tiene el foco en "Modelo" ahora mismo — el
@@ -170,9 +165,6 @@ export function FormularioServicio({
           const tipoTrabajoFinalEq = eq.tipoTrabajo === 'Otros' ? eq.tipoTrabajoOtro.trim() : eq.tipoTrabajo;
           const comboListo = eq.modelo.trim() !== '' && tipoTrabajoFinalEq !== '';
           const sugerenciaPrecio = comboListo ? obtenerSugerenciaPrecio(eq.modelo, tipoTrabajoFinalEq) : null;
-          const estimacionDificultad = comboListo
-            ? obtenerEstimacionDificultad(eq.modelo, tipoTrabajoFinalEq)
-            : null;
           return (
             <div key={idx} className="border border-slate-800 rounded-xl p-3 space-y-3 relative">
               {equipos.length > 1 && (
@@ -291,42 +283,25 @@ export function FormularioServicio({
                   />
                 )}
               </div>
-              {comboListo && (
-                <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-2.5 space-y-1.5">
-                  {sugerenciaPrecio && (
-                    <div className="flex items-center justify-between gap-2 text-[11px]">
-                      <span className="text-slate-400">
-                        💡 Precio sugerido:{' '}
-                        <span className="font-bold text-emerald-300">
-                          {formatearMonto(sugerenciaPrecio.monto)}
-                        </span>{' '}
-                        ({sugerenciaPrecio.pct}% de {sugerenciaPrecio.total} caso
-                        {sugerenciaPrecio.total === 1 ? '' : 's'})
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => onCambiarEquipo(idx, 'monto', String(sugerenciaPrecio.monto))}
-                        className="flex-shrink-0 text-cyan-400 hover:text-cyan-300 font-bold uppercase text-[10px] tracking-wider"
-                      >
-                        Usar
-                      </button>
-                    </div>
-                  )}
-                  <p className="text-[11px] text-slate-400">
-                    {estimacionDificultad ? (
-                      <>
-                        ⏱️ Dificultad estimada: {ETIQUETA_DIFICULTAD[estimacionDificultad.nivel].icono}{' '}
-                        {ETIQUETA_DIFICULTAD[estimacionDificultad.nivel].texto} · típico{' '}
-                        {formatearDuracionMin(estimacionDificultad.tiempoTipicoMinutos)} (
-                        {estimacionDificultad.muestras} casos)
-                      </>
-                    ) : (
-                      <>
-                        🧠 Dificultad: aprendiendo (menos de {MIN_MUESTRAS_DIFICULTAD} casos con tiempo
-                        real registrado todavía)
-                      </>
-                    )}
-                  </p>
+              {comboListo && sugerenciaPrecio && (
+                <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-2.5">
+                  <div className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="text-slate-400">
+                      💡 Precio sugerido:{' '}
+                      <span className="font-bold text-emerald-300">
+                        {formatearMonto(sugerenciaPrecio.monto)}
+                      </span>{' '}
+                      ({sugerenciaPrecio.pct}% de {sugerenciaPrecio.total} caso
+                      {sugerenciaPrecio.total === 1 ? '' : 's'})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onCambiarEquipo(idx, 'monto', String(sugerenciaPrecio.monto))}
+                      className="flex-shrink-0 text-cyan-400 hover:text-cyan-300 font-bold uppercase text-[10px] tracking-wider"
+                    >
+                      Usar
+                    </button>
+                  </div>
                 </div>
               )}
               <label className="flex items-center gap-2 cursor-pointer select-none">

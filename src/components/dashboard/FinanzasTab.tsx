@@ -1,9 +1,15 @@
 import { useMemo, useState } from 'react';
 import type { Servicio, TemaUI } from '../../types';
-import { DIAS_SEMANA } from '../../lib/date';
-import { calcularComparacionFinanciera } from '../../lib/cierreCaja';
+import { DIAS_SEMANA, getFechaLocal } from '../../lib/date';
+import {
+  calcularComparacionFinanciera,
+  calcularComparacionFinancieraSemana,
+  type ComparacionFinancieraPeriodo,
+  type ComparacionFinancieraSemana,
+} from '../../lib/cierreCaja';
 import { formatearPorcentaje } from '../../lib/moneda';
 import { BarChart } from './components/BarChart';
+import { CalendarioSemana } from './components/CalendarioSemana';
 
 const OPCIONES_DIAS = [7, 30, 90, 180, 365] as const;
 
@@ -11,6 +17,99 @@ const OPCIONES_DIAS = [7, 30, 90, 180, 365] as const;
 function formatearFechaCorta(fechaStr: string): string {
   const [, m, d] = fechaStr.split('-');
   return `${d}/${m}`;
+}
+
+// Compartido por el modo "relativo" (7/30/90/180/365 días) y el modo
+// "semana específica" (calendario) — ambos calculan exactamente el mismo
+// desglose (ver lib/cierreCaja.ts), solo cambia qué rango de fechas se les
+// pasa, así que la UI para mostrarlo es una sola.
+function DesgloseFinanciero({
+  data,
+  T,
+  fmt,
+}: {
+  data: ComparacionFinancieraPeriodo | ComparacionFinancieraSemana;
+  T: TemaUI;
+  fmt: (n: number) => string;
+}) {
+  return (
+    <>
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 mb-2.5">
+        <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+            Ingresos (neto)
+          </p>
+          <p className={`text-base font-black ${T.texto}`}>{fmt(data.totalIngresos)}</p>
+        </div>
+        <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Trabajos</p>
+          <p className={`text-base font-black ${T.texto}`}>{data.totalTrabajos}</p>
+        </div>
+        <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Pagos</p>
+          <p className={`text-base font-black ${T.texto}`}>{data.totalPagos}</p>
+        </div>
+        <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+            Días con cobro
+          </p>
+          <p className={`text-base font-black ${T.texto}`}>{data.diasConCobro}</p>
+        </div>
+        <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+            Promedio/día con cobro
+          </p>
+          <p className={`text-base font-black ${T.texto}`}>{fmt(Math.round(data.promedioPorDiaConCobro))}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-4">
+        <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Mejor día</p>
+          <p className="text-sm font-black text-emerald-400">
+            {data.mejorDia ? `${formatearFechaCorta(data.mejorDia.fecha)} · ${fmt(data.mejorDia.monto)}` : 'Sin datos'}
+          </p>
+        </div>
+        <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Peor día</p>
+          <p className="text-sm font-black text-amber-400">
+            {data.peorDia ? `${formatearFechaCorta(data.peorDia.fecha)} · ${fmt(data.peorDia.monto)}` : 'Sin datos'}
+          </p>
+        </div>
+        <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+            Tendencia vs. período anterior
+          </p>
+          <p
+            className={`text-sm font-black ${
+              data.tendenciaPct == null ? 'text-slate-500' : data.tendenciaPct >= 0 ? 'text-emerald-400' : 'text-rose-400'
+            }`}
+          >
+            {data.tendenciaPct == null ? 'Sin datos previos' : formatearPorcentaje(data.tendenciaPct)}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+            💳 Por método (período)
+          </p>
+          <BarChart
+            items={data.porMetodo}
+            fmt={fmt}
+            barraClass={T.barraGradiente ? `bg-gradient-to-r ${T.barraGradiente}` : 'bg-gradient-to-r from-cyan-500 to-emerald-400'}
+          />
+        </div>
+        <div>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+            🔧 Por tipo de trabajo (período)
+          </p>
+          <BarChart items={data.porTipo} fmt={fmt} barraClass="bg-gradient-to-r from-violet-500 to-fuchsia-400" />
+        </div>
+      </div>
+    </>
+  );
 }
 
 interface Props {
@@ -58,11 +157,20 @@ export function FinanzasTab({
   onAbrirReporteMensual,
   onAbrirPagosPorDia,
 }: Props) {
+  const [modoComparacion, setModoComparacion] = useState<'relativo' | 'semana'>('relativo');
   const [diasComparacion, setDiasComparacion] = useState<number>(30);
+  const [semanaElegida, setSemanaElegida] = useState<string | null>(null);
+
   const comparacion = useMemo(
     () => calcularComparacionFinanciera(servicios, diasComparacion),
     [servicios, diasComparacion]
   );
+
+  const semanaParaMostrar = semanaElegida || getFechaLocal(new Date());
+  const comparacionSemana = useMemo(() => {
+    const [y, m, d] = semanaParaMostrar.split('-').map(Number);
+    return calcularComparacionFinancieraSemana(servicios, new Date(y, m - 1, d));
+  }, [servicios, semanaParaMostrar]);
 
   return (
     <div className="space-y-6">
@@ -140,103 +248,62 @@ export function FinanzasTab({
             📊 Comparación por Período
           </h3>
           <div className="flex gap-1.5 bg-slate-950/80 border border-slate-800 rounded-xl p-1 flex-wrap">
-            {OPCIONES_DIAS.map((d) => (
-              <button
-                key={d}
-                type="button"
-                onClick={() => setDiasComparacion(d)}
-                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
-                  diasComparacion === d ? T.filtroActivo : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {d}d
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-2.5">
-          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
-            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-              Ingresos (neto)
-            </p>
-            <p className={`text-base font-black ${T.texto}`}>{fmt(comparacion.totalIngresos)}</p>
-          </div>
-          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
-            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Pagos</p>
-            <p className={`text-base font-black ${T.texto}`}>{comparacion.totalPagos}</p>
-          </div>
-          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
-            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-              Días con cobro
-            </p>
-            <p className={`text-base font-black ${T.texto}`}>
-              {comparacion.diasConCobro}/{comparacion.dias}
-            </p>
-          </div>
-          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
-            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-              Promedio/día con cobro
-            </p>
-            <p className={`text-base font-black ${T.texto}`}>{fmt(Math.round(comparacion.promedioPorDiaConCobro))}</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-4">
-          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
-            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Mejor día</p>
-            <p className="text-sm font-black text-emerald-400">
-              {comparacion.mejorDia
-                ? `${formatearFechaCorta(comparacion.mejorDia.fecha)} · ${fmt(comparacion.mejorDia.monto)}`
-                : 'Sin datos'}
-            </p>
-          </div>
-          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
-            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Peor día</p>
-            <p className="text-sm font-black text-amber-400">
-              {comparacion.peorDia
-                ? `${formatearFechaCorta(comparacion.peorDia.fecha)} · ${fmt(comparacion.peorDia.monto)}`
-                : 'Sin datos'}
-            </p>
-          </div>
-          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
-            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-              Tendencia vs. período anterior
-            </p>
-            <p
-              className={`text-sm font-black ${
-                comparacion.tendenciaPct == null
-                  ? 'text-slate-500'
-                  : comparacion.tendenciaPct >= 0
-                    ? 'text-emerald-400'
-                    : 'text-rose-400'
+            <button
+              type="button"
+              onClick={() => setModoComparacion('relativo')}
+              className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
+                modoComparacion === 'relativo' ? T.filtroActivo : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              {comparacion.tendenciaPct == null ? 'Sin datos previos' : formatearPorcentaje(comparacion.tendenciaPct)}
-            </p>
+              Días
+            </button>
+            <button
+              type="button"
+              onClick={() => setModoComparacion('semana')}
+              className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
+                modoComparacion === 'semana' ? T.filtroActivo : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              📅 Semana específica
+            </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-              💳 Por método (período)
-            </p>
-            <BarChart
-              items={comparacion.porMetodo}
-              fmt={fmt}
-              barraClass={
-                T.barraGradiente ? `bg-gradient-to-r ${T.barraGradiente}` : 'bg-gradient-to-r from-cyan-500 to-emerald-400'
-              }
-            />
-          </div>
-          <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-              🔧 Por tipo de trabajo (período)
-            </p>
-            <BarChart items={comparacion.porTipo} fmt={fmt} barraClass="bg-gradient-to-r from-violet-500 to-fuchsia-400" />
-          </div>
-        </div>
+        {modoComparacion === 'relativo' ? (
+          <>
+            <div className="flex gap-1.5 bg-slate-950/80 border border-slate-800 rounded-xl p-1 flex-wrap mb-4 w-fit">
+              {OPCIONES_DIAS.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setDiasComparacion(d)}
+                  className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
+                    diasComparacion === d ? T.filtroActivo : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {d}d
+                </button>
+              ))}
+            </div>
+            <DesgloseFinanciero data={comparacion} T={T} fmt={fmt} />
+          </>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-[220px_1fr] gap-4 mb-4">
+              <CalendarioSemana T={T} semanaSeleccionada={semanaElegida} onSeleccionarSemana={setSemanaElegida} />
+              <div className="flex flex-col justify-center">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+                  Semana elegida
+                </p>
+                <p className={`text-sm font-bold ${T.texto}`}>
+                  {formatearFechaCorta(comparacionSemana.fechaInicio)} – {formatearFechaCorta(comparacionSemana.fechaFin)}
+                </p>
+                {!semanaElegida && <p className="text-[10px] text-slate-500 mt-1">Semana actual (por defecto)</p>}
+              </div>
+            </div>
+            <DesgloseFinanciero data={comparacionSemana} T={T} fmt={fmt} />
+          </>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">

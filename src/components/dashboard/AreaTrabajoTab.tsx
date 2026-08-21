@@ -1,10 +1,8 @@
 import { useMemo, useState } from 'react';
 import type { Servicio, TemaUI } from '../../types';
-import { ETIQUETA_DIFICULTAD, MIN_MUESTRAS_DIFICULTAD, type EstimacionDificultad } from '../../lib/dificultad';
-import { formatearDuracionMin } from '../../lib/tiempo';
-import { normalizarTexto } from '../../lib/normalizarTexto';
+import { normalizarTexto, normalizarNombre } from '../../lib/normalizarTexto';
+import { tieneTelefonoValido } from '../../lib/phone';
 import { NotaPopover } from './components/NotaPopover';
-import { TrabajoTiempoControl, type AvisoOlvidado } from './components/TrabajoTiempoControl';
 import { EstadoControl } from './components/EstadoControl';
 import { FiltrosEstadoPago } from './components/FiltrosEstadoPago';
 
@@ -22,6 +20,9 @@ interface Props {
   serviciosPaginados: Servicio[];
   /** PENDIENTE/EN PROCESO agrupados por cliente (de la tabla completa en memoria) — para la vista "Agrupar por cliente". */
   trabajosActivosAgrupados: GrupoClienteActivo[];
+  /** Equipos Completados sin avisar todavía, agrupados por cliente normalizado (misma clave que trabajosActivosAgrupados usa internamente). */
+  avisosPendientesPorCliente: { [clave: string]: GrupoClienteActivo };
+  onAvisarEquiposListos: (telefono: string | undefined, trabajos: Servicio[]) => void;
   conteosPorEstado: { [estado: string]: number };
   conteosPorPagado: { pagado: number; sin_pagar: number };
   filtroFecha: string;
@@ -31,7 +32,6 @@ interface Props {
   paginaActual: number;
   totalPaginas: number;
   accionId: string | null;
-  trabajosOlvidados: { [id: string]: AvisoOlvidado };
   estadoMenuAbierto: string | null;
   botonFiltro: (activo: boolean) => string;
   onFiltroFecha: (v: string) => void;
@@ -39,14 +39,8 @@ interface Props {
   onFiltroPagado: (v: 'todos' | 'pagado' | 'sin_pagar') => void;
   onBusqueda: (v: string) => void;
   onPagina: (fn: (p: number) => number) => void;
-  onIniciarTrabajo: (id: string) => void;
-  onFinalizarTrabajo: (id: string) => void;
-  onSilenciarAvisoOlvidado: (id: string) => void;
-  onCorregirHoraTrabajo: (id: string) => void;
-  onToggleTiempoValido: (id: string, actual: boolean) => void;
   onToggleEstadoMenu: (id: string | null) => void;
   onCambiarEstado: (id: string, actual: string, nuevo: string) => void;
-  obtenerEstimacionDificultad: (modelo: string, tipoTrabajo: string) => EstimacionDificultad | null;
 }
 
 interface TrabajoCardProps {
@@ -54,37 +48,23 @@ interface TrabajoCardProps {
   T: TemaUI;
   mostrarCliente: boolean;
   accionId: string | null;
-  trabajosOlvidados: { [id: string]: AvisoOlvidado };
   estadoMenuAbierto: string | null;
-  dificultad: EstimacionDificultad | null;
   onToggleEstadoMenu: (id: string | null) => void;
   onCambiarEstado: (id: string, actual: string, nuevo: string) => void;
-  onIniciarTrabajo: (id: string) => void;
-  onFinalizarTrabajo: (id: string) => void;
-  onSilenciarAvisoOlvidado: (id: string) => void;
-  onCorregirHoraTrabajo: (id: string) => void;
-  onToggleTiempoValido: (id: string, actual: boolean) => void;
 }
 
 // Una sola tarjeta de trabajo — compartida por la vista normal (grid 2
 // columnas) y la vista agrupada por cliente (lista dentro de cada grupo),
-// para no mantener el mismo bloque de JSX (estado, tiempo, dificultad)
-// duplicado en dos lugares.
+// para no mantener el mismo bloque de JSX (estado, nota) duplicado en dos
+// lugares.
 function TrabajoCard({
   s,
   T,
   mostrarCliente,
   accionId,
-  trabajosOlvidados,
   estadoMenuAbierto,
-  dificultad,
   onToggleEstadoMenu,
   onCambiarEstado,
-  onIniciarTrabajo,
-  onFinalizarTrabajo,
-  onSilenciarAvisoOlvidado,
-  onCorregirHoraTrabajo,
-  onToggleTiempoValido,
 }: TrabajoCardProps) {
   return (
     <div className="border border-slate-800 bg-slate-950/60 rounded-xl p-4 flex flex-col gap-2.5">
@@ -112,29 +92,8 @@ function TrabajoCard({
             onCambiar={(op) => onCambiarEstado(s.id, s.estado, op)}
             disabled={accionId === s.id}
           />
-          <TrabajoTiempoControl
-            s={s}
-            disabled={accionId === s.id}
-            avisoOlvidado={trabajosOlvidados[s.id]}
-            onIniciar={onIniciarTrabajo}
-            onFinalizar={onFinalizarTrabajo}
-            onSilenciarAviso={onSilenciarAvisoOlvidado}
-            onCorregirHora={onCorregirHoraTrabajo}
-            onToggleValidez={onToggleTiempoValido}
-          />
         </div>
       </div>
-
-      <p className="text-[11px] text-slate-500 pt-2 border-t border-slate-800/60">
-        {dificultad ? (
-          <>
-            ⏱️ {ETIQUETA_DIFICULTAD[dificultad.nivel].icono} {ETIQUETA_DIFICULTAD[dificultad.nivel].texto} · típico{' '}
-            {formatearDuracionMin(dificultad.tiempoTipicoMinutos)} ({dificultad.muestras} casos)
-          </>
-        ) : (
-          <>🧠 Dificultad: aprendiendo (menos de {MIN_MUESTRAS_DIFICULTAD} casos con tiempo real)</>
-        )}
-      </p>
     </div>
   );
 }
@@ -148,6 +107,8 @@ export function AreaTrabajoTab({
   totalFiltrados,
   serviciosPaginados,
   trabajosActivosAgrupados,
+  avisosPendientesPorCliente,
+  onAvisarEquiposListos,
   conteosPorEstado,
   conteosPorPagado,
   filtroFecha,
@@ -157,7 +118,6 @@ export function AreaTrabajoTab({
   paginaActual,
   totalPaginas,
   accionId,
-  trabajosOlvidados,
   estadoMenuAbierto,
   botonFiltro,
   onFiltroFecha,
@@ -165,14 +125,8 @@ export function AreaTrabajoTab({
   onFiltroPagado,
   onBusqueda,
   onPagina,
-  onIniciarTrabajo,
-  onFinalizarTrabajo,
-  onSilenciarAvisoOlvidado,
-  onCorregirHoraTrabajo,
-  onToggleTiempoValido,
   onToggleEstadoMenu,
   onCambiarEstado,
-  obtenerEstimacionDificultad,
 }: Props) {
   const [vistaAgrupada, setVistaAgrupada] = useState(false);
   const [busquedaAgrupada, setBusquedaAgrupada] = useState('');
@@ -198,15 +152,9 @@ export function AreaTrabajoTab({
   const trabajoCardProps = {
     T,
     accionId,
-    trabajosOlvidados,
     estadoMenuAbierto,
     onToggleEstadoMenu,
     onCambiarEstado,
-    onIniciarTrabajo,
-    onFinalizarTrabajo,
-    onSilenciarAvisoOlvidado,
-    onCorregirHoraTrabajo,
-    onToggleTiempoValido,
   };
 
   return (
@@ -263,22 +211,35 @@ export function AreaTrabajoTab({
             <p className="text-sm text-slate-400 py-8 text-center">Ningún cliente activo coincide con la búsqueda.</p>
           ) : (
             <div className="space-y-5">
-              {gruposFiltrados.map((g) => (
+              {gruposFiltrados.map((g) => {
+                const avisoPendiente = avisosPendientesPorCliente[normalizarNombre(g.nombre)];
+                return (
                 <div key={g.nombre} className="border border-slate-800/80 rounded-2xl p-4 bg-slate-950/30">
-                  <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
                     <span className={`font-bold text-sm ${T.texto}`}>👤 {g.nombre}</span>
-                    <span className="text-[10px] font-bold text-slate-400 bg-slate-800/60 border border-slate-700 px-2.5 py-1 rounded-full uppercase tracking-wider">
-                      {g.trabajos.length} {g.trabajos.length === 1 ? 'trabajo' : 'trabajos'}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {avisoPendiente && tieneTelefonoValido(avisoPendiente.telefono) && (
+                        <button
+                          type="button"
+                          onClick={() => onAvisarEquiposListos(avisoPendiente.telefono, avisoPendiente.trabajos)}
+                          className="text-[9px] font-bold uppercase tracking-wider bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 px-2.5 py-1.5 rounded-lg transition-all"
+                        >
+                          📱 Avisar equipos listos ({avisoPendiente.trabajos.length})
+                        </button>
+                      )}
+                      <span className="text-[10px] font-bold text-slate-400 bg-slate-800/60 border border-slate-700 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                        {g.trabajos.length} {g.trabajos.length === 1 ? 'trabajo' : 'trabajos'}
+                      </span>
+                    </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {g.trabajos.map((s) => {
-                      const dificultad = obtenerEstimacionDificultad(s.modelo_equipo, s.tipo_trabajo);
-                      return <TrabajoCard key={s.id} s={s} dificultad={dificultad} mostrarCliente={false} {...trabajoCardProps} />;
-                    })}
+                    {g.trabajos.map((s) => (
+                      <TrabajoCard key={s.id} s={s} mostrarCliente={false} {...trabajoCardProps} />
+                    ))}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </>
@@ -302,10 +263,9 @@ export function AreaTrabajoTab({
             </p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {serviciosPaginados.map((s) => {
-                const dificultad = obtenerEstimacionDificultad(s.modelo_equipo, s.tipo_trabajo);
-                return <TrabajoCard key={s.id} s={s} dificultad={dificultad} mostrarCliente {...trabajoCardProps} />;
-              })}
+              {serviciosPaginados.map((s) => (
+                <TrabajoCard key={s.id} s={s} mostrarCliente {...trabajoCardProps} />
+              ))}
             </div>
           )}
 

@@ -22,11 +22,9 @@ import {
   finMesPasado,
 } from '../../lib/fechaFinanzas';
 import { validarEquipo } from '../../lib/validacion';
-import { renderPlantilla } from '../../lib/whatsappPlantillas';
+import { renderPlantilla, unirModelos } from '../../lib/whatsappPlantillas';
 import type { ResumenCierre } from '../../lib/cierreCaja';
 import { construirIndicePrecios, sugerirPrecio } from '../../lib/precioSugerido';
-import { construirIndiceDuraciones, estimarDificultad } from '../../lib/dificultad';
-import { calcularCargaTaller, ETIQUETA_CARGA, ESTILO_CARGA } from '../../lib/cargaTaller';
 import { CuentasTab } from './CuentasTab';
 import { ImeiTab } from './ImeiTab';
 import { ClientesTab } from './ClientesTab';
@@ -41,10 +39,9 @@ import { FormularioServicio } from './components/FormularioServicio';
 import { HistorialServicios } from './components/HistorialServicios';
 import { AlertasAtascados } from './components/AlertasAtascados';
 import { AlertasFiados } from './components/AlertasFiados';
+import { AvisosPendientes } from './components/AvisosPendientes';
 import { CompletarRevisionModal } from './components/CompletarRevisionModal';
 import { ResolverGarantiaModal } from './components/ResolverGarantiaModal';
-import { CorregirFinRealModal } from './components/CorregirFinRealModal';
-import type { AvisoOlvidado } from './components/TrabajoTiempoControl';
 import { ToastContainer } from './components/ToastContainer';
 import { ConfirmSheet } from './components/ConfirmSheet';
 import { useToast } from './hooks/useToast';
@@ -78,6 +75,7 @@ interface ConfirmState {
   mensaje: string;
   peligro?: boolean;
   confirmLabel?: string;
+  cancelLabel?: string;
   onConfirm: () => void;
 }
 
@@ -135,6 +133,8 @@ export function Dashboard() {
   const [guardandoForm, setGuardandoForm] = useState(false);
   const [guardandoGarantia, setGuardandoGarantia] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  // Vive acá (no dentro de AvisosPendientes) para sobrevivir cambios de pestaña: el componente se desmonta al salir de Inicio.
+  const [avisosAbierto, setAvisosAbierto] = useState(false);
 
   const [cierreAbierto, setCierreAbierto] = useState(false);
   const [guardandoCierre, setGuardandoCierre] = useState(false);
@@ -142,11 +142,9 @@ export function Dashboard() {
   const [pagosDiaAbierto, setPagosDiaAbierto] = useState(false);
   const [revisionPendiente, setRevisionPendiente] = useState<{ id: string; servicio: Servicio } | null>(null);
   const [garantiaPendiente, setGarantiaPendiente] = useState<Garantia | null>(null);
-  const [corrigiendoFinRealId, setCorrigiendoFinRealId] = useState<string | null>(null);
-  // Trabajos "en curso" cuyo aviso de "¿se te olvidó finalizar?" ya se
-  // descartó ("Sigue en curso") — no vuelve a molestar hasta que pase este
-  // tiempo (guarda hasta cuándo, en epoch ms).
-  const [avisosSilenciados, setAvisosSilenciados] = useState<{ [id: string]: number }>({});
+  // Sigue viva para el aviso de "trabajo fiado" (entregado hace 3h+ sin
+  // pagarse) — se recalcula solo con el paso del tiempo, no con cambios de
+  // datos.
   const [tickReloj, setTickReloj] = useState(0);
 
   useEffect(() => {
@@ -189,6 +187,13 @@ export function Dashboard() {
     return () => window.clearTimeout(id);
   }, [busqueda]);
 
+  // Área de Trabajo quiere ver primero al que lleva más tiempo esperando
+  // (más antiguo arriba); el Historial (Inicio) se queda con lo más nuevo
+  // primero, como siempre. Como comparten el mismo fetch paginado, el orden
+  // se decide según qué pestaña está activa — solo cambia (y solo ahí se
+  // vuelve a pedir la página) al entrar o salir de "area-trabajo".
+  const ordenServicios = vista === 'area-trabajo' ? 'asc' : 'desc';
+
   const filtrosPaginaActuales = useMemo(
     () => ({
       page: paginaActual,
@@ -197,8 +202,9 @@ export function Dashboard() {
       filtroFecha,
       filtroEstado,
       filtroPagado,
+      orden: ordenServicios as 'asc' | 'desc',
     }),
-    [paginaActual, busquedaDebounced, filtroFecha, filtroEstado, filtroPagado]
+    [paginaActual, busquedaDebounced, filtroFecha, filtroEstado, filtroPagado, ordenServicios]
   );
 
   // Trae la página del Historial/Área de Trabajo cada vez que cambian
@@ -538,6 +544,64 @@ export function Dashboard() {
     });
   };
 
+  // Manda el WhatsApp de "equipo(s) listo(s)" y marca avisado_at en todos
+  // los equipos incluidos — usado tanto justo después de completar (dentro
+  // de aplicarCambioEstado) como manualmente desde el botón "Avisar
+  // equipos listos" (Historial / Área de Trabajo agrupada). `ventana` debe
+  // haberse abierto ANTES de este await (con window.open('', '_blank'),
+  // sincrónico con el clic) para que Safari/Chrome no bloqueen el popup.
+  const enviarAvisoEquiposListos = async (
+    telefono: string,
+    equipos: Servicio[],
+    ventana: Window | null,
+    revisionUnica?: { diagnostico: string; monto: number }
+  ) => {
+    if (equipos.length === 0) return;
+    const { error } = await supabase
+      .from('servicios')
+      .update({ avisado_at: new Date().toISOString() })
+      .in(
+        'id',
+        equipos.map((e) => e.id)
+      );
+    if (error) {
+      toast(`No se pudo enviar el aviso: ${error.message}`, 'error');
+      return;
+    }
+
+    const numero = limpiarNumero(telefono);
+    const linkPago = cuentasList.length > 0 ? `\n\nDatos para transferencia: ${window.location.origin}/pago` : '';
+    let mensaje: string;
+    if (equipos.length === 1 && revisionUnica) {
+      mensaje = renderPlantilla('equipoListoRevision', {
+        modelo: equipos[0].modelo_equipo,
+        folio: equipos[0].folio || undefined,
+        diagnostico: revisionUnica.diagnostico,
+        monto: revisionUnica.monto,
+        linkPago,
+      });
+    } else if (equipos.length === 1) {
+      mensaje = renderPlantilla('equipoListo', {
+        modelo: equipos[0].modelo_equipo,
+        folio: equipos[0].folio || undefined,
+        linkPago,
+      });
+    } else {
+      // 2+ equipos: siempre el mensaje simple consolidado, sin folio ni
+      // diagnóstico/monto por equipo aunque alguno haya sido revisión — se
+      // coordina al retirar, igual que ya pasa con el monto hoy.
+      mensaje = renderPlantilla('equiposListos', {
+        modelos: unirModelos(equipos.map((e) => e.modelo_equipo)),
+        linkPago,
+      });
+    }
+
+    if (ventana) {
+      ventana.location.href = `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
+    }
+    recargarServicios();
+  };
+
   // Compartido entre el cambio de estado normal y la confirmación del modal
   // "Completar revisión" (que agrega diagnóstico/monto antes de llamar acá).
   const aplicarCambioEstado = async (
@@ -584,53 +648,59 @@ export function Dashboard() {
 
     // El envío de WhatsApp es un paso aparte y opcional — el cambio de
     // estado ya quedó guardado se confirme o no el aviso.
-    const tieneWhatsApp = tieneTelefonoValido(servicioActual?.clientes?.telefono);
-    if (nuevoEstado === 'COMPLETADO' && tieneWhatsApp && servicioActual) {
-      const otrosPendientes = servicios.filter(
-        (s) =>
-          s.id !== id &&
-          s.clientes?.id &&
-          s.clientes.id === servicioActual.clientes?.id &&
-          !['COMPLETADO', 'ENTREGADO', 'NO REALIZADO'].includes(s.estado)
-      ).length;
-      setConfirm({
-        titulo: 'Enviar WhatsApp',
-        mensaje:
-          otrosPendientes > 0
-            ? `Este cliente tiene ${otrosPendientes} equipo(s) más sin completar todavía.\n\n¿Enviar WhatsApp avisando que este equipo ya está listo?`
-            : '¿Enviar WhatsApp avisando que el equipo está listo para retirar?',
-        confirmLabel: 'Enviar',
-        onConfirm: () => {
-          setConfirm(null);
-          // Debe abrirse aquí, sincrónico con el clic del usuario en el
-          // botón "Enviar" del ConfirmSheet — si no, Safari/Chrome bloquean
-          // el popup por no venir de un gesto directo del usuario.
-          const ventanaWhatsApp = window.open('', '_blank');
-          const numero = limpiarNumero(servicioActual.clientes?.telefono || '');
-          const linkPago =
-            cuentasList.length > 0 ? `\n\nDatos para transferencia: ${window.location.origin}/pago` : '';
-          const mensaje =
-            diagnosticoFinal !== undefined
-              ? renderPlantilla('equipoListoRevision', {
-                  nombre: servicioActual.clientes?.nombre || '',
-                  modelo: servicioActual.modelo_equipo,
-                  folio: servicioActual.folio || undefined,
-                  diagnostico: diagnosticoFinal,
-                  monto: montoFinal ?? 0,
-                  linkPago,
-                })
-              : renderPlantilla('equipoListo', {
-                  nombre: servicioActual.clientes?.nombre || '',
-                  modelo: servicioActual.modelo_equipo,
-                  folio: servicioActual.folio || undefined,
-                  monto: servicioActual.monto,
-                  linkPago,
-                });
-          if (ventanaWhatsApp) {
-            ventanaWhatsApp.location.href = `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
-          }
-        },
-      });
+    const telefonoCliente = servicioActual?.clientes?.telefono;
+    if (nuevoEstado === 'COMPLETADO' && tieneTelefonoValido(telefonoCliente) && servicioActual) {
+      const clienteId = servicioActual.clientes?.id;
+      const otrosPendientes = clienteId
+        ? servicios.filter(
+            (s) =>
+              s.id !== id &&
+              s.clientes?.id === clienteId &&
+              !['COMPLETADO', 'ENTREGADO', 'NO REALIZADO'].includes(s.estado)
+          ).length
+        : 0;
+      // Otros equipos del mismo cliente que ya estaban Completados de antes
+      // pero quedaron esperando ("Esperar a los demás") — se consolidan en
+      // el mismo mensaje junto con el que se acaba de completar ahora.
+      const otrosCompletadosSinAvisar = clienteId
+        ? servicios.filter(
+            (s) => s.id !== id && s.clientes?.id === clienteId && s.estado === 'COMPLETADO' && !s.avisado_at
+          )
+        : [];
+      const equiposParaAvisar = [servicioActual, ...otrosCompletadosSinAvisar];
+      const revisionUnica = diagnosticoFinal !== undefined ? { diagnostico: diagnosticoFinal, monto: montoFinal ?? 0 } : undefined;
+
+      const enviarAhora = () => {
+        setConfirm(null);
+        // Debe abrirse aquí, sincrónico con el clic del usuario en el botón
+        // del ConfirmSheet — si no, Safari/Chrome bloquean el popup por no
+        // venir de un gesto directo del usuario.
+        const ventanaWhatsApp = window.open('', '_blank');
+        void enviarAvisoEquiposListos(telefonoCliente, equiposParaAvisar, ventanaWhatsApp, revisionUnica);
+      };
+
+      if (otrosPendientes > 0) {
+        setConfirm({
+          titulo: 'Enviar WhatsApp',
+          mensaje:
+            equiposParaAvisar.length > 1
+              ? `Este cliente tiene ${equiposParaAvisar.length} equipos listos sin avisar todavía, y ${otrosPendientes} más sin completar.\n\n¿Avisas ahora por los ${equiposParaAvisar.length} que ya están listos, o esperas a que se completen los demás para avisar todo junto?`
+              : `Este cliente tiene ${otrosPendientes} equipo(s) más sin completar todavía.\n\n¿Enviar WhatsApp avisando que este equipo ya está listo, o esperar a avisar todo junto?`,
+          confirmLabel: 'Enviar aviso ahora',
+          cancelLabel: 'Esperar a los demás',
+          onConfirm: enviarAhora,
+        });
+      } else {
+        setConfirm({
+          titulo: 'Enviar WhatsApp',
+          mensaje:
+            equiposParaAvisar.length > 1
+              ? `¿Enviar WhatsApp avisando que los ${equiposParaAvisar.length} equipos ya están listos?`
+              : '¿Enviar WhatsApp avisando que el equipo está listo para retirar?',
+          confirmLabel: 'Enviar',
+          onConfirm: enviarAhora,
+        });
+      }
     }
   };
 
@@ -970,76 +1040,6 @@ export function Dashboard() {
     } else toast(`No se pudo guardar: ${error.message}`, 'error');
   };
 
-  // Reloj real de trabajo (independiente del estado PENDIENTE/EN PROCESO/
-  // ENTREGADO) — inicio_real/fin_real son la fuente de datos para precio
-  // sugerido, dificultad automática y carga del taller.
-  const handleIniciarTrabajo = async (id: string) => {
-    setAccionId(id);
-    const { error } = await supabase
-      .from('servicios')
-      .update({ inicio_real: new Date().toISOString() })
-      .eq('id', id);
-    setAccionId(null);
-    if (!error) {
-      recargarServicios();
-      toast('Trabajo iniciado — el tiempo real está corriendo', 'success');
-    } else {
-      toast(`No se pudo iniciar: ${error.message}`, 'error');
-    }
-  };
-
-  const handleFinalizarTrabajo = async (id: string) => {
-    setAccionId(id);
-    const { error } = await supabase
-      .from('servicios')
-      .update({ fin_real: new Date().toISOString() })
-      .eq('id', id);
-    setAccionId(null);
-    if (!error) {
-      recargarServicios();
-      toast('Trabajo finalizado — tiempo real registrado', 'success');
-    } else {
-      toast(`No se pudo finalizar: ${error.message}`, 'error');
-    }
-  };
-
-  // "Sigue en curso": no toca la base de datos, solo deja de mostrar el
-  // aviso por un rato para no molestar de nuevo enseguida.
-  const handleSilenciarAvisoOlvidado = (id: string) => {
-    setAvisosSilenciados((prev) => ({ ...prev, [id]: Date.now() + 30 * 60 * 1000 }));
-  };
-
-  const handleAbrirCorregirHora = (id: string) => {
-    setCorrigiendoFinRealId(id);
-  };
-
-  const handleGuardarFinRealManual = async (finRealIso: string) => {
-    if (!corrigiendoFinRealId) return;
-    const id = corrigiendoFinRealId;
-    setCorrigiendoFinRealId(null);
-    setAccionId(id);
-    const { error } = await supabase.from('servicios').update({ fin_real: finRealIso }).eq('id', id);
-    setAccionId(null);
-    if (!error) {
-      recargarServicios();
-      toast('Hora de término corregida', 'success');
-    } else {
-      toast(`No se pudo guardar: ${error.message}`, 'error');
-    }
-  };
-
-  // Excluye/vuelve a incluir un tiempo real puntual del aprendizaje, sin
-  // borrar el trabajo — para cuando se detecta un dato malo después.
-  const handleToggleTiempoValido = async (id: string, actual: boolean) => {
-    const { error } = await supabase.from('servicios').update({ tiempo_valido: !actual }).eq('id', id);
-    if (!error) {
-      recargarServicios();
-      toast(actual ? 'Tiempo excluido del aprendizaje' : 'Tiempo incluido en el aprendizaje', 'success');
-    } else {
-      toast(`No se pudo actualizar: ${error.message}`, 'error');
-    }
-  };
-
   const limpiarFormularioCuenta = () => {
     setEditandoCuentaId(null);
     setFormCuenta(cuentaVacia());
@@ -1317,38 +1317,10 @@ export function Dashboard() {
     };
   }, [servicios, hoyStr]);
 
-  // Índices de aprendizaje: se recalculan solo cuando cambia `servicios`,
-  // no en cada tecla — las funciones de sugerencia hacen una búsqueda O(1)
+  // Índice de aprendizaje de precios: se recalcula solo cuando cambia
+  // `servicios`, no en cada tecla — sugerirPrecio hace una búsqueda O(1)
   // sobre esto en vez de recorrer todo el historial cada vez.
   const indicePrecios = useMemo(() => construirIndicePrecios(servicios), [servicios]);
-  const indiceDuraciones = useMemo(() => construirIndiceDuraciones(servicios), [servicios]);
-  const cargaTaller = useMemo(() => calcularCargaTaller(servicios), [servicios]);
-
-  // Trabajos con el reloj corriendo (inicio_real sin fin_real) que llevan
-  // más de 3x el tiempo típico de su combinación (o 2h genéricas si todavía
-  // no hay historial suficiente) — probablemente alguien se olvidó de
-  // apretar "Finalizar".
-  const UMBRAL_OLVIDO_GENERICO_MIN = 120;
-  const trabajosOlvidados = useMemo(() => {
-    void tickReloj; // fuerza recalcular con el paso del tiempo, no solo con cambios de datos
-    const ahora = Date.now();
-    const mapa: { [id: string]: AvisoOlvidado } = {};
-    servicios.forEach((s) => {
-      if (!s.inicio_real || s.fin_real) return;
-      const silenciadoHasta = avisosSilenciados[s.id];
-      if (silenciadoHasta && ahora < silenciadoHasta) return;
-      const minutosTranscurridos = (ahora - new Date(s.inicio_real).getTime()) / 60000;
-      const estimacion = estimarDificultad(indiceDuraciones, s.modelo_equipo, s.tipo_trabajo);
-      const umbral = estimacion ? estimacion.tiempoTipicoMinutos * 3 : UMBRAL_OLVIDO_GENERICO_MIN;
-      if (minutosTranscurridos > umbral) {
-        mapa[s.id] = {
-          minutosTranscurridos,
-          minutosTipicos: estimacion?.tiempoTipicoMinutos ?? null,
-        };
-      }
-    });
-    return mapa;
-  }, [servicios, indiceDuraciones, avisosSilenciados, tickReloj]);
 
   const trabajosAtascados = useMemo(() => {
     const enTallerEstados = ['PENDIENTE', 'EN PROCESO', 'COMPLETADO'];
@@ -1397,6 +1369,40 @@ export function Dashboard() {
       return masAntiguo(a) - masAntiguo(b);
     });
   }, [servicios]);
+
+  // Equipos Completados a los que todavía no se les avisó (se completaron
+  // mientras el cliente tenía otros pendientes y se eligió "Esperar a los
+  // demás", o se avisó manualmente todavía). Mismo criterio de agrupación
+  // por cliente normalizado que trabajosActivosAgrupados, para poder
+  // cruzarlos por nombre desde Área de Trabajo.
+  const avisosPendientesPorCliente = useMemo(() => {
+    const sinAvisar = servicios.filter((s) => s.estado === 'COMPLETADO' && !s.avisado_at);
+    const grupos: { [clave: string]: { nombre: string; telefono?: string; trabajos: Servicio[] } } = {};
+    sinAvisar.forEach((s) => {
+      const nombreOriginal = s.clientes?.nombre || 'Sin cliente';
+      const clave = normalizarNombre(nombreOriginal);
+      if (!grupos[clave]) grupos[clave] = { nombre: nombreOriginal, telefono: s.clientes?.telefono, trabajos: [] };
+      grupos[clave].trabajos.push(s);
+    });
+    return grupos;
+  }, [servicios]);
+
+  const handleAvisarEquiposListos = (telefono: string | undefined, trabajos: Servicio[]) => {
+    if (!tieneTelefonoValido(telefono) || trabajos.length === 0) return;
+    setConfirm({
+      titulo: 'Enviar WhatsApp',
+      mensaje:
+        trabajos.length > 1
+          ? `¿Enviar WhatsApp avisando que los ${trabajos.length} equipos ya están listos?`
+          : '¿Enviar WhatsApp avisando que el equipo está listo para retirar?',
+      confirmLabel: 'Enviar',
+      onConfirm: () => {
+        setConfirm(null);
+        const ventanaWhatsApp = window.open('', '_blank');
+        void enviarAvisoEquiposListos(telefono, trabajos, ventanaWhatsApp);
+      },
+    });
+  };
 
   const imeisPendientes = useMemo(
     () =>
@@ -1627,6 +1633,7 @@ export function Dashboard() {
         mensaje={confirm?.mensaje || ''}
         peligro={confirm?.peligro}
         confirmLabel={confirm?.confirmLabel}
+        cancelLabel={confirm?.cancelLabel}
         onConfirm={() => confirm?.onConfirm()}
         onCancel={() => setConfirm(null)}
       />
@@ -1671,13 +1678,6 @@ export function Dashboard() {
         onCancelar={() => setGarantiaPendiente(null)}
         onConfirmar={handleConfirmarResolucionGarantia}
       />
-      <CorregirFinRealModal
-        abierto={!!corrigiendoFinRealId}
-        T={T}
-        onCancelar={() => setCorrigiendoFinRealId(null)}
-        onConfirmar={handleGuardarFinRealManual}
-      />
-
       <div className="max-w-7xl mx-auto relative z-10">
         <div
           className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 border-b ${T.headerBorder} pb-5`}
@@ -1749,6 +1749,12 @@ export function Dashboard() {
           <>
             <AlertasAtascados trabajos={trabajosAtascados} onRecordar={handleRecordarWhatsApp} />
             <AlertasFiados trabajos={trabajosFiados} />
+            <AvisosPendientes
+              grupos={avisosPendientesPorCliente}
+              onAvisar={handleAvisarEquiposListos}
+              abierto={avisosAbierto}
+              onToggle={() => setAvisosAbierto((v) => !v)}
+            />
 
             <div className="flex justify-end mb-4">
               <button
@@ -1760,7 +1766,7 @@ export function Dashboard() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 mb-8">
               <div className="bg-gradient-to-br from-slate-900/90 to-emerald-950/40 border border-emerald-500/30 p-5 rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.07)] backdrop-blur-md flex justify-between items-center">
                 <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest">Caja de Hoy</p>
                 <span className="font-black text-emerald-300 text-2xl">{fmt(cajaHoy)}</span>
@@ -1770,22 +1776,6 @@ export function Dashboard() {
                   Por Cobrar (Total)
                 </p>
                 <span className="font-black text-amber-300 text-2xl">{fmt(porCobrarTotal)}</span>
-              </div>
-              <div
-                className={`bg-gradient-to-br ${cargaTaller ? ESTILO_CARGA[cargaTaller.nivel].gradiente : 'from-slate-900/90 to-slate-800/40'} border ${cargaTaller ? ESTILO_CARGA[cargaTaller.nivel].borde : 'border-slate-700'} p-5 rounded-2xl shadow-lg backdrop-blur-md flex justify-between items-center`}
-              >
-                <p
-                  className={`text-xs font-bold uppercase tracking-widest ${cargaTaller ? ESTILO_CARGA[cargaTaller.nivel].titulo : 'text-slate-400'}`}
-                >
-                  Carga del Taller
-                </p>
-                {cargaTaller ? (
-                  <span className={`font-black text-2xl ${ESTILO_CARGA[cargaTaller.nivel].valor}`}>
-                    {ETIQUETA_CARGA[cargaTaller.nivel]} {cargaTaller.horas.toFixed(1)}h
-                  </span>
-                ) : (
-                  <span className="font-bold text-slate-400 text-sm">🧠 Aprendiendo</span>
-                )}
               </div>
             </div>
 
@@ -1815,7 +1805,6 @@ export function Dashboard() {
                 onSubmit={handleGuardarServicio}
                 onCancelarEdicion={limpiarFormulario}
                 obtenerSugerenciaPrecio={(modelo, tipo) => sugerirPrecio(indicePrecios, modelo, tipo)}
-                obtenerEstimacionDificultad={(modelo, tipo) => estimarDificultad(indiceDuraciones, modelo, tipo)}
                 obtenerSugerenciasModelo={obtenerSugerenciasModelo}
               />
 
@@ -1869,6 +1858,8 @@ export function Dashboard() {
             totalFiltrados={totalServiciosPagina}
             serviciosPaginados={serviciosPaginados}
             trabajosActivosAgrupados={trabajosActivosAgrupados}
+            avisosPendientesPorCliente={avisosPendientesPorCliente}
+            onAvisarEquiposListos={handleAvisarEquiposListos}
             conteosPorEstado={conteosPorEstado}
             conteosPorPagado={conteosPorPagado}
             filtroFecha={filtroFecha}
@@ -1878,7 +1869,6 @@ export function Dashboard() {
             paginaActual={paginaActual}
             totalPaginas={totalPaginas}
             accionId={accionId}
-            trabajosOlvidados={trabajosOlvidados}
             estadoMenuAbierto={estadoMenuAbierto}
             botonFiltro={botonFiltro}
             onFiltroFecha={setFiltroFecha}
@@ -1886,14 +1876,8 @@ export function Dashboard() {
             onFiltroPagado={setFiltroPagado}
             onBusqueda={setBusqueda}
             onPagina={setPaginaActual}
-            onIniciarTrabajo={handleIniciarTrabajo}
-            onFinalizarTrabajo={handleFinalizarTrabajo}
-            onSilenciarAvisoOlvidado={handleSilenciarAvisoOlvidado}
-            onCorregirHoraTrabajo={handleAbrirCorregirHora}
-            onToggleTiempoValido={handleToggleTiempoValido}
             onToggleEstadoMenu={setEstadoMenuAbierto}
             onCambiarEstado={handleCambiarEstado}
-            obtenerEstimacionDificultad={(modelo, tipo) => estimarDificultad(indiceDuraciones, modelo, tipo)}
           />
         )}
 
