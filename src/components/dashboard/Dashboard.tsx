@@ -53,6 +53,17 @@ import { useCierresCaja } from '../../hooks/useCierresCaja';
 
 const PAGE_SIZE = 10;
 
+// 'activos' es un valor de filtro virtual (PENDIENTE + EN PROCESO) que no
+// existe como estado real en la tabla — lo usan tanto el filtro de estado
+// de Área de Trabajo como sus conteos de Pago derivados en el cliente.
+function filtrarPorEstadoConActivos(base: Servicio[], filtroEstado: string): Servicio[] {
+  if (filtroEstado === 'todos') return base;
+  if (filtroEstado === 'activos') {
+    return base.filter((s) => s.estado === 'PENDIENTE' || s.estado === 'EN PROCESO');
+  }
+  return base.filter((s) => s.estado === filtroEstado);
+}
+
 const NIVELES_GARANTIA = [
   'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
   'bg-amber-500/10 text-amber-400 border-amber-500/30',
@@ -100,6 +111,11 @@ export function Dashboard() {
   const [busqueda, setBusqueda] = useState('');
   const [filtroFecha, setFiltroFecha] = useState('todos');
   const [filtroEstado, setFiltroEstado] = useState('todos');
+  // Filtro de estado propio de Área de Trabajo (no comparte valor con el de
+  // Historial): por defecto "activos" (PENDIENTE + EN PROCESO) para que al
+  // entrar se vea directo la cola de trabajo real, sin que trabajos ya
+  // completados/entregados hace tiempo se cuelen ordenados por antigüedad.
+  const [filtroEstadoTrabajo, setFiltroEstadoTrabajo] = useState('activos');
   const [filtroPagado, setFiltroPagado] = useState<'todos' | 'pagado' | 'sin_pagar'>('todos');
   const [mostrarMontos, setMostrarMontos] = useState(true);
   const [paginaActual, setPaginaActual] = useState(1);
@@ -175,9 +191,14 @@ export function Dashboard() {
     if (errorCierres) toast(`No se pudo cargar el historial de cierres: ${errorCierres}`, 'error');
   }, [errorCierres, toast]);
 
+  // Historial y Área de Trabajo comparten fecha/búsqueda/pago, pero NO el
+  // filtro de estado — cada uno tiene su propia idea de qué "por defecto"
+  // tiene sentido mostrar (ver filtroEstadoTrabajo arriba).
+  const filtroEstadoActivo = vista === 'area-trabajo' ? filtroEstadoTrabajo : filtroEstado;
+
   useEffect(() => {
     setPaginaActual(1);
-  }, [busqueda, filtroFecha, filtroEstado, filtroPagado]);
+  }, [busqueda, filtroFecha, filtroEstadoActivo, filtroPagado, vista]);
 
   // Búsqueda con debounce (~300ms): el input reacciona al toque, pero la
   // consulta al servidor espera a que el usuario deje de escribir, para no
@@ -201,11 +222,11 @@ export function Dashboard() {
       pageSize: PAGE_SIZE,
       search: busquedaDebounced,
       filtroFecha,
-      filtroEstado,
+      filtroEstado: filtroEstadoActivo,
       filtroPagado,
       orden: ordenServicios as 'asc' | 'desc',
     }),
-    [paginaActual, busquedaDebounced, filtroFecha, filtroEstado, filtroPagado, ordenServicios]
+    [paginaActual, busquedaDebounced, filtroFecha, filtroEstadoActivo, filtroPagado, ordenServicios]
   );
 
   // Trae la página del Historial/Área de Trabajo cada vez que cambian
@@ -1187,12 +1208,24 @@ export function Dashboard() {
   }, [serviciosBase, filtroPagado]);
 
   const conteosPorPagado = useMemo(() => {
-    const base = filtroEstado === 'todos' ? serviciosBase : serviciosBase.filter((s) => s.estado === filtroEstado);
+    const base = filtrarPorEstadoConActivos(serviciosBase, filtroEstado);
     return {
       pagado: base.filter((s) => s.pagado).length,
       sin_pagar: base.filter((s) => !s.pagado).length,
     };
   }, [serviciosBase, filtroEstado]);
+
+  // Igual que conteosPorPagado pero para el filtro propio de Área de
+  // Trabajo (ver filtroEstadoTrabajo) — Historial y Área de Trabajo ya no
+  // comparten el mismo valor de estado, así que necesitan sus propios
+  // conteos para los chips de Pago.
+  const conteosPorPagadoTrabajo = useMemo(() => {
+    const base = filtrarPorEstadoConActivos(serviciosBase, filtroEstadoTrabajo);
+    return {
+      pagado: base.filter((s) => s.pagado).length,
+      sin_pagar: base.filter((s) => !s.pagado).length,
+    };
+  }, [serviciosBase, filtroEstadoTrabajo]);
 
   // Se mantiene calculado en el cliente (igual que antes) SOLO para el PDF
   // ("exportar todo lo filtrado", que necesita el listado completo, no una
@@ -1867,9 +1900,9 @@ export function Dashboard() {
             avisosPendientesPorCliente={avisosPendientesPorCliente}
             onAvisarEquiposListos={handleAvisarEquiposListos}
             conteosPorEstado={conteosPorEstado}
-            conteosPorPagado={conteosPorPagado}
+            conteosPorPagado={conteosPorPagadoTrabajo}
             filtroFecha={filtroFecha}
-            filtroEstado={filtroEstado}
+            filtroEstado={filtroEstadoTrabajo}
             filtroPagado={filtroPagado}
             busqueda={busqueda}
             paginaActual={paginaActual}
@@ -1878,7 +1911,7 @@ export function Dashboard() {
             estadoMenuAbierto={estadoMenuAbierto}
             botonFiltro={botonFiltro}
             onFiltroFecha={setFiltroFecha}
-            onFiltroEstado={setFiltroEstado}
+            onFiltroEstado={setFiltroEstadoTrabajo}
             onFiltroPagado={setFiltroPagado}
             onBusqueda={setBusqueda}
             onPagina={setPaginaActual}

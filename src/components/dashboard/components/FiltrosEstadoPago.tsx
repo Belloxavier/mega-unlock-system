@@ -2,6 +2,7 @@ import type { TemaUI } from '../../../types';
 
 const ESTADOS_FILTRO = [
   'todos',
+  'activos',
   'PENDIENTE',
   'EN PROCESO',
   'COMPLETADO',
@@ -39,6 +40,8 @@ export function FiltrosEstadoPago({
           const cantidad =
             est === 'todos'
               ? Object.values(conteosPorEstado).reduce((a, b) => a + b, 0)
+              : est === 'activos'
+              ? (conteosPorEstado['PENDIENTE'] || 0) + (conteosPorEstado['EN PROCESO'] || 0)
               : conteosPorEstado[est] || 0;
           const activo = filtroEstado === est;
           return (
@@ -50,7 +53,7 @@ export function FiltrosEstadoPago({
                 activo ? T.filtroActivo + ' border-transparent' : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-600'
               }`}
             >
-              {est === 'todos' ? 'Todos' : est} ({cantidad})
+              {est === 'todos' ? 'Todos' : est === 'activos' ? '🔵 Activos' : est} ({cantidad})
             </button>
           );
         })}

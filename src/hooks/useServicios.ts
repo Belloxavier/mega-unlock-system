@@ -113,7 +113,10 @@ export function useServicios() {
         query = query.gte('created_at', inicioMesChileISO()).lt('created_at', finMesChileISOExclusivo());
       }
 
-      if (filtros.filtroEstado && filtros.filtroEstado !== 'todos') {
+      if (filtros.filtroEstado === 'activos') {
+        // Valor virtual usado por Área de Trabajo: PENDIENTE + EN PROCESO, no un estado real de la tabla.
+        query = query.in('estado', ['PENDIENTE', 'EN PROCESO']);
+      } else if (filtros.filtroEstado && filtros.filtroEstado !== 'todos') {
         query = query.eq('estado', filtros.filtroEstado);
       }
       if (filtros.filtroPagado === 'pagado') query = query.eq('pagado', true);
