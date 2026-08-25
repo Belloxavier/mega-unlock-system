@@ -469,3 +469,43 @@ El usuario pidió revisar toda la pestaña Finanzas — le confundía "Semana ac
 - Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores.
 - Git: commit `0979979` en `main`, pusheado a `origin/main`. Working tree limpio (pendiente de agregar esta entrada del registro).
 ---
+
+---
+## [2026-08-25 03:00] Auditoría y limpieza de la pestaña Estadísticas + nueva sección Modelos Más Frecuentes
+
+### Instrucción recibida
+El usuario pidió revisar toda la pestaña Estadísticas ("debe darme lo que su nombre dice, viendo mi trabajo, qué es lo que realmente necesito ver"), analizar y mejorar todo, y decir qué hacer antes de aplicar. Después de la propuesta, también preguntó qué más se podría agregar que fuera realmente útil.
+
+### Comandos ejecutados (todos, en orden)
+- `Read` completo de `src/components/dashboard/EstadisticasTab.tsx` y `src/lib/estadisticasOperativas.ts` → mapeo de las 9 secciones de la pestaña y de dónde sale cada dato.
+- Encontró un comentario en el código que admitía explícitamente que los bloques "Semana/Mes Actual vs Anterior" mezclaban dinero "a pedido explícito" (de una sesión anterior), rompiendo la regla declarada del propio módulo ("estadísticas operativas: nunca montos").
+- Presentó 4 hallazgos al usuario (sin implementar): (1) redundancia real de dinero entre Estadísticas y Finanzas en los bloques Semana/Mes; (2) "Tipos de Trabajo Más Frecuentes" cortaba en el top 8 sin forma de ver el resto (mismo problema ya resuelto en Clientes); (3) "Mejor día histórico" era una curiosidad de bajo valor, redundante con "Comparación por Período" en modo 365d; (4) "Pendientes al cierre" es una reconstrucción aproximada no declarada como tal en pantalla.
+- `AskUserQuestion` → el usuario confirmó aplicar los 4 puntos.
+- `Grep "ganancia\\("` en `estadisticasOperativas.ts` → confirmó que `ganancia()` seguía siendo necesaria (usada en `calcularHistorialDia`, que SÍ se mantiene con dinero por ser un drill-down puntual, no una comparación duplicada).
+- Edit en `estadisticasOperativas.ts` → `desglosePorDia`/`DiaDesglosado` perdieron el campo `ingresos` (ya no se necesita fuera de `calcularHistorialDia`); `DetallePeriodoComparado` perdió `ingresos`/`mejorDiaPorIngresos`; `calcularDetallePeriodo` simplificado; se eliminó `calcularMejorDiaHistorico` y la interfaz `MejorDia` (sin otros usos); `calcularPorTipoTrabajo` perdió el tope `maxItems = 8` (ahora devuelve todo, la vista decide cuánto mostrar); comentario de cabecera del archivo actualizado para reflejar la nueva regla sin excepciones.
+- Edit en `EstadisticasTab.tsx` → quitó el import/uso de `calcularMejorDiaHistorico` y su tarjeta; `BloqueComparacion` simplificado (sin ingresos, sin "Mejor día (ingresos)", sin prop `fmt` ya innecesaria); nuevo estado `verTodosTipo` + botón "Ver todos" en Tipos de Trabajo; nota aclaratoria agregada bajo "Pendientes al cierre"; función `formatearFechaLegible` eliminada (sin otros usos tras quitar Mejor día histórico).
+- `npx tsc --noEmit -p tsconfig.app.json && npm run build && npm run lint` → los tres limpios (primera verificación, antes de la sección nueva).
+- (Usuario preguntó, en medio del trabajo: "¿qué otra cosa puedes agregar en estadísticas que sea realmente útil?")
+- Se dio la opinión: ranking "Modelos más frecuentes" (mismo patrón que Tipos de Trabajo, por `modelo_normalizado`, ayuda a anticipar repuestos) como recomendación principal, con tasa de "No realizado" como alternativa secundaria.
+- `AskUserQuestion` → el usuario eligió: agregar solo Modelos más frecuentes.
+- Edit en `estadisticasOperativas.ts` → nueva función `calcularPorModelo(servicios)`, agrupa por `modelo_normalizado` (mismo criterio que el ranking de clientes agrupa por `nombre_normalizado`), muestra el primer `modelo_equipo` original visto para esa clave.
+- Edit en `EstadisticasTab.tsx` → import de `calcularPorModelo`; nuevo estado `verTodosModelo`; nueva sección "📱 Modelos Más Frecuentes (Histórico)" (mismo patrón visual que Tipos de Trabajo, con su propio "Ver todos"), insertada entre esa sección y "📈 Volumen por Período".
+- `npx tsc --noEmit -p tsconfig.app.json && npm run build && npm run lint` → los tres limpios (segunda verificación, con la sección nueva).
+- (Usuario confirmó: "Sí, sube")
+- `git add src/lib/estadisticasOperativas.ts src/components/dashboard/EstadisticasTab.tsx` → staging.
+- `git commit -m "Limpia Estadisticas: quita dinero duplicado con Finanzas, Ver todos en rankings, agrega Modelos mas frecuentes"` → commit `5b00454`.
+- `git push origin main` → `c5ee24f..5b00454`.
+
+### Archivos tocados (todos)
+- `src/lib/estadisticasOperativas.ts` — modificado — quitó dinero de `DetallePeriodoComparado`/`desglosePorDia`; eliminó `calcularMejorDiaHistorico`/`MejorDia`; `calcularPorTipoTrabajo` sin tope; nueva `calcularPorModelo`.
+- `src/components/dashboard/EstadisticasTab.tsx` — modificado — `BloqueComparacion` sin dinero; tarjeta "Mejor día histórico" eliminada; "Ver todos" en Tipos de Trabajo; nota en Pendientes al cierre; nueva sección "Modelos Más Frecuentes" con su propio "Ver todos"; función `formatearFechaLegible` eliminada (sin uso).
+
+### Hallazgos y decisiones
+- La redundancia de dinero entre Estadísticas y Finanzas no era un accidente — el propio código admitía en un comentario que fue una decisión deliberada de una sesión anterior ("a pedido explícito"), que el usuario actual, sin saberlo, terminó pidiendo revertir. Vale la pena tenerlo presente: decisiones de diseño previas documentadas en comentarios pueden quedar obsoletas cuando cambian las prioridades del usuario.
+- `calcularHistorialDia` (el drill-down de un día específico) SÍ mantiene ingresos — no es una comparación repetida como los bloques Semana/Mes, es la única forma de ver el detalle de un día puntual, así que ahí el dinero sigue teniendo sentido y no se tocó.
+- "Modelos más frecuentes" se agrupa por `modelo_normalizado` (no por el texto crudo `modelo_equipo`) para que variantes de escritura del mismo modelo (ej. "iPhone 12" / "iphone 12" / "Iphone 12 ") cuenten como uno solo — mismo criterio ya usado para el modelo_normalizado en precio sugerido (sesión anterior).
+
+### Estado final
+- Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores (verificado dos veces, antes y después de agregar Modelos Más Frecuentes).
+- Git: commit `5b00454` en `main`, pusheado a `origin/main`. Working tree limpio (pendiente de agregar esta entrada del registro).
+---
