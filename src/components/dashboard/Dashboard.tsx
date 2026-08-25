@@ -380,8 +380,23 @@ export function Dashboard() {
       const tipoTrabajoFinal = eq.tipoTrabajo === 'Otros' ? eq.tipoTrabajoOtro.trim() : eq.tipoTrabajo;
       setGuardandoForm(true);
       try {
-        if (clienteIdAsociado) {
-          await supabase
+        // clienteIdAsociado se pone en null apenas se toca el campo Nombre
+        // (handleCambiarNombre) — pasa aunque solo se quiera cambiar el
+        // teléfono, si de paso se retocó el nombre. Antes, cuando quedaba
+        // en null acá, el bloque de abajo simplemente NO se ejecutaba: el
+        // teléfono/nombre nuevo se perdía en silencio y el cliente
+        // original quedaba sin editar. Ahora, igual que al crear un
+        // trabajo nuevo, si no hay id asociado se busca por nombre exacto
+        // y, si no existe, se crea — y el trabajo se re-asocia al cliente
+        // que corresponda.
+        let clienteId = clienteIdAsociado;
+        if (!clienteId) {
+          const existente = await buscarClientePorNombreExacto(nombreCliente);
+          clienteId = existente?.id || null;
+        }
+
+        if (clienteId) {
+          const { error: clienteError } = await supabase
             .from('clientes')
             .update({
               nombre: nombreCliente,
@@ -389,11 +404,35 @@ export function Dashboard() {
               telefono: telefonoCliente || null,
               tipo_contacto: tipoContacto,
             })
-            .eq('id', clienteIdAsociado);
+            .eq('id', clienteId);
+          if (clienteError) {
+            toast(`Error al actualizar el cliente: ${clienteError.message}`, 'error');
+            return;
+          }
+        } else {
+          const { data: clienteData, error: clienteError } = await supabase
+            .from('clientes')
+            .insert([
+              {
+                nombre: nombreCliente,
+                nombre_normalizado: normalizarNombre(nombreCliente),
+                telefono: telefonoCliente || null,
+                tipo_contacto: tipoContacto,
+              },
+            ])
+            .select()
+            .single();
+          if (clienteError || !clienteData) {
+            toast('Error al registrar el cliente', 'error');
+            return;
+          }
+          clienteId = clienteData.id;
         }
+
         const { error: servicioError } = await supabase
           .from('servicios')
           .update({
+            cliente_id: clienteId,
             modelo_equipo: eq.modelo,
             imei_serie: eq.imeiSerie || null,
             tipo_trabajo: tipoTrabajoFinal,
@@ -464,7 +503,7 @@ export function Dashboard() {
       }
 
       if (clienteId && !clienteEsNuevo) {
-        await supabase
+        const { error: clienteError } = await supabase
           .from('clientes')
           .update({
             nombre: nombreCliente,
@@ -473,6 +512,10 @@ export function Dashboard() {
             tipo_contacto: tipoContacto,
           })
           .eq('id', clienteId);
+        if (clienteError) {
+          toast(`Error al actualizar el cliente: ${clienteError.message}`, 'error');
+          return;
+        }
       }
 
       const tiposTrabajoFinal = equiposValidos.map((eq) =>
