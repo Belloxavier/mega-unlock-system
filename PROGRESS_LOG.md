@@ -259,3 +259,37 @@ El usuario reportó que en Clientes veía "María José" y "José Francisco" dup
 - Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso (1.92s), `npm run lint` sin errores.
 - Git: commit `c3775be` en `main`, pusheado a `origin/main`. Working tree limpio (pendiente de agregar esta entrada del registro).
 ---
+
+---
+## [2026-08-25 00:00] Etiqueta de equipo (uso interno) al imprimir el ticket
+
+### Instrucción recibida
+El usuario pidió opinión sobre agregar una segunda papeleta al imprimir (además del ticket del cliente): una etiqueta para pegar en el equipo mismo, con cliente, trabajo, número, precio, fecha, y campos útiles tipo checklist (chip, abono, pago). Pidió opinión antes de implementar, luego iteró el diseño varias veces en conversación (quitar cargador, cambiar chip/cámaras por "periférico" genérico ya que reciben equipos desarmados de otros técnicos, agregar recuadro de patrón + línea de PIN, simplificar abono a un solo campo, agregar teléfono, quitar la línea de "Equipo" porque el técnico ya tiene el celular en la mano).
+
+### Comandos ejecutados (todos, en orden)
+- `Grep "handleImprimirFolio|onImprimirFolio|imprimirFolio"` en `Dashboard.tsx` → ubicó la función de impresión actual.
+- `Read` de `handleImprimirFolio` (líneas 869-902) → confirmó que hoy imprime UNA sola papeleta de 58mm (ticket del cliente: folio, equipo, servicio, fecha, monto).
+- Varias rondas de `AskUserQuestion` + mockups en texto plano (el usuario no podía ver el campo `preview` de la pregunta, así que se mostró el mockup directamente en el cuerpo del mensaje en las rondas siguientes) para acordar: qué significa "número" (folio, elegido), si el botón imprime ambas papeletas de una vez o dos botones separados (una sola impresión, elegido), y el contenido final campo por campo.
+- Edit en `Dashboard.tsx` → `handleImprimirFolio` ahora escribe DOS bloques en la misma ventana de impresión, separados por `page-break-after: always` en el primero: el ticket del cliente (sin cambios de contenido) y una nueva "etiqueta de equipo" con folio, cliente, teléfono, trabajo, fecha, precio, casillero de Periférico (Sí/No), grilla de 3x3 puntos para dibujar el patrón, línea para PIN/contraseña, línea para abono y línea para notas.
+- `npx tsc --noEmit -p tsconfig.app.json` → limpio.
+- `npm run build` → build exitoso (410ms).
+- `npm run lint` → sin errores.
+- (Usuario confirmó: "Sí, sube")
+- `git status` → 1 archivo modificado.
+- `git add src/components/dashboard/Dashboard.tsx` → staging.
+- `git commit -m "Agrega etiqueta de equipo (uso interno) al imprimir el ticket del cliente"` → commit `55aec32`.
+- `git push origin main` → `90e4665..55aec32`.
+
+### Archivos tocados (todos)
+- `src/components/dashboard/Dashboard.tsx` — modificado — `handleImprimirFolio` ahora imprime ticket del cliente + etiqueta de equipo en el mismo trabajo de impresión.
+
+### Hallazgos y decisiones
+- El diseño final de la etiqueta quedó definido en varias rondas de iteración con el usuario (no fue una sola pasada) — campos finales: Folio, Cliente, Teléfono, Trabajo, Fecha, Precio, Periférico (Sí/No), Patrón (grilla 3x3 para dibujar a mano), PIN/Contraseña (línea para escribir), Abono ($ línea), Notas (línea). Se descartaron en el camino: Equipo/modelo (irrelevante, el técnico tiene el celular en la mano), Cargador (no lo reciben), Chip y Cámaras por separado (se fusionaron en "Periférico" genérico porque reciben equipos desarmados de otros técnicos, no consumidores finales), y "Pago completo Sí/No" (se simplificó a solo la línea de Abono).
+- Los casilleros/líneas se imprimen vacíos — se llenan a mano con lápiz al recibir el equipo, la app no tiene esos datos.
+- No se agregó ninguna consulta ni columna nueva a la base de datos — es puro HTML/CSS generado a partir de datos que el `Servicio` ya tiene (folio, cliente, teléfono, tipo_trabajo, fecha, monto).
+- Nota de proceso: el campo `preview` de `AskUserQuestion` no se le mostraba al usuario en su cliente — para las rondas de mockup hubo que poner el ejemplo en texto plano directamente en el cuerpo del mensaje en vez de en el parámetro de preview.
+
+### Estado final
+- Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores.
+- Git: commit `55aec32` en `main`, pusheado a `origin/main`. Working tree limpio (pendiente de agregar esta entrada del registro).
+---
