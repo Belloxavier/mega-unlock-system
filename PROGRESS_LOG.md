@@ -293,3 +293,39 @@ El usuario pidió opinión sobre agregar una segunda papeleta al imprimir (adem�
 - Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores.
 - Git: commit `55aec32` en `main`, pusheado a `origin/main`. Working tree limpio (pendiente de agregar esta entrada del registro).
 ---
+
+---
+## [2026-08-25 00:30] Imprimir se separa en dos: Etiqueta cliente / Etiqueta local
+
+### Instrucción recibida
+El usuario reconsideró el fix anterior (dos papeletas en un mismo trabajo de impresión, separadas por `page-break`): no tiene con qué cortar a mano, pero la impresora térmica sí corta automático — solo que únicamente al final de cada trabajo de impresión, no en medio de un salto de página CSS. Pidió no separar en dos botones visibles, sino que el botón de Imprimir deje ELEGIR qué parte imprimir, con nombres "Etiqueta cliente" y "Etiqueta local".
+
+### Comandos ejecutados (todos, en orden)
+- `Grep "handleImprimirFolio|onImprimirFolio"` en `Dashboard.tsx` → confirmó los 2 puntos de wiring (la función y su uso en `HistorialServicios`).
+- `Read src/components/dashboard/components/ConfirmSheet.tsx` → evaluado como posible reutilización para el picker de 2 opciones, descartado: su fondo (`backdrop`) llama a `onCancel` al tocar afuera, y mapear una opción real (no un "cancelar") a ese slot habría disparado una impresión accidental al cerrar tocando afuera.
+- `Read src/components/dashboard/components/EditorFechaPago.tsx` → confirmado como el patrón correcto a imitar: botón disparador + popover posicionado, con un overlay invisible que solo CIERRA (no ejecuta ninguna acción) al tocar afuera.
+- `Write src/components/dashboard/components/MenuImprimir.tsx` → nuevo componente: botón disparador configurable (`triggerClassName`/`children`) + popover con dos opciones reales ("🧾 Etiqueta cliente" / "🏷️ Etiqueta local"), cada una imprime por separado (llamadas independientes, no relacionadas entre sí).
+- Edit en `Dashboard.tsx` → separó `handleImprimirFolio` (sin cambios de contenido, vuelve a ser un solo ticket) de la nueva `handleImprimirEtiquetaEquipo` (la etiqueta de equipo, ahora en su propia ventana/trabajo de impresión); nuevo estado `imprimirMenuAbierto` (qué fila tiene el menú abierto); wiring hacia `HistorialServicios` con `onToggleImprimirMenu`/`onImprimirCliente`/`onImprimirEtiqueta` en vez del único `onImprimirFolio`.
+- Edit en `HistorialServicios.tsx` (props + tarjeta móvil + tabla de escritorio) → reemplazó el botón directo de imprimir por `<MenuImprimir>` en ambos layouts (móvil: botón de ancho completo "🖨️ Imprimir"; escritorio: ícono compacto "🖨️" en la columna de Acciones).
+- `npx tsc --noEmit -p tsconfig.app.json` → limpio.
+- `npm run build` → build exitoso (382ms).
+- `npm run lint` → sin errores.
+- (Usuario confirmó: "Sí, sube")
+- `git status` → 2 archivos modificados + 1 nuevo.
+- `git add src/components/dashboard/Dashboard.tsx src/components/dashboard/components/HistorialServicios.tsx src/components/dashboard/components/MenuImprimir.tsx` → staging.
+- `git commit -m "Convierte el boton de imprimir en un menu: Etiqueta cliente o Etiqueta local, cada una por separado"` → commit `4c3e134`.
+- `git push origin main` → `0619491..4c3e134`.
+
+### Archivos tocados (todos)
+- `src/components/dashboard/components/MenuImprimir.tsx` — nuevo — botón disparador + popover con las dos opciones de impresión.
+- `src/components/dashboard/Dashboard.tsx` — modificado — `handleImprimirFolio` vuelve a ser un solo ticket; nueva `handleImprimirEtiquetaEquipo` separada; nuevo estado `imprimirMenuAbierto`; wiring actualizado hacia `HistorialServicios`.
+- `src/components/dashboard/components/HistorialServicios.tsx` — modificado — botón de imprimir (móvil y escritorio) reemplazado por `MenuImprimir`.
+
+### Hallazgos y decisiones
+- Se descartó reutilizar `ConfirmSheet` (ya usado en otras partes de la app para elegir entre dos acciones reales, ej. "Enviar aviso ahora"/"Esperar a los demás") porque en ESE caso la opción del lado "cancelar" era equivalente a "no hacer nada ahora", lo cual coincide con lo que hace tocar el fondo. Acá las dos opciones son acciones reales igualmente válidas (imprimir una cosa u otra), así que usar el slot de "cancelar" para una de ellas habría hecho que tocar fuera del cuadro disparara una impresión sin querer — se optó por un popover nuevo (mismo patrón que `EditorFechaPago`/`EstadoControl`) donde tocar afuera SOLO cierra, nunca ejecuta.
+- El contenido de ambas papeletas (ticket del cliente y etiqueta de equipo) no cambió respecto a la entrada anterior del registro — solo cambió CÓMO se disparan: antes en un mismo trabajo de impresión con salto de página, ahora cada una en su propia ventana/trabajo, elegido desde un menú.
+
+### Estado final
+- Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores.
+- Git: commit `4c3e134` en `main`, pusheado a `origin/main`. Working tree limpio (pendiente de agregar esta entrada del registro).
+---
