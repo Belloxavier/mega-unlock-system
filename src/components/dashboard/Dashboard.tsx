@@ -1595,12 +1595,13 @@ export function Dashboard() {
       },
       {}
     );
-    const rankingPorDinero = Object.values(rankingClientesTabObj)
-      .sort((a, b) => b.dinero - a.dinero)
-      .slice(0, 8);
-    const rankingPorVisitas = Object.values(rankingClientesTabObj)
-      .sort((a, b) => b.visitas - a.visitas)
-      .slice(0, 8);
+    // Sin límite de cantidad — antes cortaba en los primeros 8, lo que
+    // hacía que la suma del ranking visible nunca calzara con las
+    // tarjetas de arriba (Clientes Únicos/Trabajos Realizados/Dinero
+    // Generado, que sí son el total real). ClientesTab decide cuántos
+    // mostrar por defecto y agrega un "Ver todos" para el resto.
+    const rankingPorDinero = Object.values(rankingClientesTabObj).sort((a, b) => b.dinero - a.dinero);
+    const rankingPorVisitas = Object.values(rankingClientesTabObj).sort((a, b) => b.visitas - a.visitas);
 
     const horasReparacion = (s: Servicio) =>
       s.completado_at
@@ -1629,7 +1630,6 @@ export function Dashboard() {
     );
     const rankingPorTipoTrabajo = Object.entries(rankingTipoTrabajoObj)
       .sort((a, b) => b[1].trabajos - a[1].trabajos)
-      .slice(0, 8)
       .map(([tipo, data]) => ({
         tipo,
         dinero: data.dinero,

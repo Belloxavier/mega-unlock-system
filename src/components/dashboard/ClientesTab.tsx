@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import type { Servicio, TemaUI } from '../../types';
 import { getFechaLocal } from '../../lib/date';
+
+const TOPE_RANKING = 8;
 
 interface RankingDinero {
   nombre: string;
@@ -68,6 +71,10 @@ export function ClientesTab({
   onFiltroFecha,
   onFiltroTipo,
 }: Props) {
+  const [verTodosDinero, setVerTodosDinero] = useState(false);
+  const [verTodosVisitas, setVerTodosVisitas] = useState(false);
+  const [verTodosTipo, setVerTodosTipo] = useState(false);
+
   return (
     <div className="space-y-6">
       <div className={`bg-slate-900/80 border ${T.borde} p-5 rounded-2xl shadow-xl backdrop-blur-md transition-colors`}>
@@ -190,11 +197,11 @@ export function ClientesTab({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
         <div className={`bg-slate-900/80 border ${T.borde} p-5 rounded-2xl shadow-xl backdrop-blur-md transition-colors`}>
           <h3 className={`text-xs font-bold ${T.texto} uppercase tracking-widest mb-3`}>💎 Top por Dinero</h3>
-          <div className="space-y-2">
+          <div className={`space-y-2 ${verTodosDinero ? 'max-h-96 overflow-y-auto pr-1' : ''}`}>
             {rankingPorDinero.length === 0 ? (
               <p className="text-xs text-slate-500 py-2">No hay datos en este periodo.</p>
             ) : (
-              rankingPorDinero.map((data, idx) => (
+              (verTodosDinero ? rankingPorDinero : rankingPorDinero.slice(0, TOPE_RANKING)).map((data, idx) => (
                 <div
                   key={data.nombre}
                   className="flex justify-between items-center bg-slate-950/60 border border-slate-800/80 px-4 py-2 rounded-xl text-xs"
@@ -208,17 +215,26 @@ export function ClientesTab({
               ))
             )}
           </div>
+          {rankingPorDinero.length > TOPE_RANKING && (
+            <button
+              type="button"
+              onClick={() => setVerTodosDinero((v) => !v)}
+              className="w-full mt-2 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-slate-200 bg-slate-950/40 hover:bg-slate-800 transition-colors"
+            >
+              {verTodosDinero ? '▲ Ver menos' : `▼ Ver todos (${rankingPorDinero.length})`}
+            </button>
+          )}
         </div>
 
         <div className={`bg-slate-900/80 border ${T.borde2} p-5 rounded-2xl shadow-xl backdrop-blur-md transition-colors`}>
           <h3 className={`text-xs font-bold ${T.texto2} uppercase tracking-widest mb-3`}>
             🔁 Top por Cantidad de Trabajos
           </h3>
-          <div className="space-y-2">
+          <div className={`space-y-2 ${verTodosVisitas ? 'max-h-96 overflow-y-auto pr-1' : ''}`}>
             {rankingPorVisitas.length === 0 ? (
               <p className="text-xs text-slate-500 py-2">No hay datos en este periodo.</p>
             ) : (
-              rankingPorVisitas.map((data, idx) => (
+              (verTodosVisitas ? rankingPorVisitas : rankingPorVisitas.slice(0, TOPE_RANKING)).map((data, idx) => (
                 <div
                   key={data.nombre}
                   className="flex justify-between items-center bg-slate-950/60 border border-slate-800/80 px-4 py-2 rounded-xl text-xs"
@@ -233,15 +249,24 @@ export function ClientesTab({
               ))
             )}
           </div>
+          {rankingPorVisitas.length > TOPE_RANKING && (
+            <button
+              type="button"
+              onClick={() => setVerTodosVisitas((v) => !v)}
+              className="w-full mt-2 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-slate-200 bg-slate-950/40 hover:bg-slate-800 transition-colors"
+            >
+              {verTodosVisitas ? '▲ Ver menos' : `▼ Ver todos (${rankingPorVisitas.length})`}
+            </button>
+          )}
         </div>
 
         <div className={`bg-slate-900/80 border ${T.borde3} p-5 rounded-2xl shadow-xl backdrop-blur-md transition-colors`}>
           <h3 className={`text-xs font-bold ${T.texto3} uppercase tracking-widest mb-3`}>🔧 Por Tipo de Trabajo</h3>
-          <div className="space-y-2">
+          <div className={`space-y-2 ${verTodosTipo ? 'max-h-96 overflow-y-auto pr-1' : ''}`}>
             {rankingPorTipoTrabajo.length === 0 ? (
               <p className="text-xs text-slate-500 py-2">No hay datos en este periodo.</p>
             ) : (
-              rankingPorTipoTrabajo.map((data, idx) => (
+              (verTodosTipo ? rankingPorTipoTrabajo : rankingPorTipoTrabajo.slice(0, TOPE_RANKING)).map((data, idx) => (
                 <div
                   key={data.tipo}
                   className="flex justify-between items-center bg-slate-950/60 border border-slate-800/80 px-4 py-2 rounded-xl text-xs"
@@ -261,6 +286,15 @@ export function ClientesTab({
               ))
             )}
           </div>
+          {rankingPorTipoTrabajo.length > TOPE_RANKING && (
+            <button
+              type="button"
+              onClick={() => setVerTodosTipo((v) => !v)}
+              className="w-full mt-2 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-slate-200 bg-slate-950/40 hover:bg-slate-800 transition-colors"
+            >
+              {verTodosTipo ? '▲ Ver menos' : `▼ Ver todos (${rankingPorTipoTrabajo.length})`}
+            </button>
+          )}
         </div>
       </div>
     </div>
