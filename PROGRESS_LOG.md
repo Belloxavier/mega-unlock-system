@@ -177,3 +177,41 @@ El usuario pidió aplicar el mismo tratamiento de colapsable/acordeón (recién 
 - Git: commits `5386d1d`, `e2e1ee2`, `bdd146a`, todos en `main` y pusheados a `origin/main`. Working tree limpio.
 - Supabase: migración `0023` aplicada y verificada.
 ---
+
+---
+## [2026-08-21 01:30] Unión de clientes duplicados (José Francisco, Cristóbal)
+
+### Instrucción recibida
+El usuario reportó que en Clientes veía "María José" y "José Francisco" duplicados por diferencias de tilde (error de tipeo previo a la normalización de nombre agregada en la migración 0022) — pidió unirlos, avisando el plan antes de aplicar.
+
+### Comandos ejecutados (todos, en orden)
+- `Grep "clientes|cliente_id"` en `supabase/migrations` y en `src/` → confirmó que la única tabla con FK directa a `clientes.id` es `servicios.cliente_id` (garantías no tiene columna propia, referencia a `servicios`).
+- `Read src/hooks/useClientes.ts` + `Read supabase/migrations/0022_nombre_normalizado_clientes.sql` → confirmó el mecanismo de `nombre_normalizado` (sin acentos, minúsculas) agregado en esa migración.
+- `AskUserQuestion` (acceso DB) → el usuario pasó otro access token de la Management API de Supabase (`sbp_...`), distinto al de la sesión anterior.
+- `curl` → query buscando grupos con `nombre_normalizado` duplicado → encontró 2 pares reales: "José Francisco" (5 y 11 trabajos) y, como hallazgo no pedido, "Cristóbal" (8 y 1 trabajos). NO encontró un segundo "María José" (solo existe una fila: "Maria jose ", 13 trabajos).
+- `curl` → búsqueda amplia `ilike '%maria jose%'` y `ilike '%jose%'` → confirmó que no hay fila duplicada de María José en la base actualmente.
+- Se reportaron los hallazgos al usuario con tabla de datos (nombre, teléfono, fecha, n° de trabajos) antes de tocar nada.
+- `AskUserQuestion` (cuál fila dejar para José Francisco, y si unir también Cristóbal) → usuario eligió: dejar la fila de 11 trabajos (sin tilde, luego corregida) para José Francisco; sí unir Cristóbal también.
+- `curl` → `update servicios set cliente_id = <keeper> where cliente_id = <duplicado>` para José Francisco → verificado con conteo antes/después (16 = 5+11, ningún trabajo perdido).
+- Intento de corregir el nombre a "José Francisco" (con tilde) vía `curl -d '{"query":"update clientes set nombre = ..."}'` con el carácter literal en el comando → **falló 3 veces**: el nombre quedó guardado como "Jos� Francisco" (carácter de reemplazo). Diagnosticado como corrupción de encoding UTF-8 al pasar el JSON como argumento de línea de comandos en este entorno (Bash tool sobre Windows), no un problema de Postgres/JSON.
+- Intento con escape SQL `U&'Jos\00E9 Francisco'` dentro del JSON → falló con error "Bad escaped character in JSON" (`\0` no es un escape JSON válido).
+- Solución: `Write` el payload JSON completo a un archivo en el scratchpad (`fix_nombre.json`), verificado con `xxd` que los bytes UTF-8 de "é" (`c3 a9`) quedaron correctos en el archivo, y `curl --data-binary "@archivo"` en vez de pasar el JSON como argumento — funcionó correctamente.
+- `curl --data-binary @fix_nombre.json` → corrigió el nombre a "José Francisco" correctamente.
+- `curl` → `delete from clientes where id = <duplicado>` (José Francisco) → verificado: 1 sola fila, 16 trabajos.
+- Mismo procedimiento para Cristóbal: `update servicios set cliente_id=...` (verificado 9 = 8+1), `Write fix_nombre2.json` + `curl --data-binary` (corrigió nombre a "Cristóbal", sin el espacio final que tenía), `delete from clientes where id=<duplicado>` → verificado: 1 sola fila, 9 trabajos.
+
+### Archivos tocados (todos)
+- Ninguno en el repositorio — todo el trabajo fue directamente sobre los datos en Supabase (tabla `clientes` y `servicios`), vía la Management API. No hubo cambios de código.
+- `fix_nombre.json`, `fix_nombre2.json` — creados en el directorio scratchpad de la sesión (temporales, fuera del repo, no requieren limpieza).
+
+### Hallazgos y decisiones
+- **"María José" no estaba duplicada** — solo existe una fila en `clientes` para ese nombre. Se le avisó al usuario; queda pendiente que confirme el nombre exacto o cómo la ve duplicada en pantalla si el problema persiste.
+- Se encontró y corrigió, no solicitado pero mismo patrón exacto, un duplicado de "Cristóbal" (con/sin tilde) — confirmado con el usuario antes de aplicar.
+- **Bug de encoding descubierto**: pasar JSON con caracteres UTF-8 (tildes) como argumento de línea de comandos a `curl -d '...'` en este entorno (Bash tool sobre Windows/Git Bash) corrompe los caracteres no-ASCII (aparecen como `�`), incluso cuando el JSON en sí es válido y el bash-quoting es correcto. La causa es de encoding a nivel de proceso/argv, no de JSON ni SQL. **Solución que funcionó**: escribir el payload a un archivo con la herramienta `Write` (que sí preserva UTF-8 correctamente, verificado con `xxd`) y usar `curl --data-binary "@archivo"` en vez de pasar el JSON inline. Vale la pena recordar este patrón para cualquier escritura futura de texto con acentos/tildes a la base de datos vía este método.
+- Ambos merges se verificaron con conteo de trabajos antes/después (ningún trabajo se perdió ni quedó huérfano) antes de borrar la fila duplicada — mismo criterio de seguridad en ambos casos.
+
+### Estado final
+- Tests/build: N/A (sin cambios de código en esta entrada).
+- Git: sin cambios — nada que commitear.
+- Supabase: "José Francisco" (16 trabajos) y "Cristóbal" (9 trabajos) quedaron como un solo cliente cada uno, con el nombre bien escrito. "María José" no tenía duplicado real, sin cambios.
+---
