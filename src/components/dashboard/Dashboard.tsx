@@ -866,6 +866,11 @@ export function Dashboard() {
     });
   };
 
+  // Imprime dos papeletas de 58mm en el mismo trabajo de impresión: el
+  // ticket del cliente (folio, para que lo tenga él) y, a continuación, una
+  // etiqueta interna para pegar en el equipo mismo mientras está en el
+  // taller — con lo que se recibió junto al equipo (periférico, patrón/PIN,
+  // abono), para no depender de la memoria ni de abrir el sistema.
   const handleImprimirFolio = (s: Servicio) => {
     const ventana = window.open('', '_blank', 'width=400,height=500');
     if (!ventana) return;
@@ -878,22 +883,61 @@ export function Dashboard() {
             @page { size: 58mm auto; margin: 0; }
             * { box-sizing: border-box; }
             body { width: 58mm; margin: 0; padding: 4mm; font-family: 'Courier New', monospace; text-align: center; }
+            .ticket { page-break-after: always; }
             .folio { font-size: 46px; font-weight: 900; letter-spacing: 3px; margin: 2mm 0; }
             .linea { border-top: 1px dashed #000; margin: 2mm 0; }
             .dato { font-size: 12px; text-align: left; margin: 1mm 0; }
             .dato b { display: inline-block; width: 20mm; }
             .monto { font-size: 18px; font-weight: 900; margin-top: 2mm; }
+            .titulo-etiqueta { font-size: 11px; font-weight: 900; letter-spacing: 1px; margin-bottom: 2mm; }
+            .fila { display: flex; justify-content: space-between; gap: 3mm; margin-top: 3mm; }
+            .box { display: inline-block; width: 3mm; height: 3mm; border: 1px solid #000; vertical-align: middle; margin-right: 1mm; }
+            .linea-escribir { display: inline-block; border-bottom: 1px solid #000; min-width: 20mm; }
+            .patron-grid { display: grid; grid-template-columns: repeat(3, 4mm); grid-template-rows: repeat(3, 4mm); gap: 2.5mm; margin-top: 1mm; }
+            .patron-grid span { width: 2mm; height: 2mm; border-radius: 50%; border: 1px solid #000; justify-self: center; align-self: center; }
           </style>
         </head>
         <body>
-          <div class="folio">${escapeHtml(s.folio)}</div>
-          <div class="linea"></div>
-          <div class="dato">Equipo dejado en MEGA UNLOCK</div>
-          <div class="dato"><b>Equipo:</b> ${escapeHtml(s.modelo_equipo)}</div>
-          <div class="dato"><b>Servicio:</b> ${escapeHtml(s.tipo_trabajo)}</div>
-          <div class="dato"><b>Fecha:</b> ${escapeHtml(fecha)}</div>
-          <div class="linea"></div>
-          <div class="monto">${formatearMonto(s.monto)}</div>
+          <div class="ticket">
+            <div class="folio">${escapeHtml(s.folio)}</div>
+            <div class="linea"></div>
+            <div class="dato">Equipo dejado en MEGA UNLOCK</div>
+            <div class="dato"><b>Equipo:</b> ${escapeHtml(s.modelo_equipo)}</div>
+            <div class="dato"><b>Servicio:</b> ${escapeHtml(s.tipo_trabajo)}</div>
+            <div class="dato"><b>Fecha:</b> ${escapeHtml(fecha)}</div>
+            <div class="linea"></div>
+            <div class="monto">${formatearMonto(s.monto)}</div>
+          </div>
+
+          <div class="etiqueta">
+            <div class="folio">${escapeHtml(s.folio)}</div>
+            <div class="titulo-etiqueta">ETIQUETA DE EQUIPO — USO INTERNO</div>
+            <div class="linea"></div>
+            <div class="dato"><b>Cliente:</b> ${escapeHtml(s.clientes?.nombre || 'General')}</div>
+            <div class="dato"><b>Teléfono:</b> ${escapeHtml(s.clientes?.telefono || '—')}</div>
+            <div class="dato"><b>Trabajo:</b> ${escapeHtml(s.tipo_trabajo)}</div>
+            <div class="dato"><b>Fecha:</b> ${escapeHtml(fecha)}</div>
+            <div class="dato"><b>Precio:</b> ${formatearMonto(s.monto)}</div>
+            <div class="linea"></div>
+            <div class="dato"><span class="box"></span>Sí <span class="box"></span>No &nbsp;— Periférico</div>
+            <div class="fila">
+              <div class="dato">
+                Patrón:
+                <div class="patron-grid">
+                  <span></span><span></span><span></span>
+                  <span></span><span></span><span></span>
+                  <span></span><span></span><span></span>
+                </div>
+              </div>
+              <div class="dato">
+                PIN/Contraseña:<br />
+                <span class="linea-escribir">&nbsp;</span>
+              </div>
+            </div>
+            <div class="dato" style="margin-top: 3mm;">Abono: $<span class="linea-escribir">&nbsp;</span></div>
+            <div class="dato">Notas: <span class="linea-escribir" style="min-width: 30mm;">&nbsp;</span></div>
+          </div>
+
           <script>window.print(); window.onafterprint = () => window.close();</script>
         </body>
       </html>
