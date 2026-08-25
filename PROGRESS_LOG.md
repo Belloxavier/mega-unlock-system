@@ -362,3 +362,37 @@ El usuario reconsideró el fix anterior (dos papeletas en un mismo trabajo de im
 - Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores.
 - Git: commit `d25100c` en `main`, pusheado a `origin/main`. Working tree limpio (pendiente de agregar esta entrada del registro).
 ---
+
+---
+## [2026-08-25 01:30] Fix: editar un trabajo perdía en silencio los cambios de teléfono/nombre del cliente
+
+### Instrucción recibida
+El usuario reportó: crea un cliente, luego quiere editarlo para agregar o cambiar el número de teléfono, y "no me deja, se bugea".
+
+### Comandos ejecutados (todos, en orden)
+- `Read` de `handleGuardarServicio` (rama `if (editandoId)`, líneas 366-420) → revisó el flujo completo de guardado al editar un trabajo.
+- `Grep "handleIniciarEdicion"` en `Dashboard.tsx` → confirmó que sí setea `clienteIdAsociado` correctamente desde `s.clientes?.id` al abrir la edición.
+- `Read supabase/migrations/0012_endurece_rls.sql` → descartada la hipótesis de que RLS bloqueara el UPDATE de `clientes` (política `to authenticated using (true)`, sin restricción de fila).
+- `Grep "handleCambiarNombre|handleSeleccionarCliente|setClienteIdAsociado"` en `Dashboard.tsx` → **encontró la causa raíz**: `handleCambiarNombre` (disparado en cada `onChange` del campo Nombre) pone `clienteIdAsociado` en `null` incondicionalmente — correcto para el flujo de "crear trabajo nuevo" (para no seguir apuntando al cliente equivocado si se escribe un nombre distinto), pero roto para "editar trabajo": el bloque `if (clienteIdAsociado) { ...update clientes... }` de la rama de edición simplemente no se ejecutaba si el usuario tocaba el campo Nombre (aunque fuera solo para revisarlo) mientras cambiaba el teléfono — el cambio se perdía sin ningún aviso de error.
+- Edit en `Dashboard.tsx` (rama `if (editandoId)` de `handleGuardarServicio`) → reescrita para: si `clienteIdAsociado` es null al guardar, buscar por nombre exacto (`buscarClientePorNombreExacto`, igual que ya hacía la rama de creación) y, si tampoco existe, crear el cliente — y ahora SÍ se actualiza `servicios.cliente_id` con el resultado (antes nunca se tocaba esa columna en la rama de edición). Se agregó manejo de error real (`clienteError`) en vez de ignorar silenciosamente el resultado del `.update()`.
+- Edit adicional en la rama de creación (`if (clienteId && !clienteEsNuevo)`, ~línea 505) → mismo fix defensivo: ahora revisa y reporta el error del `.update()` de `clientes` en vez de ignorarlo (mismo patrón de bug potencial, aunque no confirmado como la causa de este reporte específico).
+- `npx tsc --noEmit -p tsconfig.app.json` → limpio.
+- `npm run build` → build exitoso (374ms).
+- `npm run lint` → sin errores.
+- (Usuario confirmó: "Sí, sube")
+- `git add src/components/dashboard/Dashboard.tsx` → staging.
+- `git commit -m "Fix: editar un trabajo perdia en silencio los cambios de telefono/nombre del cliente"` → commit `51f90c9`.
+- `git push origin main` → `461b487..51f90c9`.
+
+### Archivos tocados (todos)
+- `src/components/dashboard/Dashboard.tsx` — modificado — `handleGuardarServicio` (ambas ramas: editar y crear) ahora resuelve/crea el cliente correctamente y reporta errores en vez de ignorarlos en silencio.
+
+### Hallazgos y decisiones
+- El bug NO era de la base de datos ni de RLS — era puramente de lógica en el cliente: `clienteIdAsociado` se ponía en `null` por diseño al tocar el nombre (para no reasociar accidentalmente el trabajo al cliente equivocado), pero la rama de EDICIÓN nunca tuvo el mismo mecanismo de re-búsqueda/creación que ya existía en la rama de CREACIÓN — quedaba huérfana, sin actualizar nada y sin avisar.
+- Efecto secundario correcto (no un bug nuevo): si mientras editas un trabajo cambias el Nombre a una persona distinta, el trabajo ahora se re-asocia de verdad a esa otra persona (buscándola o creándola) en vez de, como antes, dejar el `cliente_id` original intacto sin avisar — esto es el comportamiento esperado, no estaba pedido explícitamente pero es la consecuencia correcta de arreglar el bug reportado.
+- Se corrigió el mismo patrón de error silencioso (ignorar el resultado de `.update()` en `clientes`) en la rama de creación como medida preventiva, aunque no se confirmó que fuera la causa de este reporte específico.
+
+### Estado final
+- Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores.
+- Git: commit `51f90c9` en `main`, pusheado a `origin/main`. Working tree limpio (pendiente de agregar esta entrada del registro).
+---
