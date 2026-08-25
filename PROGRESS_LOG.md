@@ -215,3 +215,47 @@ El usuario reportó que en Clientes veía "María José" y "José Francisco" dup
 - Git: sin cambios — nada que commitear.
 - Supabase: "José Francisco" (16 trabajos) y "Cristóbal" (9 trabajos) quedaron como un solo cliente cada uno, con el nombre bien escrito. "María José" no tenía duplicado real, sin cambios.
 ---
+
+---
+## [2026-08-21 02:00] Búsqueda de historial por cliente + fix de "Agrupar por cliente" con filtro Completado
+
+### Instrucción recibida
+1. Agregar en la pestaña Clientes una búsqueda por cliente que muestre todos sus trabajos.
+2. Bug reportado: en Área de Trabajo, si se selecciona el filtro "Completado" y luego se activa "Agrupar por cliente", no muestra nada — solo funciona con "Pendientes".
+
+### Comandos ejecutados (todos, en orden)
+- `Grep "trabajosActivosAgrupados"` en `Dashboard.tsx` → confirmó que ese memo estaba hardcodeado a `s.estado === 'PENDIENTE' || s.estado === 'EN PROCESO'`, ignorando por completo el filtro de estado seleccionado (`filtroEstadoTrabajo`) — causa raíz del bug.
+- `Read` completo de esa sección (líneas ~1375-1414) para entender la lógica de agrupación/orden antes de tocarla.
+- Edit en `Dashboard.tsx` → `trabajosActivosAgrupados` ahora usa `filtrarPorEstadoConActivos(servicios, filtroEstadoTrabajo)` en vez del filtro fijo; se agregó `filtroEstadoTrabajo` a las dependencias del `useMemo`.
+- `Read` de `AreaTrabajoTab.tsx` (bloque de renderizado agrupado/sin agrupar, líneas ~190-260) para planear dónde mover los chips de Estado/Pago.
+- Edit en `AreaTrabajoTab.tsx` → se movió `<FiltrosEstadoPago>` fuera del condicional `vistaAgrupada` para que se vea SIEMPRE (antes solo se mostraba en la vista sin agrupar, así que en la vista agrupada no había forma de ver ni cambiar qué filtro estaba activo); se quitó el texto fijo "Solo trabajos PENDIENTE o EN PROCESO..." (ya no es cierto siempre) y se actualizó el mensaje de lista vacía a uno genérico.
+- `npx tsc --noEmit -p tsconfig.app.json` → limpio, confirmó el fix del bug antes de seguir.
+- `Read src/components/dashboard/ClientesTab.tsx` completo → confirmó que la pestaña solo tenía rankings/estadísticas, sin lista de clientes ni búsqueda.
+- `Grep "normalizarNombre|normalizarTexto"` en `Dashboard.tsx` → confirmó que ya estaba importado (reutilizado de features anteriores).
+- `Grep "ClientesTab|filtroFechaClientes|filtroTipoContacto"` en `Dashboard.tsx` → ubicó dónde agregar el nuevo estado/memo y el punto de render de `<ClientesTab>`.
+- Edit en `Dashboard.tsx` → nuevo estado `busquedaClienteHistorial`; nuevo memo `resultadosBusquedaCliente` (agrupa TODA la tabla `servicios` en memoria por cliente normalizado que calce con el texto buscado en nombre o teléfono, sin límite de fecha/estado — a diferencia de Historial/Área de Trabajo que sí pagina/filtra); wiring de las 3 nuevas props hacia `<ClientesTab>`.
+- Edit en `ClientesTab.tsx` → nueva tarjeta "Buscar cliente" arriba de todo, con input de búsqueda y, si hay texto, la lista de clientes que calzan con su historial completo (folio, modelo, tipo de trabajo, fecha, badge de estado con color, monto por trabajo, y total del cliente).
+- `npx tsc --noEmit -p tsconfig.app.json` → limpio.
+- `npm run build` → build exitoso (1.92s).
+- `npm run lint` → sin errores.
+- (Usuario confirmó: "Sí, sube")
+- `git status` → 3 archivos modificados.
+- `git add src/components/dashboard/AreaTrabajoTab.tsx src/components/dashboard/ClientesTab.tsx src/components/dashboard/Dashboard.tsx` → staging.
+- `git commit -m "Agrega busqueda de historial por cliente en Clientes, corrige Agrupar por cliente con filtro Completado"` → commit `c3775be`.
+- `git push origin main` → `e9a957a..c3775be`.
+
+### Archivos tocados (todos)
+- `src/components/dashboard/Dashboard.tsx` — modificado — `trabajosActivosAgrupados` ahora respeta `filtroEstadoTrabajo`; nuevo estado y memo `resultadosBusquedaCliente` para la búsqueda por cliente; wiring hacia `AreaTrabajoTab`/`ClientesTab`.
+- `src/components/dashboard/AreaTrabajoTab.tsx` — modificado — `FiltrosEstadoPago` ahora se muestra también en la vista agrupada; se quitó el texto fijo desactualizado y se generalizó el mensaje de lista vacía.
+- `src/components/dashboard/ClientesTab.tsx` — modificado — nueva sección "Buscar cliente" (input + resultados agrupados con historial completo por cliente).
+
+### Hallazgos y decisiones
+- Causa raíz del bug: `trabajosActivosAgrupados` se calculó originalmente (en una sesión anterior) con un filtro fijo a PENDIENTE/EN PROCESO porque en ese momento no existía ningún filtro de estado seleccionable para Área de Trabajo — cuando se agregó `filtroEstadoTrabajo` (sesión anterior, fix del orden por antigüedad), ese memo quedó desconectado del nuevo estado, y nadie lo notó hasta que el usuario probó "Completado" + agrupar.
+- Se decidió mostrar los chips de Estado/Pago SIEMPRE en Área de Trabajo (agrupado o no), no solo condicionalmente, para que el usuario pueda ver y cambiar el filtro activo sin tener que salir de la vista agrupada.
+- La búsqueda de clientes reutiliza la tabla `servicios` completa que YA vive en memoria en `Dashboard.tsx` (la misma que usan Finanzas/rankings/avisos) — no se agregó ninguna consulta nueva a Supabase, es puro filtrado en el cliente, igual que `trabajosActivosAgrupados`.
+- Deliberadamente NO se filtró la búsqueda por `filtroFechaClientes`/`filtroTipoContacto` (los filtros de periodo/tipo de la pestaña Clientes) — el pedido fue "muéstrame TODOS los trabajos de ese cliente", así que la búsqueda ignora esos filtros a propósito y siempre trae el historial completo.
+
+### Estado final
+- Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso (1.92s), `npm run lint` sin errores.
+- Git: commit `c3775be` en `main`, pusheado a `origin/main`. Working tree limpio (pendiente de agregar esta entrada del registro).
+---
