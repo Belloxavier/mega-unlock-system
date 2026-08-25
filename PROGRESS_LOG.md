@@ -509,3 +509,32 @@ El usuario pidió revisar toda la pestaña Estadísticas ("debe darme lo que su 
 - Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores (verificado dos veces, antes y después de agregar Modelos Más Frecuentes).
 - Git: commit `5b00454` en `main`, pusheado a `origin/main`. Working tree limpio (pendiente de agregar esta entrada del registro).
 ---
+
+---
+## [2026-08-25 03:30] Estadísticas: nombre de mes y rango de fechas en Semana/Mes Actual vs Anterior
+
+### Instrucción recibida
+El usuario notó que, tras la limpieza de Estadísticas, "Mes Actual vs. Anterior" y "Semana Actual vs. Anterior" seguían mostrando "Actual"/"Anterior" genérico, sin el nombre del mes ni el rango de fechas de la semana — a diferencia de Finanzas, donde ya se había aplicado ese fix.
+
+### Comandos ejecutados (todos, en orden)
+- `Read` de `calcularDetallePeriodo`/`ComparacionSemanaMes` en `estadisticasOperativas.ts` → confirmó que `DetallePeriodoComparado` no traía fechas de inicio/fin, solo los totales — por eso `BloqueComparacion` no tenía de dónde sacar el mes o el rango.
+- Edit en `estadisticasOperativas.ts` → agregó `fechaInicio`/`fechaFin` a `DetallePeriodoComparado` y a lo que devuelve `calcularDetallePeriodo` (usa `ini`/`fin`, que ya se calculaban, solo faltaba exponerlos).
+- Edit en `EstadisticasTab.tsx` → nuevo helper `nombreMes(fechaStr)` (capitaliza `toLocaleDateString('es-CL', {month:'long'})`, mismo patrón que ya se usó en Finanzas/Dashboard.tsx); `BloqueComparacion` ganó una prop `esSemana` para decidir si la etiqueta de cada columna es un rango de fechas ("18/08 – 24/08") o un nombre de mes ("Agosto"), reemplazando los textos fijos "Actual"/"Anterior".
+- Actualizó los 2 call sites (`esSemana` / `esSemana={false}`).
+- `npx tsc --noEmit -p tsconfig.app.json && npm run build && npm run lint` → los tres limpios.
+- (Usuario confirmó: "Sí, sube")
+- `git add src/lib/estadisticasOperativas.ts src/components/dashboard/EstadisticasTab.tsx` → staging.
+- `git commit -m "Estadisticas: muestra nombre de mes y rango de fechas de semana en las comparaciones, igual que Finanzas"` → commit `e91b000`.
+- `git push origin main` → `5aba393..e91b000`.
+
+### Archivos tocados (todos)
+- `src/lib/estadisticasOperativas.ts` — modificado — `DetallePeriodoComparado` y `calcularDetallePeriodo` ahora exponen `fechaInicio`/`fechaFin`.
+- `src/components/dashboard/EstadisticasTab.tsx` — modificado — nuevo helper `nombreMes`; `BloqueComparacion` con prop `esSemana` y etiquetas de columna reales en vez de "Actual"/"Anterior".
+
+### Hallazgos y decisiones
+- Se replicó exactamente el mismo criterio ya aplicado en Finanzas (mismo nombre de función conceptualmente, mismo patrón de capitalización) para no introducir un segundo enfoque distinto para el mismo problema.
+
+### Estado final
+- Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores.
+- Git: commit `e91b000` en `main`, pusheado a `origin/main`. Working tree limpio (pendiente de agregar esta entrada del registro).
+---
