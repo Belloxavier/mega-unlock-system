@@ -245,7 +245,7 @@ export function HistorialServicios(props: Props) {
                   {s.folio && (
                     <MenuImprimir
                       abierto={props.imprimirMenuAbierto === s.id}
-                      alinear="left"
+                      alinear="right"
                       wrapperClassName="flex-1"
                       triggerClassName="w-full text-slate-300 bg-slate-700/30 py-2.5 rounded-xl text-xs font-semibold"
                       onAbrir={() => props.onToggleImprimirMenu(s.id)}
@@ -410,7 +410,7 @@ export function HistorialServicios(props: Props) {
                           {s.folio && (
                             <MenuImprimir
                               abierto={props.imprimirMenuAbierto === s.id}
-                              alinear="left"
+                              alinear="right"
                               triggerClassName="text-slate-300 hover:text-white bg-slate-700/30 hover:bg-slate-700/50 px-2 py-1 rounded-lg text-xs font-semibold transition-colors"
                               onAbrir={() => props.onToggleImprimirMenu(s.id)}
                               onCerrar={() => props.onToggleImprimirMenu(null)}
