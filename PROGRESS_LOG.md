@@ -396,3 +396,37 @@ El usuario reportó: crea un cliente, luego quiere editarlo para agregar o cambi
 - Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores.
 - Git: commit `51f90c9` en `main`, pusheado a `origin/main`. Working tree limpio (pendiente de agregar esta entrada del registro).
 ---
+
+---
+## [2026-08-25 02:00] "Ver todos" en los rankings de Clientes (antes cortaban en el top 8)
+
+### Instrucción recibida
+El usuario notó que en la pestaña Clientes, al filtrar por Técnicos o Clientes, los rankings ("Top por Dinero", "Top por Cantidad de Trabajos") solo muestran el top 8 — pero las tarjetas de arriba (Clientes Únicos, Trabajos Realizados, Dinero Generado) son el total real, así que sumar el top 8 nunca calzaba con esas cifras. Pidió opinión sobre agregar un desglose completo.
+
+### Comandos ejecutados (todos, en orden)
+- Se dio la opinión primero (sin implementar): recomendé expandir en el mismo lugar ("Ver todos") en vez de un modal aparte, por ser más simple y reutilizar la UI existente.
+- `AskUserQuestion` → el usuario confirmó: expandir en el mismo lugar.
+- `Grep "rankingPorDinero|rankingPorVisitas|\\.slice\\(0, 8\\)"` en `Dashboard.tsx` → ubicó los 3 puntos donde se cortaba a 8 (`rankingPorDinero`, `rankingPorVisitas`, `rankingPorTipoTrabajo`).
+- `Read` de la sección completa del cálculo (líneas ~1560-1657) para entender la estructura antes de tocarla.
+- Edit en `Dashboard.tsx` (x2) → se quitó `.slice(0, 8)` de los 3 rankings — ahora Dashboard.tsx manda la lista COMPLETA, sin límite artificial.
+- `Read` completo de `ClientesTab.tsx` (post cambios de sesiones anteriores) para planear dónde insertar el toggle.
+- Edit en `ClientesTab.tsx` → import de `useState`, constante `TOPE_RANKING = 8`, 3 estados locales (`verTodosDinero`/`verTodosVisitas`/`verTodosTipo`), y en cada uno de los 3 bloques de ranking: la lista renderizada usa `.slice(0, TOPE_RANKING)` solo si el toggle está apagado, contenedor con `max-h-96 overflow-y-auto` cuando está expandido, y un botón "▼ Ver todos (N)" / "▲ Ver menos" debajo de cada lista (solo visible si hay más de 8 elementos).
+- `npx tsc --noEmit -p tsconfig.app.json && npm run build && npm run lint` → los tres limpios.
+- (Usuario confirmó: "Sí, sube")
+- `git add src/components/dashboard/Dashboard.tsx src/components/dashboard/ClientesTab.tsx` → staging.
+- `git commit -m "Agrega Ver todos a los rankings de Clientes (antes cortaban en el top 8)"` → commit `7fbad9b`.
+- `git push origin main` → `0bc086b..7fbad9b`.
+
+### Archivos tocados (todos)
+- `src/components/dashboard/Dashboard.tsx` — modificado — los 3 rankings (`rankingPorDinero`, `rankingPorVisitas`, `rankingPorTipoTrabajo`) ya no se cortan a 8, mandan la lista completa.
+- `src/components/dashboard/ClientesTab.tsx` — modificado — cada ranking tiene su propio toggle "Ver todos"/"Ver menos", mostrando por defecto solo los primeros 8 (mismo comportamiento visual que antes) pero con opción de ver el resto sin salir de la pestaña.
+
+### Hallazgos y decisiones
+- El límite de 8 se movió de donde se CALCULA el dato (Dashboard.tsx) a donde se MUESTRA (ClientesTab.tsx) — Dashboard.tsx ahora siempre manda todo, y es la vista la que decide cuánto mostrar por defecto. Esto es más correcto en general: cualquier otro consumidor futuro de esos rankings no hereda un límite arbitrario que no le corresponde.
+- No se tocó el ranking "Por Tipo de Trabajo" en la instrucción original del usuario (solo mencionó clientes/técnicos), pero comparte exactamente el mismo patrón de corte a 8 — se le aplicó el mismo fix por consistencia, ya que dejarlo a medias hubiera sido inconsistente sin motivo.
+- Se usó `max-h-96 overflow-y-auto` en la lista expandida para que un ranking con muchos clientes (ej. 100+) no estire la página verticalmente sin límite.
+
+### Estado final
+- Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores.
+- Git: commit `7fbad9b` en `main`, pusheado a `origin/main`. Working tree limpio (pendiente de agregar esta entrada del registro).
+---
