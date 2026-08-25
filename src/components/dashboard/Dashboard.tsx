@@ -121,6 +121,7 @@ export function Dashboard() {
   const [paginaActual, setPaginaActual] = useState(1);
   const [temaCalido, setTemaCalido] = useState(false);
   const [estadoMenuAbierto, setEstadoMenuAbierto] = useState<string | null>(null);
+  const [imprimirMenuAbierto, setImprimirMenuAbierto] = useState<string | null>(null);
   const [imeiCopiadoId, setImeiCopiadoId] = useState<string | null>(null);
   const [editandoFechaPagoId, setEditandoFechaPagoId] = useState<string | null>(null);
   const [fechaPagoInput, setFechaPagoInput] = useState('');
@@ -866,11 +867,6 @@ export function Dashboard() {
     });
   };
 
-  // Imprime dos papeletas de 58mm en el mismo trabajo de impresión: el
-  // ticket del cliente (folio, para que lo tenga él) y, a continuación, una
-  // etiqueta interna para pegar en el equipo mismo mientras está en el
-  // taller — con lo que se recibió junto al equipo (periférico, patrón/PIN,
-  // abono), para no depender de la memoria ni de abrir el sistema.
   const handleImprimirFolio = (s: Servicio) => {
     const ventana = window.open('', '_blank', 'width=400,height=500');
     if (!ventana) return;
@@ -883,12 +879,52 @@ export function Dashboard() {
             @page { size: 58mm auto; margin: 0; }
             * { box-sizing: border-box; }
             body { width: 58mm; margin: 0; padding: 4mm; font-family: 'Courier New', monospace; text-align: center; }
-            .ticket { page-break-after: always; }
             .folio { font-size: 46px; font-weight: 900; letter-spacing: 3px; margin: 2mm 0; }
             .linea { border-top: 1px dashed #000; margin: 2mm 0; }
             .dato { font-size: 12px; text-align: left; margin: 1mm 0; }
             .dato b { display: inline-block; width: 20mm; }
             .monto { font-size: 18px; font-weight: 900; margin-top: 2mm; }
+          </style>
+        </head>
+        <body>
+          <div class="folio">${escapeHtml(s.folio)}</div>
+          <div class="linea"></div>
+          <div class="dato">Equipo dejado en MEGA UNLOCK</div>
+          <div class="dato"><b>Equipo:</b> ${escapeHtml(s.modelo_equipo)}</div>
+          <div class="dato"><b>Servicio:</b> ${escapeHtml(s.tipo_trabajo)}</div>
+          <div class="dato"><b>Fecha:</b> ${escapeHtml(fecha)}</div>
+          <div class="linea"></div>
+          <div class="monto">${formatearMonto(s.monto)}</div>
+          <script>window.print(); window.onafterprint = () => window.close();</script>
+        </body>
+      </html>
+    `);
+    ventana.document.close();
+  };
+
+  // Etiqueta interna para pegar en el equipo mismo mientras está en el
+  // taller — lo que se recibió junto a él (periférico, patrón/PIN, abono),
+  // para no depender de la memoria ni de abrir el sistema. Impresión
+  // SEPARADA del ticket del cliente (no en el mismo trabajo de impresión):
+  // la impresora térmica solo corta automático al final de cada trabajo,
+  // no en medio de un salto de página CSS, así que iban pegadas y había
+  // que cortarlas a mano.
+  const handleImprimirEtiquetaEquipo = (s: Servicio) => {
+    const ventana = window.open('', '_blank', 'width=400,height=500');
+    if (!ventana) return;
+    const fecha = getFechaLocal(s.created_at);
+    ventana.document.write(`
+      <html>
+        <head>
+          <title>Etiqueta ${escapeHtml(s.folio)}</title>
+          <style>
+            @page { size: 58mm auto; margin: 0; }
+            * { box-sizing: border-box; }
+            body { width: 58mm; margin: 0; padding: 4mm; font-family: 'Courier New', monospace; text-align: center; }
+            .folio { font-size: 46px; font-weight: 900; letter-spacing: 3px; margin: 2mm 0; }
+            .linea { border-top: 1px dashed #000; margin: 2mm 0; }
+            .dato { font-size: 12px; text-align: left; margin: 1mm 0; }
+            .dato b { display: inline-block; width: 20mm; }
             .titulo-etiqueta { font-size: 11px; font-weight: 900; letter-spacing: 1px; margin-bottom: 2mm; }
             .fila { display: flex; justify-content: space-between; gap: 3mm; margin-top: 3mm; }
             .box { display: inline-block; width: 3mm; height: 3mm; border: 1px solid #000; vertical-align: middle; margin-right: 1mm; }
@@ -898,46 +934,32 @@ export function Dashboard() {
           </style>
         </head>
         <body>
-          <div class="ticket">
-            <div class="folio">${escapeHtml(s.folio)}</div>
-            <div class="linea"></div>
-            <div class="dato">Equipo dejado en MEGA UNLOCK</div>
-            <div class="dato"><b>Equipo:</b> ${escapeHtml(s.modelo_equipo)}</div>
-            <div class="dato"><b>Servicio:</b> ${escapeHtml(s.tipo_trabajo)}</div>
-            <div class="dato"><b>Fecha:</b> ${escapeHtml(fecha)}</div>
-            <div class="linea"></div>
-            <div class="monto">${formatearMonto(s.monto)}</div>
-          </div>
-
-          <div class="etiqueta">
-            <div class="folio">${escapeHtml(s.folio)}</div>
-            <div class="titulo-etiqueta">ETIQUETA DE EQUIPO — USO INTERNO</div>
-            <div class="linea"></div>
-            <div class="dato"><b>Cliente:</b> ${escapeHtml(s.clientes?.nombre || 'General')}</div>
-            <div class="dato"><b>Teléfono:</b> ${escapeHtml(s.clientes?.telefono || '—')}</div>
-            <div class="dato"><b>Trabajo:</b> ${escapeHtml(s.tipo_trabajo)}</div>
-            <div class="dato"><b>Fecha:</b> ${escapeHtml(fecha)}</div>
-            <div class="dato"><b>Precio:</b> ${formatearMonto(s.monto)}</div>
-            <div class="linea"></div>
-            <div class="dato"><span class="box"></span>Sí <span class="box"></span>No &nbsp;— Periférico</div>
-            <div class="fila">
-              <div class="dato">
-                Patrón:
-                <div class="patron-grid">
-                  <span></span><span></span><span></span>
-                  <span></span><span></span><span></span>
-                  <span></span><span></span><span></span>
-                </div>
-              </div>
-              <div class="dato">
-                PIN/Contraseña:<br />
-                <span class="linea-escribir">&nbsp;</span>
+          <div class="folio">${escapeHtml(s.folio)}</div>
+          <div class="titulo-etiqueta">ETIQUETA DE EQUIPO — USO INTERNO</div>
+          <div class="linea"></div>
+          <div class="dato"><b>Cliente:</b> ${escapeHtml(s.clientes?.nombre || 'General')}</div>
+          <div class="dato"><b>Teléfono:</b> ${escapeHtml(s.clientes?.telefono || '—')}</div>
+          <div class="dato"><b>Trabajo:</b> ${escapeHtml(s.tipo_trabajo)}</div>
+          <div class="dato"><b>Fecha:</b> ${escapeHtml(fecha)}</div>
+          <div class="dato"><b>Precio:</b> ${formatearMonto(s.monto)}</div>
+          <div class="linea"></div>
+          <div class="dato"><span class="box"></span>Sí <span class="box"></span>No &nbsp;— Periférico</div>
+          <div class="fila">
+            <div class="dato">
+              Patrón:
+              <div class="patron-grid">
+                <span></span><span></span><span></span>
+                <span></span><span></span><span></span>
+                <span></span><span></span><span></span>
               </div>
             </div>
-            <div class="dato" style="margin-top: 3mm;">Abono: $<span class="linea-escribir">&nbsp;</span></div>
-            <div class="dato">Notas: <span class="linea-escribir" style="min-width: 30mm;">&nbsp;</span></div>
+            <div class="dato">
+              PIN/Contraseña:<br />
+              <span class="linea-escribir">&nbsp;</span>
+            </div>
           </div>
-
+          <div class="dato" style="margin-top: 3mm;">Abono: $<span class="linea-escribir">&nbsp;</span></div>
+          <div class="dato">Notas: <span class="linea-escribir" style="min-width: 30mm;">&nbsp;</span></div>
           <script>window.print(); window.onafterprint = () => window.close();</script>
         </body>
       </html>
@@ -1944,6 +1966,7 @@ export function Dashboard() {
                 estadoMenuAbierto={estadoMenuAbierto}
                 editandoFechaPagoId={editandoFechaPagoId}
                 fechaPagoInput={fechaPagoInput}
+                imprimirMenuAbierto={imprimirMenuAbierto}
                 accionId={accionId}
                 fmt={fmt}
                 botonFiltro={botonFiltro}
@@ -1961,7 +1984,9 @@ export function Dashboard() {
                 onFechaPagoInput={setFechaPagoInput}
                 onGuardarFechaPago={handleGuardarFechaPago}
                 onIniciarEdicion={handleIniciarEdicion}
-                onImprimirFolio={handleImprimirFolio}
+                onToggleImprimirMenu={setImprimirMenuAbierto}
+                onImprimirCliente={handleImprimirFolio}
+                onImprimirEtiqueta={handleImprimirEtiquetaEquipo}
                 onMarcarNoRealizado={handleMarcarNoRealizado}
                 onReactivar={handleReactivar}
                 onDelete={handleDeleteServicio}

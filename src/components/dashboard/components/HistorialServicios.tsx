@@ -4,6 +4,7 @@ import { getImeiWarning } from '../../../lib/imei';
 import { EstadoControl } from './EstadoControl';
 import { EditorFechaPago } from './EditorFechaPago';
 import { FiltrosEstadoPago } from './FiltrosEstadoPago';
+import { MenuImprimir } from './MenuImprimir';
 
 interface Props {
   T: TemaUI;
@@ -23,6 +24,7 @@ interface Props {
   estadoMenuAbierto: string | null;
   editandoFechaPagoId: string | null;
   fechaPagoInput: string;
+  imprimirMenuAbierto: string | null;
   accionId: string | null;
   fmt: (n: number) => string;
   botonFiltro: (activo: boolean) => string;
@@ -40,7 +42,9 @@ interface Props {
   onFechaPagoInput: (v: string) => void;
   onGuardarFechaPago: (id: string) => void;
   onIniciarEdicion: (s: Servicio) => void;
-  onImprimirFolio: (s: Servicio) => void;
+  onToggleImprimirMenu: (id: string | null) => void;
+  onImprimirCliente: (s: Servicio) => void;
+  onImprimirEtiqueta: (s: Servicio) => void;
   onMarcarNoRealizado: (id: string) => void;
   onReactivar: (id: string) => void;
   onDelete: (id: string) => void;
@@ -239,13 +243,18 @@ export function HistorialServicios(props: Props) {
                     ✏️ Editar
                   </button>
                   {s.folio && (
-                    <button
-                      type="button"
-                      onClick={() => props.onImprimirFolio(s)}
-                      className="flex-1 text-slate-300 bg-slate-700/30 py-2.5 rounded-xl text-xs font-semibold"
+                    <MenuImprimir
+                      abierto={props.imprimirMenuAbierto === s.id}
+                      alinear="left"
+                      wrapperClassName="flex-1"
+                      triggerClassName="w-full text-slate-300 bg-slate-700/30 py-2.5 rounded-xl text-xs font-semibold"
+                      onAbrir={() => props.onToggleImprimirMenu(s.id)}
+                      onCerrar={() => props.onToggleImprimirMenu(null)}
+                      onImprimirCliente={() => props.onImprimirCliente(s)}
+                      onImprimirEtiqueta={() => props.onImprimirEtiqueta(s)}
                     >
-                      🖨️ Ticket
-                    </button>
+                      🖨️ Imprimir
+                    </MenuImprimir>
                   )}
                   {s.estado === 'NO REALIZADO' ? (
                     <button
@@ -399,14 +408,17 @@ export function HistorialServicios(props: Props) {
                             ✏️
                           </button>
                           {s.folio && (
-                            <button
-                              type="button"
-                              onClick={() => props.onImprimirFolio(s)}
-                              title="Imprimir folio"
-                              className="text-slate-300 hover:text-white bg-slate-700/30 hover:bg-slate-700/50 px-2 py-1 rounded-lg text-xs font-semibold transition-colors"
+                            <MenuImprimir
+                              abierto={props.imprimirMenuAbierto === s.id}
+                              alinear="left"
+                              triggerClassName="text-slate-300 hover:text-white bg-slate-700/30 hover:bg-slate-700/50 px-2 py-1 rounded-lg text-xs font-semibold transition-colors"
+                              onAbrir={() => props.onToggleImprimirMenu(s.id)}
+                              onCerrar={() => props.onToggleImprimirMenu(null)}
+                              onImprimirCliente={() => props.onImprimirCliente(s)}
+                              onImprimirEtiqueta={() => props.onImprimirEtiqueta(s)}
                             >
                               🖨️
-                            </button>
+                            </MenuImprimir>
                           )}
                           {s.estado === 'NO REALIZADO' ? (
                             <button
