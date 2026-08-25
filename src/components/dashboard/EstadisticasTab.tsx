@@ -6,9 +6,9 @@ import { formatearPorcentaje } from '../../lib/moneda';
 import {
   calcularSnapshotEstados,
   calcularVolumen,
-  calcularMejorDiaHistorico,
   calcularPorDiaSemana,
   calcularPorTipoTrabajo,
+  calcularPorModelo,
   calcularSerieAgrupada,
   calcularComparacionPeriodo,
   calcularComparacionSemana,
@@ -17,6 +17,8 @@ import {
   type Agrupacion,
   type ComparacionSemanaMes,
 } from '../../lib/estadisticasOperativas';
+
+const TOPE_RANKING = 8;
 
 interface Props {
   T: TemaUI;
@@ -33,20 +35,6 @@ const ETIQUETA_ESTADO: { [estado: string]: string } = {
 };
 
 const OPCIONES_DIAS = [7, 30, 90, 180, 365] as const;
-
-// Fecha YYYY-MM-DD → "miércoles 15/07/2026", sin pasar por ISO/UTC para no
-// arriesgar un desfase de día por huso horario.
-function formatearFechaLegible(fechaStr: string): string {
-  const [y, m, d] = fechaStr.split('-').map(Number);
-  const fecha = new Date(y, m - 1, d);
-  const texto = fecha.toLocaleDateString('es-CL', {
-    weekday: 'long',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-  return texto.charAt(0).toUpperCase() + texto.slice(1);
-}
 
 // Versión compacta ("15/07") para etiquetas dentro de tarjetas chicas.
 function formatearFechaCorta(fechaStr: string): string {
@@ -110,19 +98,19 @@ function FilaComparacion({ label, valor }: { label: string; valor: string }) {
   );
 }
 
+// Deliberadamente sin dinero — eso ya lo cubre Finanzas (Semana/Mes Actual
+// vs Anterior). Acá es puramente "cuánto trabajo hice", no "cuánta plata
+// generé", para no mostrar la misma comparación dos veces en dos pestañas.
 function BloqueComparacion({
   titulo,
   data,
-  fmt,
   T,
 }: {
   titulo: string;
   data: ComparacionSemanaMes;
-  fmt: (n: number) => string;
   T: TemaUI;
 }) {
   const deltaTrabajos = data.actual.trabajos - data.anterior.trabajos;
-  const deltaIngresos = data.actual.ingresos - data.anterior.ingresos;
   return (
     <div className={`bg-slate-900/80 border ${T.borde} p-5 rounded-2xl shadow-xl backdrop-blur-md`}>
       <h3 className={`text-xs font-bold ${T.texto} uppercase tracking-widest mb-4`}>{titulo}</h3>
@@ -131,7 +119,6 @@ function BloqueComparacion({
           <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Actual</p>
           <div className="space-y-1.5">
             <FilaComparacion label="Trabajos" valor={String(data.actual.trabajos)} />
-            <FilaComparacion label="Ingresos (neto)" valor={fmt(data.actual.ingresos)} />
             <FilaComparacion label="Pagos" valor={String(data.actual.pagos)} />
             <FilaComparacion label="Prom./día" valor={data.actual.promedioTrabajosPorDia.toFixed(1)} />
           </div>
@@ -140,7 +127,6 @@ function BloqueComparacion({
           <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Anterior</p>
           <div className="space-y-1.5">
             <FilaComparacion label="Trabajos" valor={String(data.anterior.trabajos)} />
-            <FilaComparacion label="Ingresos (neto)" valor={fmt(data.anterior.ingresos)} />
             <FilaComparacion label="Pagos" valor={String(data.anterior.pagos)} />
             <FilaComparacion label="Prom./día" valor={data.anterior.promedioTrabajosPorDia.toFixed(1)} />
           </div>
@@ -151,30 +137,15 @@ function BloqueComparacion({
           deltaTrabajos >= 0 ? 'text-emerald-400' : 'text-rose-400'
         }`}
       >
-        {deltaTrabajos >= 0 ? '▲' : '▼'} {Math.abs(deltaTrabajos)} trabajos ·{' '}
-        {deltaIngresos >= 0 ? '▲' : '▼'} {fmt(Math.abs(deltaIngresos))} vs. período anterior
+        {deltaTrabajos >= 0 ? '▲' : '▼'} {Math.abs(deltaTrabajos)} trabajos vs. período anterior
       </div>
-      <div className="grid grid-cols-2 gap-3 mt-3">
-        <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-2.5">
-          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-            Mejor día (trabajos)
-          </p>
-          <p className={`text-sm font-black ${T.texto}`}>
-            {data.actual.mejorDiaPorTrabajos
-              ? `${formatearFechaCorta(data.actual.mejorDiaPorTrabajos.fecha)} · ${data.actual.mejorDiaPorTrabajos.cantidad}`
-              : '—'}
-          </p>
-        </div>
-        <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-2.5">
-          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-            Mejor día (ingresos)
-          </p>
-          <p className={`text-sm font-black ${T.texto2}`}>
-            {data.actual.mejorDiaPorIngresos
-              ? `${formatearFechaCorta(data.actual.mejorDiaPorIngresos.fecha)} · ${fmt(data.actual.mejorDiaPorIngresos.monto)}`
-              : '—'}
-          </p>
-        </div>
+      <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-2.5 mt-3">
+        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Mejor día</p>
+        <p className={`text-sm font-black ${T.texto}`}>
+          {data.actual.mejorDiaPorTrabajos
+            ? `${formatearFechaCorta(data.actual.mejorDiaPorTrabajos.fecha)} · ${data.actual.mejorDiaPorTrabajos.cantidad} trabajos`
+            : '—'}
+        </p>
       </div>
     </div>
   );
@@ -184,13 +155,15 @@ export function EstadisticasTab({ T, servicios, fmt }: Props) {
   const [agrupacion, setAgrupacion] = useState<Agrupacion>('dia');
   const [diasComparacion, setDiasComparacion] = useState<number>(30);
   const [fechaHistorial, setFechaHistorial] = useState(() => getFechaLocal(new Date()));
+  const [verTodosTipo, setVerTodosTipo] = useState(false);
+  const [verTodosModelo, setVerTodosModelo] = useState(false);
   const hoy = getFechaLocal(new Date());
 
   const snapshotEstados = useMemo(() => calcularSnapshotEstados(servicios), [servicios]);
   const volumen = useMemo(() => calcularVolumen(servicios), [servicios]);
-  const mejorDia = useMemo(() => calcularMejorDiaHistorico(servicios), [servicios]);
   const porDiaSemana = useMemo(() => calcularPorDiaSemana(servicios), [servicios]);
   const porTipoTrabajo = useMemo(() => calcularPorTipoTrabajo(servicios), [servicios]);
+  const porModelo = useMemo(() => calcularPorModelo(servicios), [servicios]);
   const serie = useMemo(() => calcularSerieAgrupada(servicios, agrupacion), [servicios, agrupacion]);
   const comparacionPeriodo = useMemo(
     () => calcularComparacionPeriodo(servicios, diasComparacion),
@@ -202,6 +175,7 @@ export function EstadisticasTab({ T, servicios, fmt }: Props) {
 
   const maxDiaSemana = Math.max(1, ...porDiaSemana.map((i) => i.cantidad));
   const maxTipoTrabajo = Math.max(1, ...porTipoTrabajo.map((i) => i.cantidad));
+  const maxModelo = Math.max(1, ...porModelo.map((i) => i.cantidad));
   const maxSerie = Math.max(1, ...serie.map((i) => i.cantidad));
 
   return (
@@ -236,18 +210,6 @@ export function EstadisticasTab({ T, servicios, fmt }: Props) {
           </div>
         ))}
       </div>
-
-      {mejorDia && (
-        <div className="bg-gradient-to-br from-slate-900/90 to-emerald-950/40 border border-emerald-500/30 p-5 rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.07)] backdrop-blur-md flex justify-between items-center gap-3">
-          <div>
-            <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-1">
-              Mejor día histórico
-            </p>
-            <p className="text-sm text-slate-300">{formatearFechaLegible(mejorDia.fecha)}</p>
-          </div>
-          <span className="font-black text-emerald-300 text-2xl flex-shrink-0">{mejorDia.cantidad} trab.</span>
-        </div>
-      )}
 
       <div className={`bg-slate-900/80 border ${T.borde} p-5 rounded-2xl shadow-xl backdrop-blur-md`}>
         <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
@@ -323,8 +285,8 @@ export function EstadisticasTab({ T, servicios, fmt }: Props) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <BloqueComparacion titulo="📆 Semana Actual vs. Anterior" data={comparacionSemana} fmt={fmt} T={T} />
-        <BloqueComparacion titulo="🗓️ Mes Actual vs. Anterior" data={comparacionMes} fmt={fmt} T={T} />
+        <BloqueComparacion titulo="📆 Semana Actual vs. Anterior" data={comparacionSemana} T={T} />
+        <BloqueComparacion titulo="🗓️ Mes Actual vs. Anterior" data={comparacionMes} T={T} />
       </div>
 
       <div className={`bg-slate-900/80 border ${T.borde} p-5 rounded-2xl shadow-xl backdrop-blur-md`}>
@@ -351,17 +313,61 @@ export function EstadisticasTab({ T, servicios, fmt }: Props) {
         {porTipoTrabajo.length === 0 ? (
           <p className="text-xs text-slate-500">Sin datos todavía.</p>
         ) : (
-          <div className="space-y-2.5">
-            {porTipoTrabajo.map((item) => (
-              <BarraCantidad
-                key={item.nombre}
-                nombre={item.nombre}
-                cantidad={item.cantidad}
-                max={maxTipoTrabajo}
-                barraClass="from-violet-500 to-fuchsia-400"
-              />
-            ))}
-          </div>
+          <>
+            <div className="space-y-2.5">
+              {(verTodosTipo ? porTipoTrabajo : porTipoTrabajo.slice(0, TOPE_RANKING)).map((item) => (
+                <BarraCantidad
+                  key={item.nombre}
+                  nombre={item.nombre}
+                  cantidad={item.cantidad}
+                  max={maxTipoTrabajo}
+                  barraClass="from-violet-500 to-fuchsia-400"
+                />
+              ))}
+            </div>
+            {porTipoTrabajo.length > TOPE_RANKING && (
+              <button
+                type="button"
+                onClick={() => setVerTodosTipo((v) => !v)}
+                className="w-full mt-2 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-slate-200 bg-slate-950/40 hover:bg-slate-800 transition-colors"
+              >
+                {verTodosTipo ? '▲ Ver menos' : `▼ Ver todos (${porTipoTrabajo.length})`}
+              </button>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className={`bg-slate-900/80 border ${T.borde} p-5 rounded-2xl shadow-xl backdrop-blur-md`}>
+        <h3 className={`text-xs font-bold ${T.texto} uppercase tracking-widest mb-1`}>
+          📱 Modelos Más Frecuentes (Histórico)
+        </h3>
+        <p className="text-[10px] text-slate-500 mb-4">Para saber qué equipos llegan más seguido y anticipar repuestos.</p>
+        {porModelo.length === 0 ? (
+          <p className="text-xs text-slate-500">Sin datos todavía.</p>
+        ) : (
+          <>
+            <div className="space-y-2.5">
+              {(verTodosModelo ? porModelo : porModelo.slice(0, TOPE_RANKING)).map((item) => (
+                <BarraCantidad
+                  key={item.nombre}
+                  nombre={item.nombre}
+                  cantidad={item.cantidad}
+                  max={maxModelo}
+                  barraClass="from-cyan-500 to-blue-400"
+                />
+              ))}
+            </div>
+            {porModelo.length > TOPE_RANKING && (
+              <button
+                type="button"
+                onClick={() => setVerTodosModelo((v) => !v)}
+                className="w-full mt-2 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-slate-200 bg-slate-950/40 hover:bg-slate-800 transition-colors"
+              >
+                {verTodosModelo ? '▲ Ver menos' : `▼ Ver todos (${porModelo.length})`}
+              </button>
+            )}
+          </>
         )}
       </div>
 
@@ -447,6 +453,9 @@ export function EstadisticasTab({ T, servicios, fmt }: Props) {
           <MiniStat label="Entregados" valor={historialDia.entregados} T={T} />
           <MiniStat label="Pendientes al cierre" valor={historialDia.pendientesAlCierre} T={T} colorClass="text-amber-400" />
         </div>
+        <p className="text-[10px] text-slate-600 mt-3">
+          "Pendientes al cierre" es una aproximación reconstruida a partir de las fechas guardadas (no hay un registro histórico de cada cambio de estado).
+        </p>
       </div>
     </div>
   );

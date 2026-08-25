@@ -1,13 +1,14 @@
-// Estadísticas operativas del taller: volumen y tipo de trabajo (nunca
-// montos, eso lo cubren cierreCaja/reporteMensual), salvo la comparación
-// semana/mes de más abajo, que mezcla trabajos+ingresos+pagos a pedido
-// explícito (ver calcularComparacionSemana/Mes). Todo se deriva de
-// `servicios` — nada que el usuario tenga que escribir a mano.
+// Estadísticas operativas del taller: volumen y tipo de trabajo — nunca
+// montos, eso vive en Finanzas (cierreCaja/reporteMensual). La única
+// excepción es calcularHistorialDia (reconstrucción de un día específico),
+// que sí incluye ingresos porque es un drill-down puntual, no una
+// comparación repetida en ambas pestañas. Todo se deriva de `servicios` —
+// nada que el usuario tenga que escribir a mano.
 //
-// El dinero SIEMPRE se contabiliza por fecha real de pago (fechaPagoIso:
-// pagado_at editable, no created_at) — igual que cierreCaja/reporteMensual,
-// para que un pago registrado días después siga cayendo en el día en que
-// de verdad ocurrió.
+// El dinero (donde aparece) SIEMPRE se contabiliza por fecha real de pago
+// (fechaPagoIso: pagado_at editable, no created_at) — igual que
+// cierreCaja/reporteMensual, para que un pago registrado días después siga
+// cayendo en el día en que de verdad ocurrió.
 import type { Servicio } from '../types';
 import { getFechaLocal, getDiaSemana, DIAS_SEMANA } from './date';
 import {
@@ -39,11 +40,6 @@ export interface ResumenVolumen {
   semana: number;
   mes: number;
   total: number;
-}
-
-export interface MejorDia {
-  fecha: string; // YYYY-MM-DD local
-  cantidad: number;
 }
 
 export type Agrupacion = 'dia' | 'semana' | 'mes';
@@ -79,18 +75,6 @@ export function calcularVolumen(servicios: Servicio[]): ResumenVolumen {
   };
 }
 
-/** Día calendario (histórico) con más trabajos dados de alta. */
-export function calcularMejorDiaHistorico(servicios: Servicio[]): MejorDia | null {
-  if (servicios.length === 0) return null;
-  const conteo: { [fecha: string]: number } = {};
-  servicios.forEach((s) => {
-    const f = getFechaLocal(s.created_at);
-    conteo[f] = (conteo[f] || 0) + 1;
-  });
-  const [fecha, cantidad] = Object.entries(conteo).sort((a, b) => b[1] - a[1])[0];
-  return { fecha, cantidad };
-}
-
 /** Cuántos trabajos se han hecho históricamente en cada día de la semana (Lunes–Sábado). */
 export function calcularPorDiaSemana(servicios: Servicio[]): ConteoItem[] {
   const conteo: { [dia: string]: number } = {};
@@ -101,8 +85,8 @@ export function calcularPorDiaSemana(servicios: Servicio[]): ConteoItem[] {
   return DIAS_SEMANA.map((dia) => ({ nombre: dia, cantidad: conteo[dia] || 0 }));
 }
 
-/** Ranking histórico de tipos de trabajo por cantidad (no por dinero). */
-export function calcularPorTipoTrabajo(servicios: Servicio[], maxItems = 8): ConteoItem[] {
+/** Ranking histórico completo de tipos de trabajo por cantidad (no por dinero) — sin tope, la vista decide cuántos mostrar por defecto. */
+export function calcularPorTipoTrabajo(servicios: Servicio[]): ConteoItem[] {
   const conteo: { [tipo: string]: number } = {};
   servicios.forEach((s) => {
     const t = s.tipo_trabajo || 'General';
@@ -110,8 +94,26 @@ export function calcularPorTipoTrabajo(servicios: Servicio[], maxItems = 8): Con
   });
   return Object.entries(conteo)
     .map(([nombre, cantidad]) => ({ nombre, cantidad }))
-    .sort((a, b) => b.cantidad - a.cantidad)
-    .slice(0, maxItems);
+    .sort((a, b) => b.cantidad - a.cantidad);
+}
+
+/**
+ * Ranking histórico completo de modelos de equipo por cantidad — ayuda a
+ * anticipar qué equipos llegan más seguido (repuestos a tener a mano).
+ * Agrupa por modelo_normalizado (sin acentos, sin prefijo de marca) para
+ * que distintas formas de escribir el mismo modelo cuenten como uno solo
+ * (ver lib/normalizarTexto.ts), mostrando el primer texto original visto
+ * para esa clave.
+ */
+export function calcularPorModelo(servicios: Servicio[]): ConteoItem[] {
+  const conteo = new Map<string, { nombre: string; cantidad: number }>();
+  servicios.forEach((s) => {
+    const clave = s.modelo_normalizado || s.modelo_equipo || 'Sin modelo';
+    const entry = conteo.get(clave) || { nombre: s.modelo_equipo || 'Sin modelo', cantidad: 0 };
+    entry.cantidad += 1;
+    conteo.set(clave, entry);
+  });
+  return Array.from(conteo.values()).sort((a, b) => b.cantidad - a.cantidad);
 }
 
 const CANTIDAD_PERIODOS: { [k in Agrupacion]: number } = { dia: 14, semana: 8, mes: 6 };
@@ -167,20 +169,14 @@ export function calcularSerieAgrupada(servicios: Servicio[], modo: Agrupacion): 
 interface DiaDesglosado {
   fecha: string;
   trabajos: number;
-  /** Ganancia neta (fecha real de pago) — 0 si nada se pagó ese día. */
-  ingresos: number;
 }
 
-// Un mismo día puede aportar a `trabajos` (por created_at) y a `ingresos`
-// (por fechaPagoIso) sin ser el mismo grupo de trabajos — un pago cobrado
-// hoy puede ser de un trabajo creado la semana pasada. Por eso se acumulan
-// por separado en el mismo bucket de fecha, no como "trabajos pagados".
 function desglosePorDia(servicios: Servicio[], ini: Date, fin: Date): DiaDesglosado[] {
   const mapa = new Map<string, DiaDesglosado>();
   const fila = (fecha: string) => {
     let f = mapa.get(fecha);
     if (!f) {
-      f = { fecha, trabajos: 0, ingresos: 0 };
+      f = { fecha, trabajos: 0 };
       mapa.set(fecha, f);
     }
     return f;
@@ -188,12 +184,6 @@ function desglosePorDia(servicios: Servicio[], ini: Date, fin: Date): DiaDesglos
   servicios.forEach((s) => {
     if (estaEnRango(s.created_at, ini, fin)) {
       fila(getFechaLocal(s.created_at)).trabajos += 1;
-    }
-    if (s.pagado) {
-      const fPago = fechaPagoIso(s);
-      if (estaEnRango(fPago, ini, fin)) {
-        fila(getFechaLocal(fPago)).ingresos += ganancia(s);
-      }
     }
   });
   return Array.from(mapa.values());
@@ -278,13 +268,10 @@ export function calcularComparacionPeriodo(servicios: Servicio[], dias: number):
 
 export interface DetallePeriodoComparado {
   trabajos: number;
-  /** Ganancia neta (fecha real de pago), no facturado bruto. */
-  ingresos: number;
-  /** Cantidad de cobros (trabajos pagados) en el rango. */
+  /** Cantidad de cobros (trabajos pagados) en el rango — el dinero en sí vive en Finanzas, acá solo la cantidad. */
   pagos: number;
   promedioTrabajosPorDia: number;
   mejorDiaPorTrabajos: DiaCantidad | null;
-  mejorDiaPorIngresos: { fecha: string; monto: number } | null;
 }
 
 export interface ComparacionSemanaMes {
@@ -300,20 +287,16 @@ function calcularDetallePeriodo(
 ): DetallePeriodoComparado {
   const desglose = desglosePorDia(servicios, ini, fin);
   const trabajos = desglose.reduce((a, d) => a + d.trabajos, 0);
-  const ingresos = desglose.reduce((a, d) => a + d.ingresos, 0);
   const pagos = servicios.filter((s) => s.pagado && estaEnRango(fechaPagoIso(s), ini, fin)).length;
   const dias = diasTranscurridosEnRango(ini, fin, ahora);
 
   const porTrabajos = [...desglose].filter((d) => d.trabajos > 0).sort((a, b) => b.trabajos - a.trabajos)[0];
-  const porIngresos = [...desglose].filter((d) => d.ingresos > 0).sort((a, b) => b.ingresos - a.ingresos)[0];
 
   return {
     trabajos,
-    ingresos,
     pagos,
     promedioTrabajosPorDia: trabajos / dias,
     mejorDiaPorTrabajos: porTrabajos ? { fecha: porTrabajos.fecha, cantidad: porTrabajos.trabajos } : null,
-    mejorDiaPorIngresos: porIngresos ? { fecha: porIngresos.fecha, monto: porIngresos.ingresos } : null,
   };
 }
 
