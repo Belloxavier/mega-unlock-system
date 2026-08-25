@@ -329,3 +329,36 @@ El usuario reconsideró el fix anterior (dos papeletas en un mismo trabajo de im
 - Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores.
 - Git: commit `4c3e134` en `main`, pusheado a `origin/main`. Working tree limpio (pendiente de agregar esta entrada del registro).
 ---
+
+---
+## [2026-08-25 01:00] Memoria de prioridad iPhone + fix de overflow en el menú de imprimir
+
+### Instrucción recibida
+1. El usuario pidió recordar, como regla permanente, que este programa se usa más en iPhone que en cualquier otro dispositivo — prioridad siempre iPhone sobre Android.
+2. Mandó una captura de pantalla mostrando el nuevo menú de imprimir (`MenuImprimir`) abriéndose hacia la derecha y saliéndose de la pantalla, cortando el texto de las opciones ("Etiqueta clie...", "Etiqueta loc...").
+
+### Comandos ejecutados (todos, en orden)
+- `Write` de `feedback_iphone_priority.md` en el directorio de memoria del proyecto (fuera del repo de código) → nueva memoria tipo `feedback` con la regla y el contexto (el bug del botón de eliminar ausente en móvil, de una sesión anterior en esta misma conversación, como precedente concreto de por qué importa).
+- `Read` + `Edit` de `MEMORY.md` (índice de memoria) → agregó la línea apuntando a la nueva memoria.
+- Análisis de la captura enviada por el usuario → confirmó que el popover de `MenuImprimir` (agregado en la entrada anterior de este registro) usaba `alinear="left"` en el ícono de escritorio, que queda cerca del borde derecho de la columna "Acciones" — el popover de 192px de ancho se abría hacia la derecha y se salía del viewport, cortando el texto.
+- `Grep "alinear=\"left\""` en `HistorialServicios.tsx` → ubicó las 2 instancias de `MenuImprimir` (móvil y escritorio).
+- Edit en `HistorialServicios.tsx` (x2) → cambió `alinear="left"` a `alinear="right"` en ambas instancias de `MenuImprimir` (escritorio: confirmado por la captura; móvil: preventivo, mismo riesgo potencial ya que la posición del botón de imprimir en la fila varía según qué otros botones se muestran condicionalmente).
+- `npx tsc --noEmit -p tsconfig.app.json && npm run build && npm run lint` → los tres limpios.
+- (Usuario confirmó: "Sí, sube")
+- `git add src/components/dashboard/components/HistorialServicios.tsx` → staging.
+- `git commit -m "Fix: el menu de imprimir se salia de pantalla, ahora abre hacia la izquierda"` → commit `d25100c`.
+- `git push origin main` → `e635357..d25100c`.
+
+### Archivos tocados (todos)
+- `feedback_iphone_priority.md` (memoria, fuera del repo) — nuevo — regla permanente de priorizar iPhone.
+- `MEMORY.md` (memoria, fuera del repo) — modificado — nueva línea de índice.
+- `src/components/dashboard/components/HistorialServicios.tsx` — modificado — `MenuImprimir` ahora abre hacia la izquierda (`alinear="right"`) en vez de hacia la derecha, en ambos layouts.
+
+### Hallazgos y decisiones
+- El bug fue introducido en la entrada anterior de este mismo registro (el nuevo `MenuImprimir`) — no se detectó en la verificación de `tsc`/`build`/`lint` porque es un bug puramente visual/de layout (overflow fuera del viewport), no de tipos ni de lógica; solo se hizo evidente con la captura real del usuario. Sirve de recordatorio de que estas verificaciones automáticas no reemplazan probar la UI de verdad.
+- Se aplicó el mismo fix preventivamente en el layout móvil aunque la captura solo mostraba el bug en escritorio, porque el mismo razonamiento geométrico (popover ancho abriendo hacia el lado donde hay menos espacio) aplica ahí también y la posición del botón dentro de la fila de acciones móvil no es fija.
+
+### Estado final
+- Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores.
+- Git: commit `d25100c` en `main`, pusheado a `origin/main`. Working tree limpio (pendiente de agregar esta entrada del registro).
+---
