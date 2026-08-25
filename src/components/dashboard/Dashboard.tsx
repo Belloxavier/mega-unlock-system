@@ -126,6 +126,7 @@ export function Dashboard() {
   const [fechaPagoInput, setFechaPagoInput] = useState('');
   const [filtroFechaClientes, setFiltroFechaClientes] = useState('todos');
   const [filtroTipoContacto, setFiltroTipoContacto] = useState<'todos' | 'tecnico' | 'cliente'>('todos');
+  const [busquedaClienteHistorial, setBusquedaClienteHistorial] = useState('');
 
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [clienteIdAsociado, setClienteIdAsociado] = useState<string | null>(null);
@@ -1378,15 +1379,18 @@ export function Dashboard() {
     });
   }, [servicios, tickReloj]);
 
-  // Cola activa (PENDIENTE/EN PROCESO) agrupada por cliente normalizado —
-  // para la vista "Agrupar por cliente" de Área de Trabajo. Sale de la
-  // tabla completa en memoria (no de serviciosPagina) porque este set es
-  // chico (lo que de verdad hay hoy en el taller) y necesita verse
-  // completo, no paginado. Ordenado por cantidad de trabajos (más primero)
-  // y, en empate, por el trabajo más antiguo del cliente (el que lleva más
+  // Trabajos agrupados por cliente normalizado — para la vista "Agrupar por
+  // cliente" de Área de Trabajo. Respeta el mismo filtro de estado que la
+  // vista sin agrupar (filtroEstadoTrabajo) — antes estaba fijo a
+  // PENDIENTE/EN PROCESO sin importar el chip elegido, así que elegir
+  // "Completado" y agrupar mostraba la lista vacía. Sale de la tabla
+  // completa en memoria (no de serviciosPagina) porque este set es chico
+  // (lo que de verdad hay hoy en el taller) y necesita verse completo, no
+  // paginado. Ordenado por cantidad de trabajos (más primero) y, en
+  // empate, por el trabajo más antiguo del cliente (el que lleva más
   // esperando).
   const trabajosActivosAgrupados = useMemo(() => {
-    const activos = servicios.filter((s) => s.estado === 'PENDIENTE' || s.estado === 'EN PROCESO');
+    const activos = filtrarPorEstadoConActivos(servicios, filtroEstadoTrabajo);
     const grupos = new Map<string, { nombre: string; telefono?: string; trabajos: Servicio[] }>();
     activos.forEach((s) => {
       const nombreOriginal = s.clientes?.nombre || 'Sin cliente';
@@ -1402,7 +1406,7 @@ export function Dashboard() {
         Math.min(...g.trabajos.map((t) => new Date(t.created_at).getTime()));
       return masAntiguo(a) - masAntiguo(b);
     });
-  }, [servicios]);
+  }, [servicios, filtroEstadoTrabajo]);
 
   // Equipos Completados a los que todavía no se les avisó (se completaron
   // mientras el cliente tenía otros pendientes y se eligió "Esperar a los
@@ -1542,6 +1546,38 @@ export function Dashboard() {
       tiempoPromedioHoras,
     };
   }, [servicios, filtroFechaClientes, filtroTipoContacto, hoyStr, mesActualStr]);
+
+  // Búsqueda por cliente en la pestaña Clientes: trae TODO el historial de
+  // ese cliente (todos los estados, sin paginar, sin límite de fecha) desde
+  // la tabla completa en memoria — a diferencia de Historial/Área de
+  // Trabajo, acá el punto es ver la ficha completa de una persona, no una
+  // página filtrada. Agrupa por nombre normalizado por si el texto buscado
+  // calza con más de un cliente (ej. "jose" trae a todos los José).
+  const resultadosBusquedaCliente = useMemo(() => {
+    const textoBuscado = busquedaClienteHistorial.trim();
+    const q = normalizarNombre(textoBuscado);
+    if (!q) return [];
+    const coincidencias = servicios.filter((s) => {
+      const nombre = normalizarNombre(s.clientes?.nombre || '');
+      const telefono = s.clientes?.telefono || '';
+      return nombre.includes(q) || telefono.includes(textoBuscado);
+    });
+    const grupos = new Map<string, { nombre: string; telefono?: string; trabajos: Servicio[] }>();
+    coincidencias.forEach((s) => {
+      const nombreOriginal = s.clientes?.nombre || 'Sin cliente';
+      const clave = normalizarNombre(nombreOriginal);
+      if (!grupos.has(clave)) {
+        grupos.set(clave, { nombre: nombreOriginal, telefono: s.clientes?.telefono, trabajos: [] });
+      }
+      grupos.get(clave)!.trabajos.push(s);
+    });
+    return Array.from(grupos.values())
+      .map((g) => ({
+        ...g,
+        trabajos: [...g.trabajos].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+      }))
+      .sort((a, b) => b.trabajos.length - a.trabajos.length);
+  }, [servicios, busquedaClienteHistorial]);
 
   const garantiasConIntensidad = useMemo(() => {
     const ordenadasAsc = [...garantiasList].sort(
@@ -1932,6 +1968,9 @@ export function Dashboard() {
             totalTrabajosClientesTab={totalTrabajosClientesTab}
             totalDineroClientesTab={totalDineroClientesTab}
             tiempoPromedioHoras={tiempoPromedioHoras}
+            busquedaCliente={busquedaClienteHistorial}
+            resultadosBusquedaCliente={resultadosBusquedaCliente}
+            onBusquedaCliente={setBusquedaClienteHistorial}
             fmt={fmt}
             botonFiltro={botonFiltro}
             onFiltroFecha={setFiltroFechaClientes}

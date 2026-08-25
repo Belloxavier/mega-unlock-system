@@ -200,15 +200,22 @@ export function AreaTrabajoTab({
         </button>
       </div>
 
+      <FiltrosEstadoPago
+        T={T}
+        filtroEstado={filtroEstado}
+        filtroPagado={filtroPagado}
+        conteosPorEstado={conteosPorEstado}
+        conteosPorPagado={conteosPorPagado}
+        onFiltroEstado={onFiltroEstado}
+        onFiltroPagado={onFiltroPagado}
+      />
+
       {vistaAgrupada ? (
         <>
-          <p className="text-[10px] text-slate-500 mb-4">
-            Solo trabajos PENDIENTE o EN PROCESO — lo que ya entregaste no aparece acá.
-          </p>
           {trabajosActivosAgrupados.length === 0 ? (
-            <p className="text-sm text-slate-400 py-8 text-center">No tienes trabajos pendientes ni en proceso. 🎉</p>
+            <p className="text-sm text-slate-400 py-8 text-center">Ningún trabajo coincide con este filtro.</p>
           ) : gruposFiltrados.length === 0 ? (
-            <p className="text-sm text-slate-400 py-8 text-center">Ningún cliente activo coincide con la búsqueda.</p>
+            <p className="text-sm text-slate-400 py-8 text-center">Ningún cliente coincide con la búsqueda.</p>
           ) : (
             <div className="space-y-5">
               {gruposFiltrados.map((g) => {
@@ -245,16 +252,6 @@ export function AreaTrabajoTab({
         </>
       ) : (
         <>
-          <FiltrosEstadoPago
-            T={T}
-            filtroEstado={filtroEstado}
-            filtroPagado={filtroPagado}
-            conteosPorEstado={conteosPorEstado}
-            conteosPorPagado={conteosPorPagado}
-            onFiltroEstado={onFiltroEstado}
-            onFiltroPagado={onFiltroPagado}
-          />
-
           {loading ? (
             <p className="text-sm text-slate-400 py-8 text-center">Cargando base de datos...</p>
           ) : totalFiltrados === 0 ? (
