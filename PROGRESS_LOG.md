@@ -430,3 +430,42 @@ El usuario notó que en la pestaña Clientes, al filtrar por Técnicos o Cliente
 - Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores.
 - Git: commit `7fbad9b` en `main`, pusheado a `origin/main`. Working tree limpio (pendiente de agregar esta entrada del registro).
 ---
+
+---
+## [2026-08-25 02:30] Auditoría y limpieza de la pestaña Finanzas
+
+### Instrucción recibida
+El usuario pidió revisar toda la pestaña Finanzas — le confundía "Semana actual vs anterior", "Mes actual vs anterior", y específicamente no entendía qué significaba "Días con cobro: 23". Pidió una revisión completa de qué tan útil es cada cosa y recomendaciones antes de aplicar nada.
+
+### Comandos ejecutados (todos, en orden)
+- `Read` completo de `src/components/dashboard/FinanzasTab.tsx` y `src/lib/cierreCaja.ts` → mapeo exhaustivo de cada métrica mostrada y de dónde sale cada número.
+- `Grep "cajaSemana\\b|cajaMes\\b|..."` + `Read` de la sección de cálculo en `Dashboard.tsx` (líneas ~1357-1462) → confirmó semántica exacta de `cajaMes`/`cajaMesPasado` (mes calendario, no 30 días rodantes) y de `porMetodoMes`/`porTipoMes` (fijo al mes actual, redundante con la sección de "Comparación por Período").
+- Presentó 6 hallazgos concretos al usuario (sin implementar): (1) "Días con cobro" no dice sobre qué período; (2) "Promedio/día con cobro" se puede confundir con promedio diario real; (3) "Trabajos" (creados) vs "Pagos" (cobros) no está explicado y pueden no coincidir; (4) la tarjeta de Mes no tiene la misma nota aclaratoria que ya tiene la de Semana; (5) la sección "Por método/tipo (mes)" es redundante con "Comparación por Período"; (6) "Por Cobrar (Total)"/"Devuelto por Garantías" no aclaran que son históricos, no del período elegido arriba.
+- `AskUserQuestion` → el usuario confirmó aplicar los 6 puntos, y agregó un pedido extra: en la tarjeta de mes, mostrar el NOMBRE real del mes (ej. "Febrero" vs "Enero") en vez de "Este mes"/"Mes anterior".
+- `Grep "pagadosMes|metodoMap|tipoMap|nombreMes|MESES\\b"` en `Dashboard.tsx` y `Grep "export function|MESES|nombreMes"` en `lib/date.ts` → confirmó que `pagadosMes`/`metodoMap`/`tipoMap` solo se usaban para la sección a eliminar (seguro borrarlos del todo) y que no existía ya un helper de nombre de mes.
+- `Read` de `inicioMes`/`finMes`/`inicioMesPasado`/`finMesPasado` en `lib/fechaFinanzas.ts` → confirmó que ya había objetos `Date` disponibles (`mesIni`/`mesPasIni`) para derivar el nombre del mes con `toLocaleDateString('es-CL', { month: 'long' })`.
+- Edit en `Dashboard.tsx` → quitó `pagadosMes`/`metodoMap`/`tipoMap`/`porMetodoMes`/`porTipoMes` por completo; agregó `nombreMesActual`/`nombreMesAnterior` (capitalizados) derivados de `mesIni`/`mesPasIni`; actualizó la desestructuración y el paso de props a `<FinanzasTab>`.
+- Edit en `FinanzasTab.tsx` (`DesgloseFinanciero`) → "Días con cobro" ahora muestra "X de Y" (Y = `data.dias` en modo relativo, 7 en modo semana); "Trabajos"/"Pagos" con subtítulo aclaratorio; "Promedio/día con cobro" con nota aclaratoria.
+- Edit en `FinanzasTab.tsx` (props + tarjeta "Mes Actual vs Anterior") → agregó `nombreMesActual`/`nombreMesAnterior` a la interfaz y los usó en vez de "Este mes"/"Mes anterior"; agregó la nota "Mes calendario completo (no últimos 30 días rodantes)" igual que ya tenía la tarjeta de semana.
+- Edit en `FinanzasTab.tsx` → eliminó por completo la sección "💳 Por método de pago (mes)" / "🔧 Por tipo de trabajo (mes)"; agregó nota "Histórico completo, no depende del período elegido arriba" a "Por Cobrar (Total)" y "Devuelto por Garantías".
+- `npx tsc --noEmit -p tsconfig.app.json` → limpio.
+- `npm run build` → build exitoso (568ms).
+- `npm run lint` → sin errores.
+- (Usuario confirmó: "Sí, sube")
+- `git add src/components/dashboard/Dashboard.tsx src/components/dashboard/FinanzasTab.tsx` → staging.
+- `git commit -m "Aclara metricas confusas en Finanzas y quita seccion duplicada de metodo/tipo (mes)"` → commit `0979979`.
+- `git push origin main` → `8c58315..0979979`.
+
+### Archivos tocados (todos)
+- `src/components/dashboard/Dashboard.tsx` — modificado — quitó el cálculo redundante de `porMetodoMes`/`porTipoMes`; agregó `nombreMesActual`/`nombreMesAnterior`.
+- `src/components/dashboard/FinanzasTab.tsx` — modificado — 6 aclaraciones de texto/label, sección duplicada eliminada, nombres de mes reales en la tarjeta de comparación mensual.
+
+### Hallazgos y decisiones
+- Ninguno de los 6 hallazgos era un bug de cálculo — todos los números ya eran correctos, el problema era 100% de comunicación/labels poco claros. No se tocó ninguna fórmula financiera.
+- Se eliminó la sección "Por método/tipo (mes)" completa en vez de solo ocultarla, junto con todo su cálculo en `Dashboard.tsx` (`pagadosMes`/`metodoMap`/`tipoMap`) — sin dejar código muerto, ya que no se usaban en ningún otro lado.
+- El nombre del mes se deriva con `toLocaleDateString('es-CL', { month: 'long' })` + capitalización manual (JS no capitaliza por defecto en esa locale) — no se agregó ninguna librería nueva ni un array de nombres de meses hardcodeado.
+
+### Estado final
+- Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores.
+- Git: commit `0979979` en `main`, pusheado a `origin/main`. Working tree limpio (pendiente de agregar esta entrada del registro).
+---
