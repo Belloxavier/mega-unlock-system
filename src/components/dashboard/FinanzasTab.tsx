@@ -32,6 +32,11 @@ function DesgloseFinanciero({
   T: TemaUI;
   fmt: (n: number) => string;
 }) {
+  // Cuántos días tiene el rango mostrado, para poder decir "23 de 30" en
+  // vez de solo "23" — el modo semana siempre son 7 días (no viene en el
+  // dato, a diferencia del modo relativo que sí trae `dias`).
+  const diasEnRango = 'dias' in data ? data.dias : 7;
+
   return (
     <>
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 mb-2.5">
@@ -44,22 +49,27 @@ function DesgloseFinanciero({
         <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
           <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Trabajos</p>
           <p className={`text-base font-black ${T.texto}`}>{data.totalTrabajos}</p>
+          <p className="text-[9px] text-slate-600 mt-0.5">creados en el período</p>
         </div>
         <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
           <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Pagos</p>
           <p className={`text-base font-black ${T.texto}`}>{data.totalPagos}</p>
+          <p className="text-[9px] text-slate-600 mt-0.5">cobros en el período</p>
         </div>
         <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
           <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">
             Días con cobro
           </p>
-          <p className={`text-base font-black ${T.texto}`}>{data.diasConCobro}</p>
+          <p className={`text-base font-black ${T.texto}`}>
+            {data.diasConCobro} <span className="text-slate-500 text-sm font-bold">de {diasEnRango}</span>
+          </p>
         </div>
         <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
           <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">
             Promedio/día con cobro
           </p>
           <p className={`text-base font-black ${T.texto}`}>{fmt(Math.round(data.promedioPorDiaConCobro))}</p>
+          <p className="text-[9px] text-slate-600 mt-0.5">solo días con cobro, no cuenta los días en cero</p>
         </div>
       </div>
 
@@ -122,16 +132,15 @@ interface Props {
   cajaMesPasado: number;
   deltaSemana: number;
   deltaMes: number;
+  /** Nombre del mes calendario actual/anterior (ej. "Febrero"/"Enero"), para no obligar a hacer la cuenta mental de qué mes es cada uno. */
+  nombreMesActual: string;
+  nombreMesAnterior: string;
   porCobrarTotal: number;
   totalDevueltoGarantias: number;
   flujoPorDiaObj: { [dia: string]: number };
   maxFlujoDia: number;
   /** Cantidad de trabajos pagados por día de la semana (histórico). */
   conteoPorDiaObj: { [dia: string]: number };
-  /** Desglose por método de pago (pagados del mes actual). */
-  porMetodoMes: { metodo: string; monto: number }[];
-  /** Desglose por tipo de trabajo (pagados del mes actual). */
-  porTipoMes: { tipo: string; monto: number }[];
   fmt: (n: number) => string;
   onAbrirReporteMensual: () => void;
   onAbrirPagosPorDia: () => void;
@@ -146,13 +155,13 @@ export function FinanzasTab({
   cajaMesPasado,
   deltaSemana,
   deltaMes,
+  nombreMesActual,
+  nombreMesAnterior,
   porCobrarTotal,
   totalDevueltoGarantias,
   flujoPorDiaObj,
   maxFlujoDia,
   conteoPorDiaObj,
-  porMetodoMes,
-  porTipoMes,
   fmt,
   onAbrirReporteMensual,
   onAbrirPagosPorDia,
@@ -221,13 +230,14 @@ export function FinanzasTab({
           <p className={`text-xs font-bold ${T.fuerte2} uppercase tracking-widest mb-3`}>
             Mes Actual vs Anterior
           </p>
+          <p className="text-[10px] text-slate-500 mb-2">Mes calendario completo (no últimos 30 días rodantes)</p>
           <div className="flex justify-between items-end mb-2">
             <div>
-              <p className="text-[10px] text-slate-400">Este mes</p>
+              <p className="text-[10px] text-slate-400">{nombreMesActual}</p>
               <p className={`text-xl font-black ${T.texto2}`}>{fmt(cajaMes)}</p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] text-slate-400">Mes anterior</p>
+              <p className="text-[10px] text-slate-400">{nombreMesAnterior}</p>
               <p className="text-sm font-bold text-slate-400">{fmt(cajaMesPasado)}</p>
             </div>
           </div>
@@ -307,56 +317,19 @@ export function FinanzasTab({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-        <div className="bg-gradient-to-br from-slate-900/90 to-amber-950/40 border border-amber-500/30 p-5 md:p-6 rounded-2xl shadow-[0_0_20px_rgba(245,158,11,0.07)] backdrop-blur-md flex justify-between items-center">
-          <p className="text-xs font-bold text-amber-400 uppercase tracking-widest">Por Cobrar (Total)</p>
-          <span className="font-black text-amber-300 text-2xl">{fmt(porCobrarTotal)}</span>
+        <div className="bg-gradient-to-br from-slate-900/90 to-amber-950/40 border border-amber-500/30 p-5 md:p-6 rounded-2xl shadow-[0_0_20px_rgba(245,158,11,0.07)] backdrop-blur-md">
+          <div className="flex justify-between items-center">
+            <p className="text-xs font-bold text-amber-400 uppercase tracking-widest">Por Cobrar (Total)</p>
+            <span className="font-black text-amber-300 text-2xl">{fmt(porCobrarTotal)}</span>
+          </div>
+          <p className="text-[10px] text-slate-500 mt-1">Histórico completo, no depende del período elegido arriba</p>
         </div>
-        <div className="bg-gradient-to-br from-slate-900/90 to-rose-950/40 border border-rose-500/30 p-5 md:p-6 rounded-2xl shadow-[0_0_20px_rgba(244,63,94,0.07)] backdrop-blur-md flex justify-between items-center">
-          <p className="text-xs font-bold text-rose-400 uppercase tracking-widest">Devuelto por Garantías</p>
-          <span className="font-black text-rose-300 text-2xl">{fmt(totalDevueltoGarantias)}</span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-        <div className={`bg-slate-900/80 border ${T.borde} p-5 rounded-2xl shadow-xl backdrop-blur-md`}>
-          <h3 className={`text-xs font-bold ${T.texto} uppercase tracking-widest mb-3`}>
-            💳 Por método de pago (mes)
-          </h3>
-          {porMetodoMes.length === 0 ? (
-            <p className="text-xs text-slate-500">Sin cobros este mes.</p>
-          ) : (
-            <div className="space-y-2">
-              {porMetodoMes.map((row) => (
-                <div
-                  key={row.metodo}
-                  className="flex justify-between text-xs bg-slate-950/60 border border-slate-800/80 px-3 py-2 rounded-lg"
-                >
-                  <span className="text-slate-300 font-semibold">{row.metodo}</span>
-                  <span className={`font-black ${T.fuerte}`}>{fmt(row.monto)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className={`bg-slate-900/80 border ${T.borde2} p-5 rounded-2xl shadow-xl backdrop-blur-md`}>
-          <h3 className={`text-xs font-bold ${T.texto2} uppercase tracking-widest mb-3`}>
-            🔧 Por tipo de trabajo (mes)
-          </h3>
-          {porTipoMes.length === 0 ? (
-            <p className="text-xs text-slate-500">Sin cobros este mes.</p>
-          ) : (
-            <div className="space-y-2">
-              {porTipoMes.map((row) => (
-                <div
-                  key={row.tipo}
-                  className="flex justify-between text-xs bg-slate-950/60 border border-slate-800/80 px-3 py-2 rounded-lg"
-                >
-                  <span className="text-slate-300 font-semibold truncate mr-2">{row.tipo}</span>
-                  <span className={`font-black ${T.fuerte2} flex-shrink-0`}>{fmt(row.monto)}</span>
-                </div>
-              ))}
-            </div>
-          )}
+        <div className="bg-gradient-to-br from-slate-900/90 to-rose-950/40 border border-rose-500/30 p-5 md:p-6 rounded-2xl shadow-[0_0_20px_rgba(244,63,94,0.07)] backdrop-blur-md">
+          <div className="flex justify-between items-center">
+            <p className="text-xs font-bold text-rose-400 uppercase tracking-widest">Devuelto por Garantías</p>
+            <span className="font-black text-rose-300 text-2xl">{fmt(totalDevueltoGarantias)}</span>
+          </div>
+          <p className="text-[10px] text-slate-500 mt-1">Histórico completo, no depende del período elegido arriba</p>
         </div>
       </div>
 

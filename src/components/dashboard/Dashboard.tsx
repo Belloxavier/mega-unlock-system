@@ -1366,8 +1366,8 @@ export function Dashboard() {
     flujoPorDiaObj,
     maxFlujoDia,
     conteoPorDiaObj,
-    porMetodoMes,
-    porTipoMes,
+    nombreMesActual,
+    nombreMesAnterior,
   } = useMemo(() => {
     const fechaPago = (s: Servicio) => s.pagado_at || s.entregado_at || s.created_at;
     // Ganancia real del taller: a técnicos/mayoristas se les cobra solo
@@ -1427,22 +1427,12 @@ export function Dashboard() {
       return acc;
     }, {});
 
-    const pagadosMes = pagados.filter((s) => estaEnRango(fechaPago(s), mesIni, mesFin));
-    const metodoMap: { [k: string]: number } = {};
-    const tipoMap: { [k: string]: number } = {};
-    pagadosMes.forEach((s) => {
-      const m = s.metodo_pago || 'Sin método';
-      metodoMap[m] = (metodoMap[m] || 0) + ganancia(s);
-      const t = s.tipo_trabajo || 'General';
-      tipoMap[t] = (tipoMap[t] || 0) + ganancia(s);
-    });
-    const porMetodoMes = Object.entries(metodoMap)
-      .map(([metodo, monto]) => ({ metodo, monto }))
-      .sort((a, b) => b.monto - a.monto);
-    const porTipoMes = Object.entries(tipoMap)
-      .map(([tipo, monto]) => ({ tipo, monto }))
-      .sort((a, b) => b.monto - a.monto)
-      .slice(0, 8);
+    // Nombre real del mes ("Febrero" en vez de "Este mes") para que la
+    // comparación mes actual/anterior no obligue a hacer la cuenta mental
+    // de qué mes es cada uno.
+    const capitalizar = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+    const nombreMesActual = capitalizar(mesIni.toLocaleDateString('es-CL', { month: 'long' }));
+    const nombreMesAnterior = capitalizar(mesPasIni.toLocaleDateString('es-CL', { month: 'long' }));
 
     return {
       cajaHoy,
@@ -1456,8 +1446,8 @@ export function Dashboard() {
       flujoPorDiaObj,
       maxFlujoDia,
       conteoPorDiaObj,
-      porMetodoMes,
-      porTipoMes,
+      nombreMesActual,
+      nombreMesAnterior,
     };
   }, [servicios, hoyStr]);
 
@@ -2100,13 +2090,13 @@ export function Dashboard() {
             cajaMesPasado={cajaMesPasado}
             deltaSemana={deltaSemana}
             deltaMes={deltaMes}
+            nombreMesActual={nombreMesActual}
+            nombreMesAnterior={nombreMesAnterior}
             porCobrarTotal={porCobrarTotal}
             totalDevueltoGarantias={totalDevueltoGarantias}
             flujoPorDiaObj={flujoPorDiaObj}
             maxFlujoDia={maxFlujoDia}
             conteoPorDiaObj={conteoPorDiaObj}
-            porMetodoMes={porMetodoMes}
-            porTipoMes={porTipoMes}
             fmt={fmt}
             onAbrirReporteMensual={() => setReporteAbierto(true)}
             onAbrirPagosPorDia={() => setPagosDiaAbierto(true)}
