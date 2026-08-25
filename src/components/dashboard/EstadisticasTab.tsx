@@ -42,6 +42,14 @@ function formatearFechaCorta(fechaStr: string): string {
   return `${d}/${m}`;
 }
 
+// Nombre real del mes ("Febrero") a partir de una fecha YYYY-MM-DD local —
+// para no obligar a hacer la cuenta mental de qué mes es "actual"/"anterior".
+function nombreMes(fechaStr: string): string {
+  const [y, m, d] = fechaStr.split('-').map(Number);
+  const texto = new Date(y, m - 1, d).toLocaleDateString('es-CL', { month: 'long' });
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
 function BarraCantidad({
   nombre,
   cantidad,
@@ -105,18 +113,29 @@ function BloqueComparacion({
   titulo,
   data,
   T,
+  esSemana,
 }: {
   titulo: string;
   data: ComparacionSemanaMes;
   T: TemaUI;
+  /** true = etiqueta con rango de fechas (semana), false = nombre del mes. */
+  esSemana: boolean;
 }) {
   const deltaTrabajos = data.actual.trabajos - data.anterior.trabajos;
+  const labelActual = esSemana
+    ? `${formatearFechaCorta(data.actual.fechaInicio)} – ${formatearFechaCorta(data.actual.fechaFin)}`
+    : nombreMes(data.actual.fechaInicio);
+  const labelAnterior = esSemana
+    ? `${formatearFechaCorta(data.anterior.fechaInicio)} – ${formatearFechaCorta(data.anterior.fechaFin)}`
+    : nombreMes(data.anterior.fechaInicio);
   return (
     <div className={`bg-slate-900/80 border ${T.borde} p-5 rounded-2xl shadow-xl backdrop-blur-md`}>
       <h3 className={`text-xs font-bold ${T.texto} uppercase tracking-widest mb-4`}>{titulo}</h3>
       <div className="grid grid-cols-2 gap-4 mb-3">
         <div>
-          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Actual</p>
+          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 truncate" title={labelActual}>
+            {labelActual}
+          </p>
           <div className="space-y-1.5">
             <FilaComparacion label="Trabajos" valor={String(data.actual.trabajos)} />
             <FilaComparacion label="Pagos" valor={String(data.actual.pagos)} />
@@ -124,7 +143,9 @@ function BloqueComparacion({
           </div>
         </div>
         <div>
-          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Anterior</p>
+          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 truncate" title={labelAnterior}>
+            {labelAnterior}
+          </p>
           <div className="space-y-1.5">
             <FilaComparacion label="Trabajos" valor={String(data.anterior.trabajos)} />
             <FilaComparacion label="Pagos" valor={String(data.anterior.pagos)} />
@@ -285,8 +306,8 @@ export function EstadisticasTab({ T, servicios, fmt }: Props) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <BloqueComparacion titulo="📆 Semana Actual vs. Anterior" data={comparacionSemana} T={T} />
-        <BloqueComparacion titulo="🗓️ Mes Actual vs. Anterior" data={comparacionMes} T={T} />
+        <BloqueComparacion titulo="📆 Semana Actual vs. Anterior" data={comparacionSemana} T={T} esSemana />
+        <BloqueComparacion titulo="🗓️ Mes Actual vs. Anterior" data={comparacionMes} T={T} esSemana={false} />
       </div>
 
       <div className={`bg-slate-900/80 border ${T.borde} p-5 rounded-2xl shadow-xl backdrop-blur-md`}>

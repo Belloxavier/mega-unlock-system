@@ -267,6 +267,8 @@ export function calcularComparacionPeriodo(servicios: Servicio[], dias: number):
 }
 
 export interface DetallePeriodoComparado {
+  fechaInicio: string; // YYYY-MM-DD local
+  fechaFin: string; // YYYY-MM-DD local
   trabajos: number;
   /** Cantidad de cobros (trabajos pagados) en el rango — el dinero en sí vive en Finanzas, acá solo la cantidad. */
   pagos: number;
@@ -293,6 +295,8 @@ function calcularDetallePeriodo(
   const porTrabajos = [...desglose].filter((d) => d.trabajos > 0).sort((a, b) => b.trabajos - a.trabajos)[0];
 
   return {
+    fechaInicio: getFechaLocal(ini),
+    fechaFin: getFechaLocal(fin),
     trabajos,
     pagos,
     promedioTrabajosPorDia: trabajos / dias,
