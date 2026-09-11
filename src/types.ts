@@ -40,6 +40,8 @@ export interface Servicio {
   costo_repuesto?: number | null;
   /** Cuándo se avisó al cliente que este equipo (ya Completado) está listo. Null = todavía no avisado. */
   avisado_at?: string | null;
+  /** Vencimiento de la garantía automática (entregado_at + 3 meses). Null si todavía no se entrega. Se calcula solo en la base de datos (trigger), nunca se escribe desde el código. */
+  garantia_vence_at?: string | null;
   clientes?: Cliente;
 }
 

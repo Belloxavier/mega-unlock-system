@@ -538,3 +538,205 @@ El usuario notó que, tras la limpieza de Estadísticas, "Mes Actual vs. Anterio
 - Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores.
 - Git: commit `e91b000` en `main`, pusheado a `origin/main`. Working tree limpio (pendiente de agregar esta entrada del registro).
 ---
+
+---
+## [2026-09-10 00:00] Garantía automática de 3 meses por equipo entregado
+
+### Instrucción recibida
+El usuario pidió (spec detallada, 5 puntos): (1) columna `garantia_vence_at` en `servicios` = `entregado_at + 3 meses`, null si no entregado; (2) backfill retroactivo sobre TODOS los registros ya entregados, sin excepción por fecha; (3) cálculo automático de ahí en adelante, sin acción manual; (4) badge visual 🟢/🔴 en Historial y Área de Trabajo, al lado de cada equipo (no correo, no banner agregado — es información de consulta, no toca la tabla `garantias` que es para reclamos); (5) seguir el workflow de siempre (local primero, avisar qué migración se necesita, no aplicar a producción sin visto bueno explícito), y registrar en PROGRESS_LOG.md.
+
+Entre medio, también pidió (fuera de esta tarea) un resumen técnico completo del proyecto para pasarle a otra IA — se entregó como texto en el chat, sin tocar archivos, así que no generó una entrada propia en este registro.
+
+### Comandos ejecutados (todos, en orden)
+- `Read` de `HistorialServicios.tsx` completo (post cambios de sesiones anteriores: MenuImprimir, etc.) para ubicar dónde insertar el badge en tarjeta móvil y tabla de escritorio.
+- `Write supabase/migrations/0024_garantia_vence_at.sql` → `alter table` (columna nueva), `update` de backfill (todos los `entregado_at is not null and garantia_vence_at is null`), función `calcular_garantia_vence_at()` + trigger `trg_garantia_vence_at` (`before insert or update of entregado_at`) que recalcula automáticamente — si `entregado_at` se limpia (ej. "Reactivar" un trabajo), `garantia_vence_at` también se limpia.
+- Edit en `src/types.ts` → agregó `garantia_vence_at?: string | null` a la interfaz `Servicio`.
+- `Write src/lib/garantia.ts` → nueva función `calcularEstadoGarantia(garantiaVenceAt)`, devuelve `null` si no hay fecha (equipo no entregado) o `{ vigente, diasRestantes }`.
+- `Write src/components/dashboard/components/BadgeGarantia.tsx` → nuevo componente, renderiza 🟢 "Garantía: X días" o 🔴 "Sin garantía", o nada si `calcularEstadoGarantia` devuelve null.
+- Edit en `HistorialServicios.tsx` (import + tarjeta móvil + tabla de escritorio) → `<BadgeGarantia garantiaVenceAt={s.garantia_vence_at} />` junto al nombre del modelo en ambos layouts.
+- `Read` de `AreaTrabajoTab.tsx` (primeras 100 líneas, `TrabajoCard`) → confirmó estructura antes de tocar.
+- Edit en `AreaTrabajoTab.tsx` (import + `TrabajoCard`) → mismo badge, junto a tipo de trabajo/nota.
+- `npx tsc --noEmit -p tsconfig.app.json && npm run build && npm run lint` → los tres limpios.
+- Presentó el resumen de la migración necesaria y preguntó cómo seguir (usuario: "Aplícala ahora").
+- `AskUserQuestion` → se pidió un access token de la Management API de Supabase (mismo procedimiento que sesiones anteriores); el usuario lo pegó directamente en el chat.
+- `Write` del payload JSON a `migracion_0024.json` en el scratchpad (mismo patrón que evitó la corrupción de encoding UTF-8 de una sesión anterior, aunque esta migración en particular no tenía caracteres fuera de ASCII en el SQL ejecutable, solo en comentarios).
+- `curl --data-binary @migracion_0024.json` contra la Management API → `[]` (sin error).
+- `curl` de verificación (3 consultas): conteo de entregados vs. con garantía calculada (756/756, 0 inconsistencias), estado del trigger (`tgenabled: 'O'` = activo), muestra de 3 filas confirmando `garantia_vence_at = entregado_at + 3 meses` exacto.
+- (Usuario: "Espera, quiero probarlo en la app primero" — código NO subido a GitHub todavía)
+
+### Archivos tocados (todos)
+- `supabase/migrations/0024_garantia_vence_at.sql` — nuevo — **aplicado en producción**, verificado.
+- `src/types.ts` — modificado — nuevo campo `garantia_vence_at` en `Servicio`.
+- `src/lib/garantia.ts` — nuevo — cálculo de vigencia/días restantes.
+- `src/components/dashboard/components/BadgeGarantia.tsx` — nuevo — el badge visual.
+- `src/components/dashboard/components/HistorialServicios.tsx` — modificado — badge en tarjeta móvil y tabla de escritorio.
+- `src/components/dashboard/AreaTrabajoTab.tsx` — modificado — badge en `TrabajoCard`.
+
+### Hallazgos y decisiones
+- El cálculo automático se implementó como **trigger de base de datos**, no como lógica en el código de React — así funciona sin importar desde dónde se actualice `entregado_at` (Dashboard.tsx hoy, cualquier función futura, o incluso una corrección manual por SQL), sin tener que acordarse de duplicar la fórmula en cada lugar que toque esa columna.
+- El trigger también LIMPIA `garantia_vence_at` a null si `entregado_at` vuelve a null (ej. al usar "Reactivar" sobre un trabajo marcado como entregado por error) — evita que quede una fecha de garantía fantasma sobre un trabajo que ya no está entregado.
+- El backfill fue un `UPDATE` directo (no depende del trigger, que solo dispara con cambios de `entregado_at`) — necesario porque los registros ya existentes no iban a "cambiar" esa columna al aplicar la migración.
+- El badge deliberadamente NO se agregó como un banner agregado tipo `AlertasFiados`/`AlertasAtascados` — el usuario pidió explícitamente que fuera información al lado de cada equipo individual, no un listado aparte; se reutilizó el estilo visual de badge/pill compacto (`px-2 py-1 rounded-full border`, mismo patrón que otros badges de estado ya existentes en la app), no la estructura de esos banners.
+- No se tocó la tabla `garantias` en ningún punto — es un concepto completamente separado (reclamos post-entrega), tal como pidió el usuario.
+- Migración aplicada directamente a producción con confirmación explícita del usuario ("Aplícala ahora"), verificada con 3 consultas antes de dar por buena. El código (React) queda sin subir a GitHub a pedido del usuario, hasta que lo pruebe visualmente en la app.
+
+### Estado final
+- Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores.
+- Git: **sin commitear** — cambios locales pendientes (`supabase/migrations/0024_garantia_vence_at.sql`, `src/types.ts`, `src/lib/garantia.ts`, `src/components/dashboard/components/BadgeGarantia.tsx`, `src/components/dashboard/components/HistorialServicios.tsx`, `src/components/dashboard/AreaTrabajoTab.tsx`). Usuario pidió esperar a probarlo antes de subir.
+- Supabase: migración `0024` **aplicada y verificada en producción** (backfill 756/756 correcto, trigger activo).
+---
+
+---
+## [2026-09-10 00:30] Rediseño: badge de garantía sale de Historial/Área de Trabajo, nueva sub-pestaña "Cobertura" en Garantías
+
+### Instrucción recibida
+El usuario probó el badge de garantía en el dev local y mandó una captura: se veía saturado visualmente en la tabla de Historial (badges empujando el texto del modelo, filas desalineadas). Pidió: (1) quitar el badge de `HistorialServicios.tsx` y `AreaTrabajoTab.tsx`, dejarlos como estaban antes de esa entrada; (2) rediseñar `GarantiasTab.tsx` en dos sub-pestañas: "Reclamos" (la tabla que ya existía, sin tocar su lógica) y "Cobertura" (nueva) — un buscador por cliente, reutilizando el mismo mecanismo que ya usa Clientes, mostrando los equipos ENTREGADO de ese cliente con el badge de garantía.
+
+### Comandos ejecutados (todos, en orden)
+- Análisis de la captura enviada por el usuario → confirmó el problema (badge ocupando demasiado espacio junto al nombre del modelo, filas desalineadas en la tabla de escritorio).
+- Edit en `HistorialServicios.tsx` (import + tarjeta móvil + tabla de escritorio) → revertido el `<BadgeGarantia>`, vuelve exactamente al estado anterior.
+- Edit en `AreaTrabajoTab.tsx` (import + `TrabajoCard`) → mismo revert.
+- `Grep "GarantiasTab|resultadosBusquedaCliente|busquedaClienteHistorial"` en `Dashboard.tsx` → ubicó el memo de búsqueda por cliente de Clientes y el punto de render de `GarantiasTab`.
+- `Read` de ese memo (`resultadosBusquedaCliente`, ~25 líneas) → confirmó la lógica exacta a reutilizar (agrupar por `nombre_normalizado`, mostrar nombre original, ordenar por cantidad de trabajos).
+- `Read` completo de `GarantiasTab.tsx` (antes de tocarlo) → confirmó la estructura de "Reclamos" (formulario + ranking + historial) que no debía modificarse.
+- Edit en `Dashboard.tsx` → nueva función a nivel de módulo `agruparPorClienteCoincidente(servicios, texto)` (extraída del cuerpo de `resultadosBusquedaCliente` para no duplicar la lógica); `resultadosBusquedaCliente` refactorizado para llamarla; nuevo estado `busquedaCobertura`; nuevo memo `resultadosCobertura` (mismo agrupador, pero sobre `servicios.filter(s => s.estado === 'ENTREGADO')` en vez de la tabla completa); nuevas props pasadas a `<GarantiasTab>`.
+- Edit en `GarantiasTab.tsx` → renombró el contenido existente a un componente interno `GarantiasReclamos` (mismo JSX, sin cambios de lógica); nuevo componente `GarantiasCobertura` (buscador + resultados agrupados por cliente, cada equipo con `<BadgeGarantia>` y su fecha de entrega); nuevo `export function GarantiasTab` como wrapper con toggle de sub-pestañas (`🛠️ Reclamos` / `🛡️ Cobertura`), estado local `vista`.
+- `npx tsc --noEmit -p tsconfig.app.json` → limpio.
+- `npm run build` → build exitoso (376ms).
+- `npm run lint` → sin errores.
+- (Usuario: "Espera a que lo pruebe" — código sigue sin subir a GitHub)
+
+### Archivos tocados (todos)
+- `src/components/dashboard/components/HistorialServicios.tsx` — modificado — revertido a como estaba antes del badge de garantía.
+- `src/components/dashboard/AreaTrabajoTab.tsx` — modificado — mismo revert.
+- `src/components/dashboard/Dashboard.tsx` — modificado — nueva función `agruparPorClienteCoincidente` (reutilizada por Clientes y Garantías→Cobertura), nuevo estado/memo `busquedaCobertura`/`resultadosCobertura`, nuevas props hacia `GarantiasTab`.
+- `src/components/dashboard/GarantiasTab.tsx` — modificado — reestructurado en sub-pestañas: `GarantiasReclamos` (contenido original sin cambios), `GarantiasCobertura` (nuevo), `GarantiasTab` (wrapper con toggle).
+
+### Hallazgos y decisiones
+- Se extrajo la lógica de agrupación por cliente a una función compartida (`agruparPorClienteCoincidente`) en vez de copiar y pegar el mismo bloque para Cobertura — exactamente lo que pidió el usuario ("reutiliza el mismo mecanismo de búsqueda"), y evita que un futuro cambio en cómo se agrupa/ordena tenga que replicarse en dos lugares.
+- "Cobertura" filtra a `estado === 'ENTREGADO'` ANTES de agrupar (no después) — así un cliente con equipos en otros estados no aparece en absoluto en esa búsqueda si no tiene ningún entregado, y el conteo mostrado ("N equipos") ya refleja solo los que tienen garantía calculada.
+- El badge de garantía (`BadgeGarantia`, creado en la entrada anterior) no se tocó — solo cambió DÓNDE se usa: antes en cada fila de Historial/Área de Trabajo (saturado visualmente), ahora solo dentro de la búsqueda dedicada de Cobertura, donde hay más espacio y contexto.
+- La tabla de "Reclamos" (formulario + ranking + historial de garantías) no tuvo ningún cambio de lógica, solo se movió a un componente interno separado para poder envolverla en el toggle de sub-pestañas.
+
+### Estado final
+- Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores.
+- Git: **sin commitear** — todo lo de esta entrada más lo pendiente de la entrada anterior (migración `0024` ya aplicada en producción, código local sin subir). Usuario pidió esperar a probarlo.
+- Supabase: sin cambios en esta entrada (la migración `0024` ya estaba aplicada desde antes).
+---
+
+---
+## [2026-09-10 00:45] Texto del badge de garantía: aclara vigente/vencida con fecha exacta
+
+### Instrucción recibida
+El usuario notó que "Garantía: X días" era ambiguo (no quedaba claro si eran los días restantes o los transcurridos). Pidió: (1) cambiar a "Vence en X días" cuando está vigente; (2) agregar la fecha exacta de vencimiento junto al texto, ej. "Vence en 83 días (02 dic 2026)"; (3) para vencidas, "Sin garantía (venció el DD mmm)" con la fecha exacta en que se cumplieron los 3 meses.
+
+### Comandos ejecutados (todos, en orden)
+- `Grep "export function|toLocaleDateString"` en `lib/date.ts` → sin resultados (los helpers ahí son `export const`, no `export function`); `Grep "^export"` → confirmó que no existía un formateador "DD mmm YYYY" ya hecho, solo `getFechaCorta` (formato "lunes DD/MM").
+- `Read` completo de `lib/date.ts` → confirmó `ZONA_HORARIA` exportado, reutilizable para formatear en hora de Chile (mismo criterio que el resto de la app) en vez de la zona horaria del navegador.
+- Edit en `lib/garantia.ts` → `EstadoGarantia` ganó el campo `fechaFormateada` (`toLocaleDateString('es-CL', { timeZone: ZONA_HORARIA, day:'2-digit', month:'short', year:'numeric' })`, ej. "02 dic 2026"); `calcularEstadoGarantia` la calcula y devuelve.
+- Edit en `BadgeGarantia.tsx` → texto vigente cambiado a "🟢 Vence en X días (fecha)"; texto vencida cambiado a "🔴 Sin garantía (venció el fecha)".
+- `npx tsc --noEmit -p tsconfig.app.json && npm run build && npm run lint` → los tres limpios.
+- (Usuario: "Espera a que lo pruebe" — código sigue sin subir a GitHub)
+
+### Archivos tocados (todos)
+- `src/lib/garantia.ts` — modificado — nuevo campo `fechaFormateada` en `EstadoGarantia`.
+- `src/components/dashboard/components/BadgeGarantia.tsx` — modificado — texto de ambos estados (vigente/vencida) con la fecha exacta.
+
+### Hallazgos y decisiones
+- La fecha se formatea explícitamente en la zona horaria de Chile (`America/Santiago`), no en la del navegador — mismo criterio que el resto del proyecto (`getFechaLocal`, etc.), para que no varíe según dónde esté físicamente quien mira la pantalla.
+
+### Estado final
+- Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores.
+- Git: **sin commitear** — se suma a lo pendiente de las 2 entradas anteriores (migración `0024` aplicada en producción, código local sin subir). Usuario pidió esperar a probarlo.
+- Supabase: sin cambios en esta entrada.
+---
+
+---
+## [2026-09-10 01:00] Cobertura: de buscador-vacío-por-defecto a lista completa paginada
+
+### Instrucción recibida
+El usuario pidió no dejar "Cobertura" vacía hasta escribir un nombre. En dos mensajes: (1) por defecto mostrar TODOS los equipos ENTREGADO con su garantía; selector de orden "Más reciente"/"Más antiguo" por fecha de entrega; filas "Sin garantía" en rojo/alerta visualmente distinguidas (no solo texto); el buscador filtra esta misma lista en vez de ser la única forma de ver algo; con 779 entregados, cuidar el rendimiento con paginación/límite. (2) Aclaración: al buscar por cliente, mostrar TODOS sus equipos entregados (vigentes Y vencidos), no ocultar los que perdieron la garantía.
+
+### Comandos ejecutados (todos, en orden)
+- `Read` de la sección de `Dashboard.tsx` donde vivía `resultadosCobertura` (agrupado por cliente, versión anterior) para planear el reemplazo.
+- Edit en `Dashboard.tsx` → reemplazó `resultadosCobertura` (agrupado, requería búsqueda) por `equiposCobertura`: lista PLANA de `Servicio[]` filtrada a `estado === 'ENTREGADO'`, opcionalmente acotada por nombre/teléfono si hay búsqueda (sin excluir vencidos), ordenada por `entregado_at` según `ordenCobertura`; nuevo estado `ordenCobertura` (`'reciente' | 'antiguo'`, default `'reciente'`); wiring actualizado hacia `GarantiasTab` (`equiposCobertura`/`ordenCobertura`/`onOrdenCobertura` en vez de `resultadosCobertura`).
+- Edit en `GarantiasTab.tsx` → `Props` actualizado (mismo cambio de forma); `GarantiasCobertura` reescrito por completo: quitó el agrupado por cliente, ahora renderiza una lista plana de tarjetas-fila (una por equipo), cada una con `background`/`border` verde o rojo tenue según `calcularEstadoGarantia(...).vigente` (no solo el badge, la fila entera); agregó selector de orden (2 botones); agregó paginación local (`PAGE_SIZE_COBERTURA = 20`, estado `pagina`, `useEffect` que resetea a página 1 cuando cambia búsqueda u orden); mensaje vacío distingue "sin resultados de búsqueda" de "no hay equipos entregados todavía".
+- `npx tsc --noEmit -p tsconfig.app.json` → limpio.
+- `npm run build` → build exitoso (383ms).
+- `npm run lint` → sin errores.
+- (Usuario: "Espera a que lo pruebe" — código sigue sin subir a GitHub)
+
+### Archivos tocados (todos)
+- `src/components/dashboard/Dashboard.tsx` — modificado — `equiposCobertura` (lista plana) reemplaza `resultadosCobertura` (agrupada); nuevo estado `ordenCobertura`.
+- `src/components/dashboard/GarantiasTab.tsx` — modificado — `GarantiasCobertura` reescrito: lista plana con color por fila, selector de orden, paginación local.
+
+### Hallazgos y decisiones
+- La paginación es puramente de VISTA (estado local en `GarantiasCobertura`, `useState` + slice del arreglo), no server-side — los 779 equipos entregados ya viven en memoria (misma tabla `servicios` que usa toda la app), así que no hace falta ninguna consulta nueva a Supabase; el "cuidado con el rendimiento" pedido es sobre cuántas filas se pintan en el DOM a la vez, no sobre cuántos datos se traen de la base.
+- Al buscar por cliente, el filtro se aplica ANTES de decidir qué mostrar (no hay una rama separada "con búsqueda" vs "sin búsqueda" que oculte vencidos) — así se garantiza que el historial de garantía de un cliente buscado siempre esté completo, vigentes y vencidos, tal como pidió el usuario en su segundo mensaje.
+- El color de fila (verde/rojo tenue en `background`+`border`) se calculó a partir del mismo `calcularEstadoGarantia` que ya usa `BadgeGarantia` — ninguna lógica de vigencia nueva, solo se le agregó una consecuencia visual a nivel de fila además del badge.
+
+### Estado final
+- Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores.
+- Git: **sin commitear** — se suma a lo pendiente de las 3 entradas anteriores (migración `0024` aplicada en producción, código local sin subir). Usuario pidió esperar a probarlo.
+- Supabase: sin cambios en esta entrada.
+---
+
+---
+## [2026-09-10 01:30] Bug real encontrado por el usuario: "sin dato" se mostraba como "vencido" en Cobertura
+
+### Instrucción recibida
+El usuario mandó una captura: dos equipos entregados con 1 día de diferencia (2026-07-29 y 2026-07-28) mostraban garantías incompatibles (uno "Vence en 49 días", el otro en rojo sin badge) — matemáticamente imposible con solo 1 día de diferencia real. Pidió: (1) contar cuántos `ENTREGADO` tienen `garantia_vence_at` null; (2) investigar por qué se cortó el backfill (¿límite de filas, rango de fechas, error silencioso?); (3) corregir el backfill para cubrir TODOS los históricos, y revisar que el componente no confunda "sin dato" con "vencido". Pidió confirmación de cuántos registros tenían el problema y que quedaran corregidos antes de subir nada.
+
+### Comandos ejecutados (todos, en orden)
+- `Grep "estado\?\.vigente|calcularEstadoGarantia"` en `GarantiasTab.tsx` → confirmó la sospecha del usuario: `estado?.vigente ? verde : rojo` colapsa `estado === null` (sin dato) y `estado.vigente === false` (vencida) en la misma rama roja.
+- `AskUserQuestion` → se pidió el access token de la Management API (el usuario reutilizó el mismo de la sesión anterior).
+- `curl` de diagnóstico (1 query con 4 `count(*) filter`) → **total ENTREGADO: 779, sin `entregado_at`: 24, con `entregado_at` pero sin `garantia_vence_at`: 0, con garantía: 755**. Confirmó que el backfill/trigger de la migración 0024 funcionó al 100% sobre cualquier fila que SÍ tuviera `entregado_at` — el hueco no es un backfill cortado, es que esas 24 filas nunca tuvieron `entregado_at` en absoluto.
+- `curl` → trajo los 24 registros completos (folio, created_at, pagado_at, completado_at, entregado_at) → los 24 son del mismo día (2026-07-28), sin folio, con `pagado_at` idéntico a `created_at` — patrón de datos anteriores al sistema de folios (migración 0011) y a que `entregado_at` se guardara consistentemente.
+- `curl` de confirmación (min/max created_at, conteo sin folio, conteo con pagado_at=created_at) → confirmó: los 24 caen exactamente en una sola fecha (2026-07-28 14:34 a 20:55), 24/24 sin folio, 24/24 con `pagado_at = created_at`.
+- `Grep "handleCambiarEstado"` + `Read` de `aplicarCambioEstado` en `Dashboard.tsx` → confirmó que el código actual SIEMPRE setea `entregado_at` al pasar a ENTREGADO — el hueco no puede repetirse con uso normal de la app, es puramente histórico.
+- Presentó el diagnóstico completo al usuario y preguntó cómo tratar los 24 (aproximar con `created_at` vs. dejarlos sin fecha con badge neutro).
+- `AskUserQuestion` → el usuario eligió explícitamente NO inventar una fecha: dejar `entregado_at`/`garantia_vence_at` en null para esos 24, y mostrar un badge "Sin dato" distinto.
+- Edit en `BadgeGarantia.tsx` → cuando `calcularEstadoGarantia` devuelve `null`, ahora renderiza "⚪ Sin dato" (antes retornaba `null`, invisible) — con comentario explicando que este componente solo se usa donde ya se filtró a ENTREGADO, así que null siempre significa "sin fecha registrada", nunca "no entregado todavía".
+- Edit en `GarantiasTab.tsx` (`GarantiasCobertura`) → color de fila con 3 ramas (`!estado` → gris neutro, `estado.vigente` → verde, si no → rojo) en vez de la rama binaria que causaba el bug.
+- Edit en `GarantiasTab.tsx` (misma fila, texto de fecha) → antes decía "entregado {fecha}" cayendo en `created_at` sin avisar cuando `entregado_at` era null; ahora distingue explícitamente: "entregado {fecha}" si hay dato real, o "creado {fecha} (sin fecha de entrega registrada)" si no.
+- `npx tsc --noEmit -p tsconfig.app.json && npm run build && npm run lint` → los tres limpios.
+- (Usuario: "Espera a que lo pruebe" — código sigue sin subir a GitHub)
+
+### Archivos tocados (todos)
+- `src/components/dashboard/components/BadgeGarantia.tsx` — modificado — nuevo estado visual "Sin dato" (gris) en vez de no renderizar nada.
+- `src/components/dashboard/GarantiasTab.tsx` — modificado — color de fila de 3 ramas; texto de fecha honesto (no confunde `created_at` con `entregado_at`).
+
+### Hallazgos y decisiones
+- **No hubo ningún cambio en la base de datos en esta entrada** — a pedido explícito del usuario, se decidió NO fabricar una fecha de entrega para los 24 registros legacy, aunque `pagado_at` coincidiera exactamente con `created_at` y hubiera sido la aproximación más obvia. La corrección fue puramente de UI: mostrar honestamente "sin dato" en vez de inventar información o confundirla visualmente con "vencida".
+- El bug reportado por el usuario era 100% real y se debía a un patrón común de JS (`x?.propiedad ? A : B` trata `undefined` igual que `false`) — ambos casos (sin dato / vencida) colapsaban a la misma rama visual pese a ser conceptos completamente distintos.
+- Se descartó la hipótesis original del usuario ("el backfill se cortó") con evidencia directa: 0 filas con `entregado_at` real quedaron sin `garantia_vence_at`. Vale la pena que quede registrado que la sospecha inicial, aunque razonable, no era la causa — el diagnóstico con datos reales encontró algo distinto (y más simple de corregir sin tocar la base) de lo que se sospechaba al principio.
+
+### Estado final
+- Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores.
+- Git: **sin commitear** — se suma a lo pendiente de las 4 entradas anteriores (migración `0024` aplicada en producción, código local sin subir). Usuario pidió esperar a probarlo.
+- Supabase: **sin cambios en esta entrada** — los 24 registros siguen con `garantia_vence_at = null`, a propósito, por decisión explícita del usuario.
+---
+
+---
+## [2026-09-10 01:35] Garantías abre en Cobertura por defecto
+
+### Instrucción recibida
+El usuario pidió que la pestaña Garantías muestre "Cobertura" por defecto en vez de "Reclamos" al entrar.
+
+### Comandos ejecutados (todos, en orden)
+- `Grep "useState<'reclamos' \| 'cobertura'>\('reclamos'\)"` en `GarantiasTab.tsx` → ubicó el estado local `vista`.
+- Edit en `GarantiasTab.tsx` → default cambiado de `'reclamos'` a `'cobertura'`.
+- `npx tsc --noEmit -p tsconfig.app.json && npm run build && npm run lint` → los tres limpios.
+- (Usuario: "Espera a que lo pruebe" — código sigue sin subir a GitHub)
+
+### Archivos tocados (todos)
+- `src/components/dashboard/GarantiasTab.tsx` — modificado — una línea, default del toggle de sub-pestaña.
+
+### Hallazgos y decisiones
+- Cambio trivial, sin lógica nueva — se suma al resto de cambios de garantía automática ya acumulados sin subir.
+
+### Estado final
+- Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso, `npm run lint` sin errores.
+- Git: **sin commitear** — se suma a lo pendiente de las entradas anteriores. Usuario pidió esperar a probarlo.
+- Supabase: sin cambios.
+---

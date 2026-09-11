@@ -64,6 +64,42 @@ function filtrarPorEstadoConActivos(base: Servicio[], filtroEstado: string): Ser
   return base.filter((s) => s.estado === filtroEstado);
 }
 
+export interface GrupoClienteConTrabajos {
+  nombre: string;
+  telefono?: string;
+  trabajos: Servicio[];
+}
+
+// Mismo mecanismo de búsqueda por cliente que usa la pestaña Clientes
+// (agrupa por nombre_normalizado, muestra el primer nombre original visto)
+// — reutilizado también por Garantías → Cobertura, pasándole de antemano
+// un subconjunto ya filtrado (ej. solo ENTREGADO) en vez de duplicar la
+// lógica de agrupación.
+function agruparPorClienteCoincidente(servicios: Servicio[], textoBuscado: string): GrupoClienteConTrabajos[] {
+  const q = normalizarNombre(textoBuscado.trim());
+  if (!q) return [];
+  const coincidencias = servicios.filter((s) => {
+    const nombre = normalizarNombre(s.clientes?.nombre || '');
+    const telefono = s.clientes?.telefono || '';
+    return nombre.includes(q) || telefono.includes(textoBuscado.trim());
+  });
+  const grupos = new Map<string, GrupoClienteConTrabajos>();
+  coincidencias.forEach((s) => {
+    const nombreOriginal = s.clientes?.nombre || 'Sin cliente';
+    const clave = normalizarNombre(nombreOriginal);
+    if (!grupos.has(clave)) {
+      grupos.set(clave, { nombre: nombreOriginal, telefono: s.clientes?.telefono, trabajos: [] });
+    }
+    grupos.get(clave)!.trabajos.push(s);
+  });
+  return Array.from(grupos.values())
+    .map((g) => ({
+      ...g,
+      trabajos: [...g.trabajos].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+    }))
+    .sort((a, b) => b.trabajos.length - a.trabajos.length);
+}
+
 const NIVELES_GARANTIA = [
   'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
   'bg-amber-500/10 text-amber-400 border-amber-500/30',
@@ -128,6 +164,8 @@ export function Dashboard() {
   const [filtroFechaClientes, setFiltroFechaClientes] = useState('todos');
   const [filtroTipoContacto, setFiltroTipoContacto] = useState<'todos' | 'tecnico' | 'cliente'>('todos');
   const [busquedaClienteHistorial, setBusquedaClienteHistorial] = useState('');
+  const [busquedaCobertura, setBusquedaCobertura] = useState('');
+  const [ordenCobertura, setOrdenCobertura] = useState<'reciente' | 'antiguo'>('reciente');
 
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [clienteIdAsociado, setClienteIdAsociado] = useState<string | null>(null);
@@ -1652,31 +1690,34 @@ export function Dashboard() {
   // Trabajo, acá el punto es ver la ficha completa de una persona, no una
   // página filtrada. Agrupa por nombre normalizado por si el texto buscado
   // calza con más de un cliente (ej. "jose" trae a todos los José).
-  const resultadosBusquedaCliente = useMemo(() => {
-    const textoBuscado = busquedaClienteHistorial.trim();
+  const resultadosBusquedaCliente = useMemo(
+    () => agruparPorClienteCoincidente(servicios, busquedaClienteHistorial),
+    [servicios, busquedaClienteHistorial]
+  );
+
+  // Garantías → Cobertura: lista PLANA (no agrupada) de todos los equipos
+  // ENTREGADO — sin buscar nada, se ven todos; al escribir un nombre/
+  // teléfono se acota a ese cliente (vigentes Y vencidos, el historial
+  // completo de garantía de esa persona, no solo lo que sigue vigente).
+  // Ordenada por fecha de entrega, paginada del lado de GarantiasTab (los
+  // datos ya están en memoria, no hace falta traer nada nuevo del server).
+  const equiposCobertura = useMemo(() => {
+    const entregados = servicios.filter((s) => s.estado === 'ENTREGADO');
+    const textoBuscado = busquedaCobertura.trim();
     const q = normalizarNombre(textoBuscado);
-    if (!q) return [];
-    const coincidencias = servicios.filter((s) => {
-      const nombre = normalizarNombre(s.clientes?.nombre || '');
-      const telefono = s.clientes?.telefono || '';
-      return nombre.includes(q) || telefono.includes(textoBuscado);
+    const filtrados = !q
+      ? entregados
+      : entregados.filter((s) => {
+          const nombre = normalizarNombre(s.clientes?.nombre || '');
+          const telefono = s.clientes?.telefono || '';
+          return nombre.includes(q) || telefono.includes(textoBuscado);
+        });
+    return [...filtrados].sort((a, b) => {
+      const da = new Date(a.entregado_at || a.created_at).getTime();
+      const db = new Date(b.entregado_at || b.created_at).getTime();
+      return ordenCobertura === 'reciente' ? db - da : da - db;
     });
-    const grupos = new Map<string, { nombre: string; telefono?: string; trabajos: Servicio[] }>();
-    coincidencias.forEach((s) => {
-      const nombreOriginal = s.clientes?.nombre || 'Sin cliente';
-      const clave = normalizarNombre(nombreOriginal);
-      if (!grupos.has(clave)) {
-        grupos.set(clave, { nombre: nombreOriginal, telefono: s.clientes?.telefono, trabajos: [] });
-      }
-      grupos.get(clave)!.trabajos.push(s);
-    });
-    return Array.from(grupos.values())
-      .map((g) => ({
-        ...g,
-        trabajos: [...g.trabajos].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
-      }))
-      .sort((a, b) => b.trabajos.length - a.trabajos.length);
-  }, [servicios, busquedaClienteHistorial]);
+  }, [servicios, busquedaCobertura, ordenCobertura]);
 
   const garantiasConIntensidad = useMemo(() => {
     const ordenadasAsc = [...garantiasList].sort(
@@ -2116,6 +2157,11 @@ export function Dashboard() {
             garantiasConIntensidad={garantiasConIntensidad}
             rankingClientesGarantiasMes={rankingClientesGarantiasMes}
             guardando={guardandoGarantia}
+            busquedaCobertura={busquedaCobertura}
+            equiposCobertura={equiposCobertura}
+            ordenCobertura={ordenCobertura}
+            onBusquedaCobertura={setBusquedaCobertura}
+            onOrdenCobertura={setOrdenCobertura}
             fmt={fmt}
             onFolioChange={(v) => {
               setFolioGarantia(v);
