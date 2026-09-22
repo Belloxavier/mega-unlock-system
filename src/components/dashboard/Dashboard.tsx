@@ -480,6 +480,7 @@ export function Dashboard() {
             nota: eq.nota.trim() || null,
             costo_repuesto: tipoContacto === 'cliente' && eq.costoRepuesto.trim() ? parseFloat(eq.costoRepuesto) : null,
             modelo_normalizado: normalizarModelo(eq.modelo),
+            garantia_meses: eq.garantiaMeses,
           })
           .eq('id', editandoId);
 
@@ -583,6 +584,7 @@ export function Dashboard() {
         es_revision: eq.esRevision,
         nota: eq.nota.trim() || null,
         costo_repuesto: tipoContacto === 'cliente' && eq.costoRepuesto.trim() ? parseFloat(eq.costoRepuesto) : null,
+        garantia_meses: eq.garantiaMeses,
       }));
 
       const { error: servicioError } = await supabase.from('servicios').insert(filas);
@@ -620,6 +622,7 @@ export function Dashboard() {
         esRevision: s.es_revision || false,
         nota: s.nota || '',
         costoRepuesto: s.costo_repuesto != null ? String(s.costo_repuesto) : '',
+        garantiaMeses: s.garantia_meses ?? 3,
       },
     ]);
     setVista('inicio');

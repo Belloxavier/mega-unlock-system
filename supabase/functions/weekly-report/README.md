@@ -1,5 +1,28 @@
 # Reporte semanal por correo
 
+## Recuperación y diagnóstico
+
+Las consultas rechazadas con `PGRST303: JWT issued at future` se repiten
+hasta tres veces (esperas de 1, 3 y 7 segundos). Si alguna de las tres
+consultas falla definitivamente, no se envía un reporte parcial. El envío
+SMTP nunca se reintenta automáticamente para evitar duplicados.
+
+Para comprobar configuración y consultas sin enviar correo, invoca la misma
+URL con `?diagnostico=1` y el header `X-Cron-Secret` habitual. Una respuesta
+`ok: true, diagnostico: true, enviado: false` confirma acceso a los datos y
+presencia de configuración, pero no prueba la contraseña SMTP ni entrega a
+la bandeja del destinatario. El diagnóstico no cambia el cron.
+
+Los logs de la función registran `correo_consulta_reintento`, `correo_fallido`
+(con etapa de configuración, consulta o SMTP) y `correo_enviado`. Este último
+significa que SMTP aceptó el envío, no que llegó a la bandeja de entrada.
+El estado `succeeded` de pg_cron solo confirma que se encoló la petición HTTP.
+Si el fallo persiste tras los reintentos, revisar los logs y el servicio de
+datos de Supabase; no desactivar la validación JWT ni cambiar claves a ciegas.
+
+Pruebas locales (Node 24 y dependencias del proyecto):
+`node --test supabase/functions/_shared/consultasCorreo.test.mjs`.
+
 Envía un resumen semanal (caja, ranking de técnicos/clientes, tipo de trabajo
 más frecuente, tiempo promedio de reparación) a los correos configurados.
 100% gratis: usa Gmail SMTP para enviar y el cron nativo de Supabase para

@@ -16,8 +16,9 @@
 // es CRON_SHARED_SECRET: la función exige el header X-Cron-Secret y lo
 // compara contra este secreto antes de hacer nada.
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.110.9';
 import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
+import { consultarCorreo, configuracionCorreo } from '../_shared/consultasCorreo.ts';
 
 const ZONA_HORARIA = 'America/Santiago';
 const DEFAULT_RECIPIENTS = ['belloxavier22@gmail.com', 'moratinosandrea@gmail.com'];
@@ -119,112 +120,127 @@ Deno.serve(async (req) => {
     });
   }
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const gmailUser = Deno.env.get('GMAIL_USER')!;
-  const gmailAppPassword = Deno.env.get('GMAIL_APP_PASSWORD')!;
-  const recipients = (Deno.env.get('REPORT_RECIPIENTS') || DEFAULT_RECIPIENTS.join(',')).split(',').map((s) => s.trim());
+  let etapa = 'configuracion';
+  try {
+    const soloDiagnostico = new URL(req.url).searchParams.get('diagnostico') === '1';
+    const { supabaseUrl, serviceRoleKey, gmailUser, gmailAppPassword, recipients } =
+      configuracionCorreo((nombre) => Deno.env.get(nombre), DEFAULT_RECIPIENTS);
 
-  const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    etapa = 'consulta';
 
-  const ahora = new Date();
-  const hace7dias = new Date(ahora.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const ahora = new Date();
+    const hace7dias = new Date(ahora.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  // Las 3 consultas son independientes entre sí — se disparan en paralelo
-  // en vez de una tras otra, para no sumar sus latencias de red.
-  const [
-    { data: serviciosSemana, error },
-    { data: pagosSemana },
-    { count: atascados },
-  ] = await Promise.all([
-    supabase
-      .from('servicios')
-      .select('id, modelo_equipo, tipo_trabajo, monto, estado, created_at, completado_at, clientes ( nombre, tipo_contacto )')
-      .gte('created_at', hace7dias.toISOString()),
-    // La caja se calcula por cuándo se COBRÓ (pagado_at), no por cuándo se
-    // registró el trabajo: un trabajo de la semana pasada cobrado esta
-    // semana cuenta para la caja de esta semana, y viceversa.
-    supabase
-      .from('servicios')
-      .select('monto')
-      .eq('pagado', true)
-      .gte('pagado_at', hace7dias.toISOString())
-      .lte('pagado_at', ahora.toISOString()),
-    supabase
-      .from('servicios')
-      .select('id', { count: 'exact', head: true })
-      .in('estado', ENTALLER_ESTADOS)
-      .lt('created_at', new Date(ahora.getTime() - 24 * 60 * 60 * 1000).toISOString()),
-  ]);
+    // Las 3 consultas son independientes entre sí — se disparan en paralelo
+    // en vez de una tras otra, para no sumar sus latencias de red.
+    const [
+      { data: serviciosSemana },
+      { data: pagosSemana },
+      { count: atascados },
+    ] = await consultarCorreo(() => Promise.all([
+      supabase
+        .from('servicios')
+        .select('id, modelo_equipo, tipo_trabajo, monto, estado, created_at, completado_at, clientes ( nombre, tipo_contacto )')
+        .gte('created_at', hace7dias.toISOString()),
+      // La caja se calcula por cuándo se COBRÓ (pagado_at), no por cuándo se
+      // registró el trabajo: un trabajo de la semana pasada cobrado esta
+      // semana cuenta para la caja de esta semana, y viceversa.
+      supabase
+        .from('servicios')
+        .select('monto')
+        .eq('pagado', true)
+        .gte('pagado_at', hace7dias.toISOString())
+        .lte('pagado_at', ahora.toISOString()),
+      supabase
+        .from('servicios')
+        .select('id', { count: 'exact', head: true })
+        .in('estado', ENTALLER_ESTADOS)
+        .lt('created_at', new Date(ahora.getTime() - 24 * 60 * 60 * 1000).toISOString()),
+    ]));
 
-  if (error) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
-  }
+    if (soloDiagnostico) {
+      return Response.json({ ok: true, diagnostico: true, enviado: false, consultas: 3, destinatarios: recipients.length });
+    }
 
-  const servicios = (serviciosSemana || []) as unknown as Servicio[];
-  const cajaSemana = (pagosSemana || []).reduce((acc, s) => acc + (s.monto || 0), 0);
+    const servicios = (serviciosSemana || []) as unknown as Servicio[];
+    const cajaSemana = (pagosSemana || []).reduce((acc, s) => acc + (s.monto || 0), 0);
 
-  const construirRanking = (tipo: 'tecnico' | 'cliente') => {
-    const obj: { [key: string]: { nombre: string; dinero: number; visitas: number } } = {};
-    servicios
-      .filter((s) => (s.clientes?.tipo_contacto || 'tecnico') === tipo)
-      .forEach((s) => {
-        const nombre = s.clientes?.nombre?.trim() || 'General';
-        const clave = nombre.toLowerCase();
-        if (!obj[clave]) obj[clave] = { nombre, dinero: 0, visitas: 0 };
-        obj[clave].dinero += s.monto || 0;
-        obj[clave].visitas += 1;
+    const construirRanking = (tipo: 'tecnico' | 'cliente') => {
+      const obj: { [key: string]: { nombre: string; dinero: number; visitas: number } } = {};
+      servicios
+        .filter((s) => (s.clientes?.tipo_contacto || 'tecnico') === tipo)
+        .forEach((s) => {
+          const nombre = s.clientes?.nombre?.trim() || 'General';
+          const clave = nombre.toLowerCase();
+          if (!obj[clave]) obj[clave] = { nombre, dinero: 0, visitas: 0 };
+          obj[clave].dinero += s.monto || 0;
+          obj[clave].visitas += 1;
+        });
+      return Object.values(obj).sort((a, b) => b.dinero - a.dinero).slice(0, 5);
+    };
+
+    const tipoObj: { [key: string]: { trabajos: number; dinero: number } } = {};
+    servicios.forEach((s) => {
+      const tipo = s.tipo_trabajo || 'General';
+      if (!tipoObj[tipo]) tipoObj[tipo] = { trabajos: 0, dinero: 0 };
+      tipoObj[tipo].trabajos += 1;
+      tipoObj[tipo].dinero += s.monto || 0;
+    });
+    const tiposTrabajo = Object.entries(tipoObj)
+      .map(([tipo, data]) => ({ tipo, ...data }))
+      .sort((a, b) => b.trabajos - a.trabajos)
+      .slice(0, 5);
+
+    const horasReparacion = servicios
+      .filter((s) => s.completado_at)
+      .map((s) => (new Date(s.completado_at!).getTime() - new Date(s.created_at).getTime()) / (1000 * 60 * 60));
+    const tiempoPromedioHoras = horasReparacion.length > 0 ? horasReparacion.reduce((a, b) => a + b, 0) / horasReparacion.length : null;
+
+    const html = construirHtml({
+      desde: hace7dias,
+      hasta: ahora,
+      cajaSemana,
+      trabajosSemana: servicios.length,
+      topTecnicos: construirRanking('tecnico'),
+      topClientes: construirRanking('cliente'),
+      tiposTrabajo,
+      tiempoPromedioHoras,
+      atascados: atascados || 0,
+    });
+
+    etapa = 'smtp';
+    const client = new SMTPClient({
+      connection: {
+        hostname: 'smtp.gmail.com',
+        port: 465,
+        tls: true,
+        auth: { username: gmailUser, password: gmailAppPassword },
+      },
+    });
+
+    try {
+      await client.send({
+        from: `Mega Unlock Manager <${gmailUser}>`,
+        to: recipients,
+        subject: `📊 Reporte semanal Mega Unlock — ${fmtFecha(ahora)}`,
+        html,
       });
-    return Object.values(obj).sort((a, b) => b.dinero - a.dinero).slice(0, 5);
-  };
+    } finally {
+      // Un fallo al cerrar no debe convertir un correo ya aceptado en error.
+      await client.close().catch(() => console.warn('weekly-report: fallo al cerrar SMTP'));
+    }
 
-  const tipoObj: { [key: string]: { trabajos: number; dinero: number } } = {};
-  servicios.forEach((s) => {
-    const tipo = s.tipo_trabajo || 'General';
-    if (!tipoObj[tipo]) tipoObj[tipo] = { trabajos: 0, dinero: 0 };
-    tipoObj[tipo].trabajos += 1;
-    tipoObj[tipo].dinero += s.monto || 0;
-  });
-  const tiposTrabajo = Object.entries(tipoObj)
-    .map(([tipo, data]) => ({ tipo, ...data }))
-    .sort((a, b) => b.trabajos - a.trabajos)
-    .slice(0, 5);
+    console.info(JSON.stringify({ evento: 'correo_enviado', funcion: 'weekly-report', destinatarios: recipients.length }));
 
-  const horasReparacion = servicios
-    .filter((s) => s.completado_at)
-    .map((s) => (new Date(s.completado_at!).getTime() - new Date(s.created_at).getTime()) / (1000 * 60 * 60));
-  const tiempoPromedioHoras = horasReparacion.length > 0 ? horasReparacion.reduce((a, b) => a + b, 0) / horasReparacion.length : null;
-
-  const html = construirHtml({
-    desde: hace7dias,
-    hasta: ahora,
-    cajaSemana,
-    trabajosSemana: servicios.length,
-    topTecnicos: construirRanking('tecnico'),
-    topClientes: construirRanking('cliente'),
-    tiposTrabajo,
-    tiempoPromedioHoras,
-    atascados: atascados || 0,
-  });
-
-  const client = new SMTPClient({
-    connection: {
-      hostname: 'smtp.gmail.com',
-      port: 465,
-      tls: true,
-      auth: { username: gmailUser, password: gmailAppPassword },
-    },
-  });
-
-  await client.send({
-    from: `Mega Unlock Manager <${gmailUser}>`,
-    to: recipients,
-    subject: `📊 Reporte semanal Mega Unlock — ${fmtFecha(ahora)}`,
-    html,
-  });
-  await client.close();
-
-  return new Response(JSON.stringify({ ok: true, enviados: recipients, trabajosSemana: servicios.length }), {
-    headers: { 'Content-Type': 'application/json' },
-  });
+    return new Response(JSON.stringify({ ok: true, enviados: recipients, trabajosSemana: servicios.length }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (error) {
+    const mensaje = error instanceof Error ? error.message : 'Error desconocido';
+    console.error(JSON.stringify({ evento: 'correo_fallido', funcion: 'weekly-report', etapa, error: mensaje }));
+    return Response.json({ ok: false, enviado: false, etapa, error: etapa === 'smtp' ? 'Fallo al enviar por SMTP; revisar logs' : mensaje }, { status: 500 });
+  }
 });

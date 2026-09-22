@@ -21,8 +21,9 @@
 // invocaciones externas es CRON_SHARED_SECRET: exige el header
 // X-Cron-Secret y lo compara contra este secreto antes de hacer nada.
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.110.9';
 import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
+import { consultarCorreo, configuracionCorreo } from '../_shared/consultasCorreo.ts';
 
 const ZONA_HORARIA = 'America/Santiago';
 const DEFAULT_RECIPIENTS = ['belloxavier22@gmail.com', 'moratinosandrea@gmail.com'];
@@ -111,85 +112,98 @@ Deno.serve(async (req) => {
     });
   }
 
-  const ahora = new Date();
+  let etapa = 'configuracion';
+  try {
+    const soloDiagnostico = new URL(req.url).searchParams.get('diagnostico') === '1';
+    const ahora = new Date();
 
-  if (horaEnChile(ahora) !== HORA_ENVIO_CHILE) {
-    return new Response(
-      JSON.stringify({ ok: true, enviado: false, motivo: `No es la hora programada (${HORA_ENVIO_CHILE}h Chile)` }),
-      { headers: { 'Content-Type': 'application/json' } }
-    );
-  }
+    if (!soloDiagnostico && horaEnChile(ahora) !== HORA_ENVIO_CHILE) {
+      return new Response(
+        JSON.stringify({ ok: true, enviado: false, motivo: `No es la hora programada (${HORA_ENVIO_CHILE}h Chile)` }),
+        { headers: { 'Content-Type': 'application/json' } }
+      );
+    }
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const gmailUser = Deno.env.get('GMAIL_USER')!;
-  const gmailAppPassword = Deno.env.get('GMAIL_APP_PASSWORD')!;
-  const recipients = (Deno.env.get('REPORT_RECIPIENTS') || DEFAULT_RECIPIENTS.join(',')).split(',').map((s) => s.trim());
+    const { supabaseUrl, serviceRoleKey, gmailUser, gmailAppPassword, recipients } =
+      configuracionCorreo((nombre) => Deno.env.get(nombre), DEFAULT_RECIPIENTS);
 
-  const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    etapa = 'consulta';
 
-  // Snapshot del estado ACTUAL — ya no se filtra por antigüedad, se manda
-  // igual todos los días a la misma hora.
-  const [
-    { data: completadosSinCobrar, error: e1 },
-    { data: pendientesSinEmpezar, error: e2 },
-    { data: garantiasSinResolver, error: e3 },
-  ] = await Promise.all([
-    supabase
-      .from('servicios')
-      .select('folio, modelo_equipo, created_at, completado_at, clientes ( nombre )')
-      .eq('estado', 'COMPLETADO')
-      .eq('pagado', false),
-    supabase
-      .from('servicios')
-      .select('folio, modelo_equipo, created_at, completado_at, clientes ( nombre )')
-      .eq('estado', 'PENDIENTE'),
-    supabase
-      .from('garantias')
-      .select('folio, descripcion, created_at, servicios ( clientes ( nombre ) )')
-      .eq('resuelta', false),
-  ]);
+    // Snapshot del estado ACTUAL — ya no se filtra por antigüedad, se manda
+    // igual todos los días a la misma hora.
+    const [
+      { data: completadosSinCobrar },
+      { data: pendientesSinEmpezar },
+      { data: garantiasSinResolver },
+    ] = await consultarCorreo(() => Promise.all([
+      supabase
+        .from('servicios')
+        .select('folio, modelo_equipo, created_at, completado_at, clientes ( nombre )')
+        .eq('estado', 'COMPLETADO')
+        .eq('pagado', false),
+      supabase
+        .from('servicios')
+        .select('folio, modelo_equipo, created_at, completado_at, clientes ( nombre )')
+        .eq('estado', 'PENDIENTE'),
+      supabase
+        .from('garantias')
+        .select('folio, descripcion, created_at, servicios ( clientes ( nombre ) )')
+        .eq('resuelta', false),
+    ]));
 
-  const error = e1 || e2 || e3;
-  if (error) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
-  }
+    if (soloDiagnostico) {
+      return Response.json({ ok: true, diagnostico: true, enviado: false, consultas: 3, destinatarios: recipients.length });
+    }
 
-  const stats = {
-    ahora,
-    completadosSinCobrar: (completadosSinCobrar || []) as unknown as ServicioAlerta[],
-    pendientesSinEmpezar: (pendientesSinEmpezar || []) as unknown as ServicioAlerta[],
-    garantiasSinResolver: (garantiasSinResolver || []) as unknown as GarantiaAlerta[],
-  };
+    const stats = {
+      ahora,
+      completadosSinCobrar: (completadosSinCobrar || []) as unknown as ServicioAlerta[],
+      pendientesSinEmpezar: (pendientesSinEmpezar || []) as unknown as ServicioAlerta[],
+      garantiasSinResolver: (garantiasSinResolver || []) as unknown as GarantiaAlerta[],
+    };
 
-  const total = stats.completadosSinCobrar.length + stats.pendientesSinEmpezar.length + stats.garantiasSinResolver.length;
+    const total = stats.completadosSinCobrar.length + stats.pendientesSinEmpezar.length + stats.garantiasSinResolver.length;
 
-  if (total === 0) {
-    return new Response(JSON.stringify({ ok: true, enviado: false, motivo: 'Sin pendientes' }), {
+    if (total === 0) {
+      return new Response(JSON.stringify({ ok: true, enviado: false, motivo: 'Sin pendientes' }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    const html = construirHtml(stats);
+
+    etapa = 'smtp';
+    const client = new SMTPClient({
+      connection: {
+        hostname: 'smtp.gmail.com',
+        port: 465,
+        tls: true,
+        auth: { username: gmailUser, password: gmailAppPassword },
+      },
+    });
+
+    try {
+      await client.send({
+        from: `Mega Unlock Manager <${gmailUser}>`,
+        to: recipients,
+        subject: `📋 Mega Unlock — Resumen diario: ${total} pendiente(s)`,
+        html,
+      });
+    } finally {
+      await client.close().catch(() => console.warn('alertas-pendientes: fallo al cerrar SMTP'));
+    }
+
+    console.info(JSON.stringify({ evento: 'correo_enviado', funcion: 'alertas-pendientes', destinatarios: recipients.length }));
+
+    return new Response(JSON.stringify({ ok: true, enviado: true, total, enviados: recipients }), {
       headers: { 'Content-Type': 'application/json' },
     });
+  } catch (error) {
+    const mensaje = error instanceof Error ? error.message : 'Error desconocido';
+    console.error(JSON.stringify({ evento: 'correo_fallido', funcion: 'alertas-pendientes', etapa, error: mensaje }));
+    return Response.json({ ok: false, enviado: false, etapa, error: etapa === 'smtp' ? 'Fallo al enviar por SMTP; revisar logs' : mensaje }, { status: 500 });
   }
-
-  const html = construirHtml(stats);
-
-  const client = new SMTPClient({
-    connection: {
-      hostname: 'smtp.gmail.com',
-      port: 465,
-      tls: true,
-      auth: { username: gmailUser, password: gmailAppPassword },
-    },
-  });
-
-  await client.send({
-    from: `Mega Unlock Manager <${gmailUser}>`,
-    to: recipients,
-    subject: `📋 Mega Unlock — Resumen diario: ${total} pendiente(s)`,
-    html,
-  });
-  await client.close();
-
-  return new Response(JSON.stringify({ ok: true, enviado: true, total, enviados: recipients }), {
-    headers: { 'Content-Type': 'application/json' },
-  });
 });

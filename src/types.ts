@@ -40,7 +40,9 @@ export interface Servicio {
   costo_repuesto?: number | null;
   /** Cuándo se avisó al cliente que este equipo (ya Completado) está listo. Null = todavía no avisado. */
   avisado_at?: string | null;
-  /** Vencimiento de la garantía automática (entregado_at + 3 meses). Null si todavía no se entrega. Se calcula solo en la base de datos (trigger), nunca se escribe desde el código. */
+  /** Plazo ofrecido por equipo; 0 = sin garantía. Históricos: 3 meses. */
+  garantia_meses?: 0 | 1 | 3 | 6;
+  /** Vencimiento calculado por la base desde la entrega. Null sin entrega o sin garantía. */
   garantia_vence_at?: string | null;
   clientes?: Cliente;
 }
@@ -56,6 +58,7 @@ export interface EquipoForm {
   nota: string;
   /** Costo del repuesto/insumo — solo se usa/muestra para clientes normales. */
   costoRepuesto: string;
+  garantiaMeses: 0 | 1 | 3 | 6;
 }
 
 export const equipoVacio = (): EquipoForm => ({
@@ -68,6 +71,7 @@ export const equipoVacio = (): EquipoForm => ({
   esRevision: false,
   nota: '',
   costoRepuesto: '',
+  garantiaMeses: 3,
 });
 
 export interface Garantia {

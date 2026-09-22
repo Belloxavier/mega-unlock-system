@@ -277,7 +277,7 @@ function GarantiasCobertura({
         Cobertura
       </h2>
       <p className="text-[10px] text-slate-500 mb-4">
-        Garantía automática de 3 meses (equipo entregado + 3 meses) sobre todos los equipos ya entregados. Busca un cliente para acotar a su historial completo.
+        La garantía de cada equipo se cuenta desde su entrega. Busca un cliente para ver su historial completo.
       </p>
 
       <div className="flex flex-col sm:flex-row gap-2 mb-4">
@@ -324,11 +324,13 @@ function GarantiasCobertura({
               // Sin dato (no vigente NI vencida, simplemente nunca se
               // registró fecha de entrega) se distingue con un color
               // neutro — antes caía en el mismo rojo que "vencida".
-              const colorFila = !estado
-                ? 'bg-slate-800/20 border-slate-700/40'
-                : estado.vigente
-                  ? 'bg-emerald-500/5 border-emerald-500/20'
-                  : 'bg-rose-500/5 border-rose-500/20';
+              const colorFila = s.garantia_meses === 0
+                ? 'bg-amber-500/5 border-amber-500/20'
+                : !estado
+                  ? 'bg-slate-800/20 border-slate-700/40'
+                  : estado.vigente
+                    ? 'bg-emerald-500/5 border-emerald-500/20'
+                    : 'bg-rose-500/5 border-rose-500/20';
               return (
                 <div
                   key={s.id}
@@ -345,9 +347,12 @@ function GarantiasCobertura({
                         ? `entregado ${getFechaLocal(s.entregado_at)}`
                         : `creado ${getFechaLocal(s.created_at)} (sin fecha de entrega registrada)`}
                     </span>
+                    <span className="block text-xs text-slate-400 mt-1">
+                      {(s.garantia_meses ?? 3) === 0 ? 'Sin cobertura acordada' : `Garantía: ${s.garantia_meses ?? 3} ${(s.garantia_meses ?? 3) === 1 ? 'mes' : 'meses'}`}
+                    </span>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <BadgeGarantia garantiaVenceAt={s.garantia_vence_at} />
+                  <div className="flex items-center flex-wrap gap-2 min-w-0">
+                    <BadgeGarantia garantiaVenceAt={s.garantia_vence_at} garantiaMeses={s.garantia_meses} />
                     <span className={`font-black text-sm ${T.fuerte}`}>{fmt(s.monto)}</span>
                   </div>
                 </div>

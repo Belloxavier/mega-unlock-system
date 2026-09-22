@@ -1,5 +1,18 @@
 # Resumen diario de pendientes (22:00 Chile)
 
+## Recuperación y diagnóstico
+
+Comparte con `weekly-report` el reintento acotado de consultas ante
+`PGRST303: JWT issued at future` (1, 3 y 7 segundos), la validación de
+configuración y los logs por etapa. Nunca reintenta el envío SMTP.
+
+La URL con `?diagnostico=1`, protegida por el mismo `X-Cron-Secret`, permite
+comprobar las tres consultas a cualquier hora sin enviar correo. Valida la
+presencia de configuración; no autentica contra Gmail ni confirma entrega.
+Sin ese parámetro mantiene el envío habitual de las 22:00 Chile, solo si
+existen pendientes. Una falla persistente se registra como `correo_fallido`
+y devuelve HTTP 500, no un éxito con datos vacíos.
+
 Todas las noches a las 22:00 hora de Chile revisa si hay trabajos
 Completados sin cobrar/retirar, Pendientes sin empezar, o garantías sin
 resolver — sea cual sea su antigüedad — y avisa por correo con el nombre

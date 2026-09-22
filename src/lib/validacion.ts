@@ -46,6 +46,7 @@ export interface EquipoFormLike {
   tipoTrabajoOtro: string;
   imeiSerie?: string;
   costoRepuesto?: string;
+  garantiaMeses?: number;
 }
 
 // El aviso de IMEI (mensajeImeiInvalido) es SOLO informativo — el campo
@@ -54,6 +55,9 @@ export interface EquipoFormLike {
 // debe bloquear guardar el trabajo. La UI (FormularioServicio) lo muestra
 // aparte como advertencia junto al campo.
 export function validarEquipo(eq: EquipoFormLike, esPrimero: boolean): string | null {
+  if (eq.garantiaMeses !== undefined && ![0, 1, 3, 6].includes(eq.garantiaMeses)) {
+    return 'Selecciona una garantía válida.';
+  }
   if (!eq.modelo.trim() && !eq.monto.trim()) {
     return esPrimero ? 'Indica al menos el modelo del equipo.' : null;
   }

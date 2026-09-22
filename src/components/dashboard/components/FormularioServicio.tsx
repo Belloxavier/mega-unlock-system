@@ -367,6 +367,26 @@ export function FormularioServicio({
                 </select>
               </div>
               <div>
+                <label htmlFor={`garantia-equipo-${idx}`} className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
+                  Garantía
+                </label>
+                <select
+                  id={`garantia-equipo-${idx}`}
+                  value={eq.garantiaMeses}
+                  onChange={(e) => onCambiarEquipo(idx, 'garantiaMeses', Number(e.target.value) as EquipoForm['garantiaMeses'])}
+                  aria-describedby={`garantia-ayuda-${idx}`}
+                  className={`w-full min-h-12 bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-base text-white focus:outline-none ${T.focoInput} transition-colors`}
+                >
+                  <option value={0}>Sin garantía</option>
+                  <option value={1}>1 mes</option>
+                  <option value={3}>3 meses</option>
+                  <option value={6}>6 meses</option>
+                </select>
+                <p id={`garantia-ayuda-${idx}`} className="text-xs text-slate-400 mt-1.5">
+                  {eq.garantiaMeses === 0 ? 'Este equipo se entrega sin garantía.' : 'Se cuenta desde la entrega del equipo.'}
+                </p>
+              </div>
+              <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
                   Nota (opcional)
                 </label>

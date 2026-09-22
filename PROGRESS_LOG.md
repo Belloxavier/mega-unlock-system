@@ -740,3 +740,430 @@ El usuario pidió que la pestaña Garantías muestre "Cobertura" por defecto en 
 - Git: **sin commitear** — se suma a lo pendiente de las entradas anteriores. Usuario pidió esperar a probarlo.
 - Supabase: sin cambios.
 ---
+
+---
+## [2026-09-22 00:43] Revisión inicial del proyecto por Cerebro
+
+### Instrucción recibida
+Revisar el proyecto y explicar su estado para dar continuidad al trabajo previo con Claude Code.
+Las funciones nuevas se definirán después; esta ronda no cambia funcionalidades.
+
+### Comandos ejecutados (todos, en orden)
+- `Get-Location` → Raíz del proyecto confirmada.
+- `git status --short` → Solo .claude/ sin seguimiento; advertencias de acceso al ignore global.
+- `rg --files -g AGENTS.md -g package.json -g '*lock*' -g 'README*' -g 'PROGRESS_LOG.md' -g '*config*' -g '.env*' -g '!node_modules' -g '!dist'` → Inventario de configuración y documentación.
+- `Get-Content AGENTS.md` → Instrucciones del proyecto leídas; visualización inicial con codificación incorrecta.
+- `Get-Content package.json` → Scripts y dependencias revisados.
+- `Get-Content README.md` → README todavía de plantilla.
+- `rg --files src supabase` → Inventario de aplicación, funciones y 24 migraciones.
+- `Get-Content PROGRESS_LOG.md -Tail 100` → Historial reciente de garantías revisado.
+- `Get-Content 'C:/Users/Xavier Bello/.codex/plugins/cache/openai-curated-remote/supabase/1.0.0/skills/supabase/SKILL.md'` → Guía Supabase leída.
+- `Get-Content -Encoding UTF8 src/App.tsx,src/types.ts,src/supabase.ts,src/hooks/useServicios.ts,src/hooks/useClientes.ts` → Autenticación, tipos y acceso a datos revisados.
+- `Get-Content -Encoding UTF8 src/lib/estadisticasOperativas.ts,src/lib/precioSugerido.ts,src/lib/tiempo.ts` → Cálculos operativos y precios revisados.
+- `Get-Content -Encoding UTF8 supabase/migrations/0012_endurece_rls.sql` → Políticas locales restringen acceso a usuarios autenticados.
+- `rg -n 'useEffect|async |function |const handle|supabase|slice\(|range\(|limit\(' src/components/dashboard/Dashboard.tsx` → Mapa de efectos y operaciones.
+- `git log -5 --oneline` → HEAD a3f4a9c: garantía automática y Cobertura.
+- `rg --files -g '*test*' -g '*spec*' -g '!package-lock.json' -g '!node_modules' -g '!dist'` → Sin archivos de pruebas encontrados.
+- `Get-ChildItem src -Recurse -File | Sort-Object Length -Descending | Select-Object -First 12 Name,Length` → Dashboard es el archivo fuente de mayor tamaño.
+- `npm run build` → Falló por política de ejecución de npm.ps1; no llegó a compilar.
+- `npm run lint` → Falló por política de ejecución de npm.ps1; no llegó a ejecutar oxlint.
+- `Get-Content -Encoding UTF8 src/components/dashboard/Dashboard.tsx | Select-Object -Skip 200 -First 100` → Efectos, paginación y refresco revisados.
+- `Get-Content -Encoding UTF8 src/components/dashboard/Dashboard.tsx | Select-Object -Skip 404 -First 202` → Registro y edición de servicios revisados.
+- `Get-Content -Encoding UTF8 src/components/dashboard/Dashboard.tsx | Select-Object -Skip 712 -First 120` → Cambios de estado y WhatsApp revisados.
+- `rg -n 'iniciado_at|finalizado_at|tiempo_real|tiempo_valido|aprendiendo|carga|siguiente|tecnico|rapido|rápido' src supabase` → Referencias de inteligencia y tiempos.
+- `Get-Content -Encoding UTF8 supabase/migrations/0015_add_tiempo_real.sql,supabase/migrations/0016_add_tiempo_valido.sql,supabase/migrations/0024_garantia_vence_at.sql` → Columnas históricas de tiempo y trigger de garantía.
+- `Get-Content -Encoding UTF8 .gitignore` → dist y node_modules excluidos.
+- `npm.cmd run build` → Exit 0: tsc -b y Vite 8.1.5; 138 módulos, Vite 1.94 s.
+- `npm.cmd run lint` → Exit 0: oxlint sin diagnósticos.
+- `Get-Content -Encoding UTF8 src/lib/cierreCaja.ts,src/lib/fechaFinanzas.ts,src/lib/date.ts,src/lib/garantia.ts` → Revisión de cálculos; salida extensa parcialmente truncada.
+- `Get-Content -Encoding UTF8 src/hooks/useGarantias.ts,src/hooks/useCierresCaja.ts,src/hooks/useCuentasBancarias.ts` → Hooks de datos incluidos en lectura.
+- `rg -n 'inicio_real|fin_real|tiempo|elimin|quit|inteligente' PROGRESS_LOG.md` → Historial de decisiones sobre tiempos.
+- `rg -n 'Deno.env|authorization|cron|select\(|range\(|limit\(|fetch\(' supabase/functions/*/index.ts` → Falló: glob de ruta no aceptado en Windows; luego repetido con -g.
+- `Get-Content -Encoding UTF8 src/components/Login.tsx,src/components/PagoPublico.tsx` → Login y página de datos bancarios.
+- `Get-Content -Encoding UTF8 supabase/migrations/0020_proteger_cron_edge_functions.sql` → Protección con secreto de cron documentada.
+- `rg -n 'inicio_real|fin_real|cronomet|cronómet|inteligente|tiempo real|eliminar.*tiempo|quitar.*tiempo' PROGRESS_LOG.md src supabase` → Confirmada eliminación histórica del tracking.
+- `rg -n 'Deno.env|authorization|Cron|select\(|range\(|limit\(|fetch\(' supabase/functions -g index.ts` → Funciones usan secreto y variables de entorno; consultas identificadas.
+- `Get-Content -Encoding UTF8 src/hooks/useGarantias.ts,src/hooks/useCierresCaja.ts,src/hooks/useCuentasBancarias.ts` → Garantías sin paginar; cierres limitados a 60.
+- `Get-Content -Encoding UTF8 src/lib/date.ts` → Zona Chile explícita y limitación DST documentada.
+- `rg -n 'channel\(|postgres_changes|visibilitychange|focus' src` → Coincidencias focus mayormente CSS, sin sincronización Realtime.
+- `(Get-Content src/components/dashboard/Dashboard.tsx).Count` → 2211 líneas.
+- `git status --short` → Solo .claude/ sin seguimiento antes del registro; build no modificó fuentes.
+- `Get-Date -Format 'yyyy-MM-dd HH:mm'` → 2026-09-22 00:43, hora local.
+- `Get-ChildItem dist -Recurse -File | Select-Object -ExpandProperty FullName` → Inventario de nueve artefactos generados.
+- `Get-ChildItem node_modules/.tmp -File -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name` → Dos cachés tsbuildinfo.
+- `Get-Content -Encoding UTF8 PROGRESS_LOG.md -First 85` → Commit 5386d1d documenta retiro de tiempos y dificultad.
+- `Get-Content -Encoding UTF8 supabase/functions/weekly-report/index.ts | Select-Object -Skip 130 -First 85` → Consultas y cálculo del reporte semanal; salida conjunta parcialmente truncada.
+- `Get-Content -Encoding UTF8 src/components/dashboard/AreaTrabajoTab.tsx -First 125` → Tarjetas y agrupación de trabajos.
+- `rg -n '1000|maximum|max_rows' node_modules/@supabase/supabase-js/src/SupabaseClient.ts` → Sin coincidencias.
+- `Get-Content -Encoding UTF8 tsconfig.app.json,tsconfig.node.json,vite.config.ts` → Build verifica src y configuración Vite; no Edge Functions. strict no activado.
+- `rg -n 'create table|enable row level|create policy' supabase/migrations` → Inventario de políticas; esquema inicial clientes/servicios no está en migraciones.
+- `rg -n 'channel\(|postgres_changes|visibilitychange|addEventListener\(.focus' src` → Sin coincidencias, exit 1 esperado.
+- Herramienta web (sin shell): consulta de documentación oficial de select de Supabase y límite de filas → límite predeterminado de 1000 confirmado en documentación; configuración real del proyecto no consultada.
+- Herramienta apply_patch (sin shell), primer intento → no aplicó por contexto no coincidente; sin cambios.
+- Herramienta apply_patch (sin shell), segundo intento → append de esta entrada a PROGRESS_LOG.md.
+Las comprobaciones build/lint/lectura se lanzaron en paralelo; se listan en orden de lanzamiento.
+
+### Archivos tocados (todos)
+- `PROGRESS_LOG.md` — modificado — añade revisión, comprobaciones, hallazgos y límites de la auditoría.
+- `dist/favicon.svg` — creado / modificado — artefacto regenerado por build, ignorado por Git; no se inventarió su existencia anterior.
+- `dist/icons.svg` — creado / modificado — artefacto regenerado por build, ignorado por Git; no se inventarió su existencia anterior.
+- `dist/index.html` — creado / modificado — artefacto regenerado por build, ignorado por Git; no se inventarió su existencia anterior.
+- `dist/manifest.json` — creado / modificado — artefacto regenerado por build, ignorado por Git; no se inventarió su existencia anterior.
+- `dist/assets/index-CH42tBQ0.css` — creado / modificado — artefacto regenerado por build, ignorado por Git; no se inventarió su existencia anterior.
+- `dist/assets/index-Ci3FQ1X8.js` — creado / modificado — artefacto regenerado por build, ignorado por Git; no se inventarió su existencia anterior.
+- `dist/assets/rolldown-runtime-DAXXjFlN.js` — creado / modificado — artefacto regenerado por build, ignorado por Git; no se inventarió su existencia anterior.
+- `dist/assets/src-BHyPwket.js` — creado / modificado — artefacto regenerado por build, ignorado por Git; no se inventarió su existencia anterior.
+- `dist/assets/vendor-LbrMf0co.js` — creado / modificado — artefacto regenerado por build, ignorado por Git; no se inventarió su existencia anterior.
+- `node_modules/.tmp/tsconfig.app.tsbuildinfo` — creado / modificado — artefacto regenerado por build, ignorado por Git; no se inventarió su existencia anterior.
+- `node_modules/.tmp/tsconfig.node.tsbuildinfo` — creado / modificado — artefacto regenerado por build, ignorado por Git; no se inventarió su existencia anterior.
+
+### Hallazgos y decisiones
+- Base React + TypeScript + Vite + Supabase con servicios, clientes, garantías, cobertura, caja, estadísticas, OCR IMEI, impresión, WhatsApp y funciones programadas. Hay separación en componentes/hooks/lib, normalización de modelos/clientes, folios atómicos y manejo explícito de errores en varias rutas.
+- Prioridad: fetchServicios en src/hooks/useServicios.ts hace un solo select sin recorrer páginas y se usa como historial completo para cálculos y búsquedas. Si supera el máximo configurado en API faltarán registros antiguos en memoria; no se verificó el volumen ni límite del servidor. El listado paginado puede mostrar filas ausentes de ese arreglo y handleCambiarEstado las busca precisamente en servicios.
+- Dashboard.tsx concentra 2211 líneas y operaciones de dominios distintos; separar gradualmente al tocar cada módulo reduce riesgo.
+- No se encontró sincronización entre sesiones por Realtime, foco o polling de datos; cada dispositivo refresca al cargar o tras sus propias operaciones. El intervalo de un minuto recalcula reloj, no descarga datos.
+- No hay script test ni archivos de pruebas encontrados. Build y lint no garantizan corrección de pagos, fechas, garantías o flujos reales; tampoco validan las Edge Functions con Deno.
+- El tracking inicio_real/fin_real y dificultad se retiró previamente según PROGRESS_LOG y commit 5386d1d. AGENTS.md mantiene esa visión, pero no es descripción de la implementación actual. No restaurar sin pedido. Precio sugerido sí existe y agrupa montos positivos por modelo/servicio, incluso trabajos no cobrados o no realizados.
+- Crear/editar cliente y guardar servicio son operaciones separadas: un fallo posterior puede dejar el cambio del cliente aplicado. buscarClientePorNombreExacto devuelve null tanto por ausencia como por error, y el llamador puede intentar crear un cliente tras una búsqueda fallida.
+- README sigue siendo plantilla y falta esquema inicial de clientes/servicios en las migraciones, por lo que el repositorio solo no reproduce toda la base desde cero.
+- Políticas locales permiten acceso amplio a usuarios autenticados; no se validó configuración remota de registro, usuarios autorizados ni aplicación de migraciones. No se afirma una vulnerabilidad remota confirmada.
+- Se revisaron fuentes y documentación; no se abrió una sesión de usuario ni se probaron pantallas en navegador, no se consultaron datos de producción, no se ejecutaron crons ni se enviaron mensajes.
+- Git previo: HEAD a3f4a9c incluye garantías automáticas; las notas antiguas de cambios sin subir no describen el estado local actual. .claude/ ya estaba sin seguimiento y se dejó intacto.
+- No se modificaron funciones, dependencias, base de datos ni configuración. No commit ni push.
+
+### Estado final
+- Tests/build: npm.cmd run build exit 0 (tsc -b + Vite; 138 módulos); npm.cmd run lint exit 0 sin diagnósticos. No suite automatizada disponible. Primeros intentos con npm fallaron por npm.ps1; npm.cmd resolvió sin cambiar la política del sistema.
+- Git: sin staged ni commit en esta ronda; PROGRESS_LOG.md modificado por esta entrada y .claude/ previamente sin seguimiento. Artefactos de build ignorados.
+---
+
+---
+## [2026-09-22 00:49] Diagnóstico de correos automáticos ausentes
+
+### Instrucción recibida
+El usuario confirma que pidió retirar los tiempos reales porque agregaban trabajo y olvidaba finalizarlos.
+Solicita investigar por qué dejó de ver los correos con estadísticas.
+
+### Comandos ejecutados (todos, en orden)
+- `Get-Content -Encoding UTF8 supabase/functions/weekly-report/index.ts` → revisada generación y envío SMTP; consulta falla antes de enviar.
+- `Get-Content -Encoding UTF8 supabase/functions/weekly-report/README.md` → programación y secretos documentados.
+- `Get-Content -Encoding UTF8 supabase/functions/alertas-pendientes/README.md` → envío diario a las 22h Chile, condicionado a pendientes.
+- `Get-Content -Encoding UTF8 supabase/migrations/0002_schedule_weekly_report.sql,supabase/migrations/0020_proteger_cron_edge_functions.sql` → programación semanal y protección compartida.
+- `rg -n 'correo|weekly|CRON|secreto|gmail|reporte semanal' PROGRESS_LOG.md` → no evidencia histórica suficiente del fallo actual.
+- `Get-Command supabase -ErrorAction SilentlyContinue | Select-Object Name,Source` → sin CLI disponible en PATH.
+- `Get-ChildItem Env: | Where-Object Name -Match 'SUPABASE|DATABASE|PGHOST|PGUSER' | Select-Object -ExpandProperty Name` → sin variables coincidentes; no se imprimieron secretos.
+- `git log --oneline --all -- supabase/functions supabase/migrations/0020_proteger_cron_edge_functions.sql` → historial de siete commits de funciones.
+- `Get-Content -Encoding UTF8 supabase/functions/weekly-report/index.ts -First 28` → importaciones SMTP/Supabase y configuración.
+- `Get-ChildItem -Force -Name .env*,.mcp.json,supabase/.temp -ErrorAction SilentlyContinue` → caché local de vinculación presente; comando compuesto termina exit 1 por rutas ausentes.
+- `Get-Date -Format 'yyyy-MM-dd HH:mm'` → 2026-09-22 00:49.
+- `git status --short` → PROGRESS_LOG.md modificado de ronda anterior, .claude/ sin seguimiento; advertencia de ignore global.
+- `Get-Content -Encoding UTF8 PROGRESS_LOG.md -Tail 5` → contexto de append verificado.
+- Descubrimiento de herramientas mediante ALL_TOOLS (sin shell) → conector Supabase disponible; no herramienta de logs analíticos expuesta.
+- Supabase list_edge_functions (solo lectura) → weekly-report ACTIVE v6 y alertas-pendientes ACTIVE v8, ambas verify_jwt=false.
+- Supabase execute_sql (solo lectura): `select jobid, jobname, schedule, active from cron.job; select jobid, status, return_message, start_time, end_time from cron.job_run_details order by start_time desc limit 30; select id, status_code, timed_out, error_msg, created, left(content, 1200) as response from net._http_response order by created desc limit 15;` → herramienta devolvió el último resultset: seis respuestas recientes; error HTTP 500 JWT issued at future a las 01:00 UTC.
+- Supabase execute_sql: `select jobid, jobname, schedule, active from cron.job;` → semanal y diario activos, horarios 0 9 * * 1 y 0 * * * *.
+- Supabase execute_sql: `select d.jobid, j.jobname, d.status, d.return_message, d.start_time from cron.job_run_details d left join cron.job j using(jobid) where j.jobname = 'weekly-report-mega-unlock' order by d.start_time desc limit 8;` → ocho lanzamientos semanales succeeded, último 2026-09-21 09:00 UTC; esto confirma encolado HTTP, no entrega de email.
+- Supabase get_edge_function weekly-report y alertas-pendientes → revisado código efectivamente desplegado; error de consulta devuelve 500 antes de SMTP, no hay reintento explícito del envío.
+- Consulta web de JWT issued at future y página de estado Supabase → antecedentes externos, insuficientes para atribuir este fallo a un incidente concreto; página consultada trata latencia y figura resuelta.
+- Supabase execute_sql: `select now() as database_now, current_setting('timezone') as timezone;` → 2026-09-22 03:48:59 UTC; no prueba del reloj interno de PostgREST.
+- Supabase execute_sql: `select count(*) as retained_responses, min(created) as oldest_response, max(created) as newest_response, count(*) filter (where status_code >= 400) as failures from net._http_response;` → seis respuestas entre 2026-09-21 22:00 UTC y 2026-09-22 03:00 UTC, una fallida; no queda respuesta del reporte semanal.
+- apply_patch (sin shell) → append de esta entrada.
+Las llamadas independientes del conector se ejecutaron en paralelo. Los comandos shell se enumeran en su orden real; las consultas del conector se enumeran aparte en orden de lanzamiento.
+
+### Archivos tocados (todos)
+- `PROGRESS_LOG.md` — modificado — registra diagnóstico con evidencia remota y confirmación de mantener eliminado el tracking.
+
+### Hallazgos y decisiones
+- Fallo confirmado del resumen diario del 21 de septiembre a las 22:00 Chile (22 de septiembre 01:00 UTC): HTTP 500, {"error":"JWT issued at future"}. La función pasó el secreto de cron y el horario, pero la API rechazó la consulta antes de que se ejecutara client.send. No fue ausencia de pendientes ni fallo Gmail en ese intento.
+- El cron sigue activo y la función responde 200 fuera de horario, con enviado=false. Esos 200 no significan correo enviado ni prueban recuperación del acceso a datos.
+- Reporte semanal activo los lunes a las 09:00 UTC (actualmente 06:00 Chile), último lanzamiento lunes 21. Su respuesta HTTP ya no está retenida: no se puede confirmar que fallara por la misma causa ni si llegó al SMTP. No se conoce fecha del último envío exitoso.
+- JWT issued at future señala rechazo temporal del token por el servicio de datos; falta determinar causa raíz (reloj/validación/credencial). No se rotaron claves, reinició infraestructura ni atribuyó con certeza a un incidente externo.
+- No hay reintento explícito de recuperación ni registro durable del resultado de entrega en este código. El succeeded de pg_cron solo refleja la llamada que encola HTTP.
+- No se enviaron correos de prueba ni se invocaron funciones de envío, porque el pedido fue investigar. No se cambiaron horarios, secretos, funciones ni base de datos.
+- Preferencia confirmada: conservar eliminados tiempos reales y control manual de duración.
+
+### Estado final
+- Tests/build: no ejecutados en esta ronda de diagnóstico; sin cambios de código. Consultas remotas de lectura completadas; fallo diario confirmado y resultado semanal no disponible.
+- Git: PROGRESS_LOG.md modificado, .claude/ previamente sin seguimiento; sin staged, commit ni push.
+---
+
+---
+## [2026-09-22 00:55] Recuperación de consultas y diagnóstico de correos
+
+### Instrucción recibida
+El usuario pidió revisar y corregir el fallo de los correos automáticos detectado en producción.
+Se mantiene eliminada la captura de tiempos reales.
+
+### Comandos ejecutados (todos, en orden)
+- `Get-Content -Encoding UTF8 supabase/functions/weekly-report/index.ts | Select-Object -Skip 110` → revisado handler semanal.
+- `Get-Content -Encoding UTF8 supabase/functions/alertas-pendientes/index.ts | Select-Object -Skip 100` → revisado handler diario.
+- `Get-Command deno,node -ErrorAction SilentlyContinue | Select-Object Name,Source` → Node disponible, Deno no disponible.
+- `git status --short` → PROGRESS_LOG.md modificado y .claude/ sin seguimiento, preexistentes.
+- `node --version` → v24.18.0.
+- `Get-Content -Encoding UTF8 'C:/Users/Xavier Bello/.codex/plugins/cache/openai-curated-remote/supabase/1.0.0/skills/supabase/SKILL.md' -First 32` → repasadas instrucciones de verificación.
+- `rg --files supabase -g AGENTS.md -g deno.json -g deno.jsonc` → sin coincidencias, exit 1.
+- `Get-Content package.json` → scripts y versión Supabase revisados.
+- `Get-Content -Encoding UTF8 supabase/functions/alertas-pendientes/index.ts -First 35` → importaciones, horario y configuración.
+- `node --test supabase/functions/_shared/consultasCorreo.test.mjs` → primera pasada: 10 tests, 10 pass, 0 fail.
+- `npm.cmd run lint` → exit 0, sin diagnósticos.
+- `git diff --check` → sin errores; advertencias de conversión LF/CRLF.
+- `$paths = @('supabase/functions/weekly-report/index.ts','supabase/functions/alertas-pendientes/index.ts','supabase/functions/_shared/consultasCorreo.ts'); $paths | ForEach-Object { @{ name = $_; content = [IO.File]::ReadAllText((Join-Path (Get-Location) $_)) } } | ConvertTo-Json -Depth 3 -Compress` → código local serializado para despliegue por conector, sin secretos.
+- `node --test supabase/functions/_shared/consultasCorreo.test.mjs` → pasada final tras formateo y etapa SMTP: 10 tests, 10 pass, 0 fail.
+- `npm.cmd run lint` → exit 0, sin diagnósticos.
+- `git diff --check` → sin errores; advertencias LF/CRLF.
+- `git diff --stat` → resumen de cambios rastreados; incluye entradas anteriores del log y no incluye nuevos archivos sin seguimiento.
+- `Get-Date -Format 'yyyy-MM-dd HH:mm'` → 2026-09-22 00:55.
+- `git status --short` → cinco archivos rastreados modificados, _shared/ nuevo y .claude/ preexistente.
+- `Get-Content -Encoding UTF8 PROGRESS_LOG.md -Tail 5` → contexto final verificado para append.
+
+Operaciones adicionales por herramientas (sin shell), en orden:
+- ALL_TOOLS → descubiertas firmas execute_sql, deploy_edge_function, get_edge_function y search_docs.
+- Consulta web changelog.md → formato no soportado; fallback a https://supabase.com/changelog exitoso. No se encontró cambio relevante que exija alterar este diseño.
+- Supabase search_docs sobre reintentos y JWT → SDK tiene reintentos temporales, pero no para 401 PGRST303; validación JWT no se desactiva.
+- Consulta web del código denomailer en GitHub → 404; consulta posterior deno.land → inaccesible. No se asumió ninguna API SMTP nueva.
+- apply_patch → creado helper de consultas/configuración y adaptadas ambas funciones.
+- apply_patch → creada suite de regresión con handlers reales y límites externos simulados.
+- Supabase deploy_edge_function → weekly-report v7 y alertas-pendientes v9 ACTIVE, manteniendo verify_jwt=false y autenticación X-Cron-Secret existente.
+- Supabase execute_sql → invocó únicamente diagnóstico sin envío en ambas funciones mediante net.http_post, obteniendo requests 1234 y 1235. El secreto se leyó dentro de SQL desde Vault y no se expuso.
+- Supabase execute_sql: `select id, status_code, timed_out, error_msg, content from net._http_response where id in (1234,1235) order by id;` → ambos 200, ok=true, diagnostico=true, enviado=false, consultas=3, destinatarios=2.
+- apply_patch → formateo de handlers y etapa SMTP antes de crear el cliente; documentación de ambas funciones.
+- Supabase deploy_edge_function → versión final weekly-report v8 y alertas-pendientes v10 ACTIVE.
+- Supabase execute_sql → repetido diagnóstico de las versiones finales, requests 1236 y 1237.
+- Supabase execute_sql: `select id, status_code, timed_out, error_msg, content from net._http_response where id in (1236,1237) order by id;` → ambos 200, ok=true, diagnostico=true, enviado=false, consultas=3, destinatarios=2, sin timeout.
+- apply_patch → append de esta entrada.
+
+SQL exacto de ambas rondas de diagnóstico:
+`select slug, net.http_post(url := 'https://smjdwyddlsraqscizrzl.supabase.co/functions/v1/' || slug || '?diagnostico=1', headers := jsonb_build_object('Content-Type', 'application/json', 'X-Cron-Secret', (select decrypted_secret from vault.decrypted_secrets where name = 'cron_shared_secret')), body := '{}'::jsonb, timeout_milliseconds := 60000) as request_id from (values ('weekly-report'), ('alertas-pendientes')) f(slug);`
+
+### Archivos tocados (todos)
+- `supabase/functions/_shared/consultasCorreo.ts` — creado — reintenta solo el rechazo temporal PGRST303 específico, propaga cualquier error de consulta y valida configuración.
+- `supabase/functions/_shared/consultasCorreo.test.mjs` — creado — diez pruebas de recuperación, límites, permisos, configuración, autenticación de diagnóstico, fallos parciales y SMTP.
+- `supabase/functions/weekly-report/index.ts` — modificado — SDK fijado a 2.110.9, reintentos de consultas, chequeo de las tres consultas, diagnóstico sin correo, logs por etapa, cierre SMTP protegido.
+- `supabase/functions/alertas-pendientes/index.ts` — modificado — mismo helper, diagnóstico autenticado fuera de horario sin enviar, errores y logs por etapa; horario normal intacto.
+- `supabase/functions/weekly-report/README.md` — modificado — documenta recuperación, prueba, diagnóstico y límites de lo que demuestra cada respuesta.
+- `supabase/functions/alertas-pendientes/README.md` — modificado — documenta recuperación y diagnóstico seguro.
+- `PROGRESS_LOG.md` — modificado — registra cambios locales, despliegues y evidencia de verificación.
+
+### Hallazgos y decisiones
+- El error observado ocurre antes de SMTP. Se añadió recuperación acotada: hasta cuatro intentos de lectura en total, con esperas de 1, 3 y 7 segundos exclusivamente para PGRST303/JWT issued at future. No se reintentan permisos ni JWT expirados.
+- En el semanal se ignoraban errores de pagosSemana y atascados; ahora cualquier consulta fallida impide enviar un reporte incompleto.
+- Se fijó la dependencia Supabase y se deshabilitó persistencia/renovación de sesión en el cliente administrativo de cada función.
+- Se captura y registra la etapa del fallo. SMTP se intenta una sola vez; cierre en finally y errores de cierre no convierten un envío aceptado en fracaso.
+- Diagnóstico exige el secreto de cron existente, comprueba configuración y ejecuta las tres consultas reales, sin construir un envío SMTP. No devuelve filas de clientes, claves ni contraseñas.
+- Las versiones finales funcionan en producción para acceso a datos/configuración. Esto demuestra recuperación actual del acceso, no demuestra que el reintento haya sido necesario en esas cuatro invocaciones ni identifica la causa raíz del reloj de PostgREST.
+- Un error persistente más allá de los reintentos seguirá devolviendo 500; no se garantiza entrega durante una caída prolongada. No hay reenvío posterior/durable ni registro nuevo en tabla: logs estructurados de Edge Functions.
+- No se enviaron correos de prueba: el usuario autorizó corregir, no pidió expresamente enviar mensajes. La autenticación SMTP y llegada a bandeja real quedan sin verificar; no afirmar entrega. Mantiene destinatarios y horarios.
+- Sin cambios de esquema, secretos, cron, interfaz ni captura de tiempos. No se ejecutó build frontend porque no cambió src; Deno no está instalado, tests ejecutan TypeScript transpilado de handlers con dobles de SDK/SMTP y las funciones desplegadas se verificaron vía HTTP.
+- Deploy autorizado por pedido de corrección; no commit ni push. .claude/ intacto.
+
+### Estado final
+- Tests/build: 10/10 tests pasan (dos rondas); lint exit 0; diff --check limpio. Dos diagnósticos finales HTTP 200 en producción, cada uno con tres consultas exitosas; SMTP real no probado.
+- Git: sin staged, commit ni push; archivos anteriores modificados y dos nuevos en _shared/. Supabase ya actualizado: weekly-report v8 y alertas-pendientes v10 ACTIVE.
+---
+
+---
+## [2026-09-22 00:58] Estudio de garantía elegible al registrar trabajo
+
+### Instrucción recibida
+Estudiar Garantías y evaluar agregar una casilla para elegir duración al ingresar un trabajo, conservando tres meses por defecto.
+
+### Comandos ejecutados (todos, en orden)
+- `Get-Content -Encoding UTF8 src/lib/garantia.ts,supabase/migrations/0024_garantia_vence_at.sql` → vencimiento calculado en trigger como entrega más tres meses.
+- `Get-Content -Encoding UTF8 src/components/dashboard/components/FormularioServicio.tsx` → formulario con una sección por equipo; salida conjunta parcialmente truncada.
+- `Get-Content -Encoding UTF8 src/components/dashboard/GarantiasTab.tsx | Select-Object -Skip 240` → Cobertura lee vencimiento y muestra texto fijo de tres meses.
+- `Get-Content -Encoding UTF8 src/types.ts` → no hay duración configurable en Servicio ni EquipoForm.
+- `rg -n 'garantia|equipoVacio|setEquipos|handleGuardarServicio|handleIniciarEdicion' src/components/dashboard/Dashboard.tsx src/lib/validacion.ts` → ubicados alta, edición y reinicio del formulario.
+- `Get-Content -Encoding UTF8 src/components/dashboard/components/BadgeGarantia.tsx` → vigente/vencida/sin dato; sin garantía voluntaria necesitaría estado propio.
+- `Get-Content -Encoding UTF8 src/components/dashboard/Dashboard.tsx | Select-Object -Skip 606 -First 23` → carga de datos para editar.
+- `Get-Content -Encoding UTF8 src/components/dashboard/Dashboard.tsx | Select-Object -Skip 915 -First 17` → reactivar borra entrega y el trigger deja vencimiento nulo.
+- `Get-Date -Format 'yyyy-MM-dd HH:mm'` → 2026-09-22 00:58.
+- `git status --short` → cambios previos de correos/log y .claude/ sin seguimiento; no cambios nuevos de funcionalidad.
+- apply_patch (sin shell) → append de esta entrada.
+
+### Archivos tocados (todos)
+- `PROGRESS_LOG.md` — modificado — añade estudio y propuesta de duración configurable por equipo.
+
+### Hallazgos y decisiones
+- Es viable un selector de duración por equipo con tres meses preseleccionados. Cambiar solo cuando se ofrezca otro plazo, sin interacción adicional en el caso habitual.
+- La duración ofrecida es una decisión del taller, no se deduce de fechas ni del historial; no contradice la regla de evitar campos que pueden inferirse automáticamente.
+- Debe guardarse la duración en servicios y adaptar trigger, alta/edición, tipos y textos de Cobertura. Mantener cómputo desde entrega real y conservar vencimientos históricos; no modificar tabla de reclamos.
+- Si se incluye Sin garantía, debe distinguirse de Sin dato (históricos sin entrega) y Vencida. No convertir null en garantía voluntariamente ausente.
+- Se propondrán plazos de ejemplo y se consultarán los usados por el usuario antes de fijar opciones. Esta ronda es estudio de la propuesta, no implementación ni migración.
+- Hallazgo secundario: calcularEstadoGarantia usa ceil y >= 0, lo que puede mantener vigente un vencimiento de hace menos de 24h. Pendiente corregir con comparación de instantes cuando se implemente el cambio.
+
+### Estado final
+- Tests/build: no ejecutados; estudio sin cambios de código ni base de datos.
+- Git: solo append nuevo al log; persisten cambios previos de correos y .claude/ sin seguimiento. Sin staged, commit ni push.
+---
+
+---
+## [2026-09-22 09:55] Garantía por equipo implementada y probada para móvil
+
+### Instrucción recibida
+Agregar Sin garantía, 1 mes, 3 meses y 6 meses dentro de cada equipo, con tres meses por defecto.
+El usuario autorizó probar y subir, priorizando iPhone, y pidió continuar tras interrumpirse la sesión.
+
+### Comandos ejecutados (todos, en orden)
+- `git status --short` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `Get-Content -Encoding UTF8 src/lib/validacion.ts` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `Get-Content -Encoding UTF8 src/components/dashboard/components/FormularioServicio.tsx | Select-Object -Skip 285 -First 120` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `Get-Content -Encoding UTF8 'C:/Users/Xavier Bello/.codex/plugins/cache/openai-curated-remote/vercel/0.21.4/skills/agent-browser/SKILL.md' -First 100` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `Get-Content -Encoding UTF8 'C:/Users/Xavier Bello/.codex/plugins/cache/openai-curated-remote/vercel/0.21.4/skills/react-best-practices/SKILL.md'` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `Get-Content -Encoding UTF8 'C:/Users/Xavier Bello/.codex/plugins/cache/openai-curated-remote/supabase/1.0.0/skills/supabase/SKILL.md'` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `Get-Command agent-browser -ErrorAction SilentlyContinue | Select-Object Name,Source` → No instalado en PATH; navegador usado por npx y sin CLI gh.
+- `Get-ChildItem node_modules/.bin -Name | Where-Object { $_ -match 'supabase|playwright|vite' }` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `git remote -v` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `git branch --show-current` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `Get-Content -Encoding UTF8 src/components/dashboard/Dashboard.tsx | Select-Object -Skip 465 -First 24` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `Get-Content -Encoding UTF8 src/components/dashboard/Dashboard.tsx | Select-Object -Skip 571 -First 19` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `npx.cmd --yes supabase --help` → EPERM al escribir caché npm; repetido con escalación.
+- `npx.cmd --yes supabase --help (escalado)` → Ayuda de CLI leída correctamente con permisos de caché.
+- `npx.cmd --yes supabase migration new --help` → Ayuda de CLI leída correctamente con permisos de caché.
+- `npx.cmd --yes supabase migration new garantia_meses_por_equipo` → CLI creó 20260922040336_garantia_meses_por_equipo.sql.
+- `npx.cmd --yes agent-browser --help (escalado)` → Ayuda de CLI leída correctamente con permisos de caché.
+- `git status --short` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `git diff -- src/types.ts src/components/dashboard/Dashboard.tsx src/lib/garantia.ts` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `Get-Content -Encoding UTF8 'C:/Users/Xavier Bello/.codex/plugins/cache/openai-curated-remote/vercel/0.21.4/skills/agent-browser-verify/SKILL.md'` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `Get-Content -Encoding UTF8 'C:/Users/Xavier Bello/.codex/plugins/cache/openai-curated-remote/vercel/0.21.4/skills/verification/SKILL.md'` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `npm.cmd run build` → tsc y Vite exitosos; 138 módulos; build final 601 ms.
+- `npm.cmd run lint` → Exit 0, sin diagnósticos.
+- `npm.cmd run dev -- --host 127.0.0.1 --port 5173 --strictPort` → Vite activo en 127.0.0.1:5173, sesión 20630.
+- `npx.cmd --yes agent-browser --session garantia-iphone open http://127.0.0.1:5173` → Navegador abrió página local.
+- `node --test tests/garantia.test.mjs supabase/functions/_shared/consultasCorreo.test.mjs` → 14 pruebas pasan (4 garantía + 10 correos), 0 fallos.
+- `npx.cmd --yes agent-browser --session garantia-iphone set device 'iPhone 13'` → Dispositivo no soportado; se corrigió a iPhone 15.
+- `npx.cmd --yes agent-browser --session garantia-iphone open http://127.0.0.1:5173/tests/garantia-browser.html` → Navegador abrió página local.
+- `npx.cmd --yes agent-browser --session garantia-iphone snapshot -i` → Árbol revisado: selector, estados, valores por equipo y Cobertura.
+- `$paths = @('supabase/migrations/20260922040336_garantia_meses_por_equipo.sql','tests/garantia.sql')` → Ejecutado para preparar o comprobar la implementación; sin cambios a trabajos reales.
+- `$paths | ForEach-Object { @{ name = $_` → Ejecutado para preparar o comprobar la implementación; sin cambios a trabajos reales.
+- `content = [IO.File]::ReadAllText((Join-Path (Get-Location) $_)) } } | ConvertTo-Json -Depth 3 -Compress` → Ejecutado para preparar o comprobar la implementación; sin cambios a trabajos reales.
+- `npx.cmd --yes agent-browser --session garantia-iphone set device 'iPhone 15'` → Dimensiones móviles aplicadas.
+- `npx.cmd --yes agent-browser --session garantia-iphone eval "JSON.stringify({width:innerWidth,scroll:document.documentElement.scrollWidth,garantia:document.querySelector('#garantia-equipo-0').value,font:getComputedStyle(document.querySelector('#garantia-equipo-0')).fontSize,height:document.querySelector('#garantia-equipo-0').getBoundingClientRect().height})"` → 393 px de ancho sin overflow; selector 16 px y altura 49 px; default 3.
+- `npx.cmd --yes agent-browser --session garantia-iphone errors` → Sin errores de aplicación reportados.
+- `npx.cmd --yes agent-browser --session garantia-iphone fill 'input[placeholder="Ej. Carlos / Willy"]' 'Prueba Garantia'` → Interacción en fixture local; resultados comprobados con snapshot/payload.
+- `npx.cmd --yes agent-browser --session garantia-iphone fill 'input[placeholder="Ej. Xiaomi Redmi Note 12"]' 'Equipo prueba A'` → Interacción en fixture local; resultados comprobados con snapshot/payload.
+- `npx.cmd --yes agent-browser --session garantia-iphone fill 'input[placeholder="0.00"]' '15000'` → Interacción en fixture local; resultados comprobados con snapshot/payload.
+- `npx.cmd --yes agent-browser --session garantia-iphone select '#garantia-equipo-0' '0'` → Interacción en fixture local; resultados comprobados con snapshot/payload.
+- `npx.cmd --yes agent-browser --session garantia-iphone click 'text=+ Agregar otro equipo (mismo cliente)'` → Selector textual no encontrado; repetido mediante ref e34.
+- `npx.cmd --yes agent-browser --session garantia-iphone snapshot -i` → Árbol revisado: selector, estados, valores por equipo y Cobertura.
+- `npx.cmd --yes agent-browser --session garantia-iphone click '@e34'` → Interacción en fixture local; resultados comprobados con snapshot/payload.
+- `npx.cmd --yes agent-browser --session garantia-iphone eval "JSON.stringify(Array.from(document.querySelectorAll('select[id^=garantia-equipo]')).map(e=>e.value))"` → Error de sintaxis por quoting de .cmd; creó archivo vacío e.value)), luego eliminado.
+- `npx.cmd --yes agent-browser --session garantia-iphone snapshot -i` → Árbol revisado: selector, estados, valores por equipo y Cobertura.
+- `npx.cmd --yes agent-browser --session garantia-iphone fill '@e180' 'Equipo prueba B'` → Interacción en fixture local; resultados comprobados con snapshot/payload.
+- `npx.cmd --yes agent-browser --session garantia-iphone fill '@e176' '20000'` → Interacción en fixture local; resultados comprobados con snapshot/payload.
+- `npx.cmd --yes agent-browser --session garantia-iphone select '#garantia-equipo-1' '6'` → Interacción en fixture local; resultados comprobados con snapshot/payload.
+- `npx.cmd --yes agent-browser --session garantia-iphone click '@e35'` → Interacción en fixture local; resultados comprobados con snapshot/payload.
+- `npx.cmd --yes agent-browser --session garantia-iphone eval 'JSON.stringify(window.garantiaQA.escrituras)'` → Inspección de escrituras simuladas; primer intento vacío por campos requeridos, tras completar por refs POST contiene plazos 0 y 6.
+- `npx.cmd --yes agent-browser --session garantia-iphone eval "document.getElementById('garantia-equipo-0').value"` → Ejecutado para preparar o comprobar la implementación; sin cambios a trabajos reales.
+- `npx.cmd --yes agent-browser --session garantia-iphone snapshot -i` → Árbol revisado: selector, estados, valores por equipo y Cobertura.
+- `npx.cmd --yes agent-browser --session garantia-iphone fill '@e36' 'Prueba Garantia'` → Interacción en fixture local; resultados comprobados con snapshot/payload.
+- `npx.cmd --yes agent-browser --session garantia-iphone fill '@e45' 'Equipo prueba A'` → Interacción en fixture local; resultados comprobados con snapshot/payload.
+- `npx.cmd --yes agent-browser --session garantia-iphone fill '@e41' '15000'` → Interacción en fixture local; resultados comprobados con snapshot/payload.
+- `npx.cmd --yes agent-browser --session garantia-iphone click '@e35'` → Interacción en fixture local; resultados comprobados con snapshot/payload.
+- `npx.cmd --yes agent-browser --session garantia-iphone eval 'JSON.stringify(window.garantiaQA.escrituras)'` → Inspección de escrituras simuladas; primer intento vacío por campos requeridos, tras completar por refs POST contiene plazos 0 y 6.
+- `npx.cmd --yes agent-browser --session garantia-iphone snapshot -i` → Árbol revisado: selector, estados, valores por equipo y Cobertura.
+- `npx.cmd --yes agent-browser --session garantia-iphone click '@e216'` → Interacción en fixture local; resultados comprobados con snapshot/payload.
+- `npx.cmd --yes agent-browser --session garantia-iphone get value '#garantia-equipo-0'` → Edición recupera correctamente 0 (sin garantía).
+- `npx.cmd --yes agent-browser --session garantia-iphone select '#garantia-equipo-0' '1'` → Interacción en fixture local; resultados comprobados con snapshot/payload.
+- `npx.cmd --yes agent-browser --session garantia-iphone scrollintoview '#garantia-equipo-0'` → Interacción en fixture local; resultados comprobados con snapshot/payload.
+- `npx.cmd --yes agent-browser --session garantia-iphone screenshot node_modules/.tmp/garantia-form-iphone.png` → Captura generada y revisada visualmente con view_image.
+- `npx.cmd --yes agent-browser --session garantia-iphone snapshot -i` → Árbol revisado: selector, estados, valores por equipo y Cobertura.
+- `npx.cmd --yes agent-browser --session garantia-iphone click '@e35'` → Interacción en fixture local; resultados comprobados con snapshot/payload.
+- `npx.cmd --yes agent-browser --session garantia-iphone eval 'JSON.stringify(window.garantiaQA.escrituras.at(-1))'` → PATCH real del Dashboard hacia API simulada contiene garantia_meses=1.
+- `npx.cmd --yes agent-browser --session garantia-iphone click '@e28'` → Interacción en fixture local; resultados comprobados con snapshot/payload.
+- `npx.cmd --yes agent-browser --session garantia-iphone set viewport 375 812` → Dimensiones móviles aplicadas.
+- `npx.cmd --yes agent-browser --session garantia-iphone eval 'JSON.stringify({width:innerWidth,scroll:document.documentElement.scrollWidth})'` → Ancho de documento igual al viewport (375 o 320 px); sin overflow.
+- `npx.cmd --yes agent-browser --session garantia-iphone screenshot node_modules/.tmp/garantia-cobertura-iphone.png` → Captura generada y revisada visualmente con view_image.
+- `npx.cmd --yes agent-browser --session garantia-iphone snapshot` → Árbol revisado: selector, estados, valores por equipo y Cobertura.
+- `npm.cmd run build` → tsc y Vite exitosos; 138 módulos; build final 601 ms.
+- `npm.cmd run lint` → Exit 0, sin diagnósticos.
+- `git diff --check` → Sin errores de whitespace; avisos LF/CRLF.
+- `npx.cmd --yes agent-browser --session garantia-iphone errors` → Sin errores de aplicación reportados.
+- `npx.cmd --yes agent-browser --session garantia-iphone set viewport 320 740` → Dimensiones móviles aplicadas.
+- `npx.cmd --yes agent-browser --session garantia-iphone eval 'JSON.stringify({width:innerWidth,scroll:document.documentElement.scrollWidth})'` → Ancho de documento igual al viewport (375 o 320 px); sin overflow.
+- `git log -3 --oneline` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `Get-Date -Format 'yyyy-MM-dd HH:mm'` → Hora local registrada; última 2026-09-22 09:55.
+- `Rename-Item -LiteralPath 'supabase/migrations/20260922040336_garantia_meses_por_equipo.sql' -NewName '20260922125047_garantia_meses_por_equipo.sql'` → Nombre sincronizado con versión remota 20260922125047.
+- `rg -n 'vercel.app|netlify.app|github.io|https://.*mega|deploy|hosting' PROGRESS_LOG.md README.md .github -g '*' ` → Sin URL de producción encontrada; .github no existe.
+- `git diff --numstat` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `Get-ChildItem -Force -Name` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `Get-Item -LiteralPath 'e.value))' | Select-Object Name,Length` → Confirmado archivo accidental de 0 bytes.
+- `Remove-Item -LiteralPath 'e.value))'` → Eliminado exclusivamente archivo vacío accidental e.value)).
+- `Get-Content -Encoding UTF8 vercel.json` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `Get-Content -Encoding UTF8 'C:/Users/Xavier Bello/.codex/plugins/cache/openai-curated-remote/vercel/0.21.4/skills/vercel-api/SKILL.md'` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `Get-Content -Encoding UTF8 'C:/Users/Xavier Bello/.codex/plugins/cache/openai-curated-remote/vercel/0.21.4/skills/deployments-cicd/SKILL.md' -First 110` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `git diff -- src/components/dashboard/GarantiasTab.tsx src/components/dashboard/components/BadgeGarantia.tsx src/components/dashboard/components/FormularioServicio.tsx src/lib/validacion.ts` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `Get-Content -Encoding UTF8 'C:/Users/Xavier Bello/.codex/plugins/cache/openai-curated-remote/vercel/0.21.4/skills/react-best-practices/SKILL.md' -First 80` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `Get-Command gh -ErrorAction SilentlyContinue | Select-Object Name,Source` → No instalado en PATH; navegador usado por npx y sin CLI gh.
+- `git diff --check` → Sin errores de whitespace; avisos LF/CRLF.
+- `git status --short` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `Get-ChildItem dist -Recurse -File | Select-Object -ExpandProperty FullName` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `git fetch origin` → Falló por permiso sobre .git/FETCH_HEAD.
+- `git fetch origin (escalado)` → Exitoso; origin/main sin divergencia con HEAD.
+- `git rev-list --left-right --count HEAD...origin/main` → 0 0: sin commits divergentes.
+- `git diff --name-only` → Lectura/inspección completada; código y cambios revisados. .claude/ preexistente intacto.
+- `Get-Date -Format 'yyyy-MM-dd HH:mm'` → Hora local registrada; última 2026-09-22 09:55.
+
+Operaciones de herramientas adicionales, sin shell:
+- Lectura de firmas Supabase y documentación oficial de triggers PostgreSQL → comportamiento UPDATE OF verificado.
+- Supabase execute_sql → función previa y columnas actuales inspeccionadas (sin duración configurable).
+- apply_patch → UI, tipos, validación, migración, pruebas y fixture de Dashboard; correcciones menores de comentarios/indentación.
+- execute_sql → migración y tests/garantia.sql probados juntos en transacción terminada en rollback; PASS.
+- view_image → inspección visual de ambas capturas móviles.
+- execute_sql → huella previa de vencimientos: 970 registros, 57 sin fecha, MD5 c978beec894e99d6d5886dc5e064d98e.
+- apply_migration garantia_meses_por_equipo → aplicada correctamente en producción.
+- execute_sql → mismos 970 registros, mismos 57 sin fecha y MISMA huella de vencimientos; 970 con plazo 3 meses.
+- execute_sql de tests/garantia.sql después de migrar → PASS en tabla temporal, rollback, sin trabajos de prueba persistidos.
+- get_advisors security → sin hallazgos sobre el trigger nuevo; avisos de objetos preexistentes (RLS sin políticas, unaccent público, funciones SECURITY DEFINER y protección de contraseñas desactivada). No se modificaron objetos ajenos al alcance. Referencias: https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable y https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection .
+- execute_sql de supabase_migrations.schema_migrations → versión remota 20260922125047; archivo local renombrado para coincidir.
+- Vercel list_teams → cuenta conectada devolvió lista vacía; no permite confirmar despliegue por ese conector.
+- apply_patch → esta entrada de progreso, previa al commit/push.
+
+### Archivos tocados (todos)
+- `src/types.ts` — modificado — plazo 0/1/3/6 en servicio y formulario, default 3.
+- `src/components/dashboard/Dashboard.tsx` — modificado — envía plazo en alta/edición y lo recupera con ?? para no perder el cero.
+- `src/components/dashboard/components/FormularioServicio.tsx` — modificado — selector nativo por equipo, etiqueta accesible, ayuda contextual, fuente 16 px y altura mínima 48 px.
+- `src/components/dashboard/GarantiasTab.tsx` — modificado — plazo elegido, sin garantía en ámbar y layout envolvente para móvil; elimina afirmación fija de tres meses.
+- `src/components/dashboard/components/BadgeGarantia.tsx` — modificado — diferencia Sin garantía / Sin dato / Vencida.
+- `src/lib/garantia.ts` — modificado — vigencia por instante exacto, sin día extra por redondeo; fechas inválidas devuelven null.
+- `src/lib/validacion.ts` — modificado — rechaza plazos diferentes a 0,1,3,6.
+- `supabase/migrations/20260922040336_garantia_meses_por_equipo.sql` — creado y renombrado — archivo inicial generado por CLI.
+- `supabase/migrations/20260922125047_garantia_meses_por_equipo.sql` — renombrado / modificado — versión remota correspondiente; columna con default/check y trigger según plazo, con search_path y UTC explícitos.
+- `tests/garantia.test.mjs` — creado — cuatro pruebas de plazos, independencia y vigencia.
+- `tests/garantia.sql` — creado — pruebas del trigger real, meses calendario, edición, reactivación, históricos y restricción, solo tabla temporal.
+- `tests/garantia-browser.html` — creado — entrada local para QA.
+- `tests/garantia-browser.tsx` — creado — Dashboard real con API simulada y captura de escrituras; bloquea llamadas externas y no se incluye en dist.
+- `tests/README.md` — creado — instrucciones de pruebas y límites de emulación.
+- `PROGRESS_LOG.md` — modificado — append de implementación y verificaciones.
+- `e.value))` — creado / borrado — archivo vacío accidental del comando eval con quoting de .cmd; eliminado.
+- `node_modules/.tmp/garantia-form-iphone.png` — creado — captura de selector móvil (ignorada por Git).
+- `node_modules/.tmp/garantia-cobertura-iphone.png` — creado — captura de cobertura móvil (ignorada por Git).
+- `node_modules/.tmp/tsconfig.app.tsbuildinfo` — modificado — caché de compilación ignorada.
+- `node_modules/.tmp/tsconfig.node.tsbuildinfo` — generado / actualizado por build — caché ignorada.
+- `dist/index.html` — modificado — manifiesto de salida Vite.
+- `dist/favicon.svg` — regenerado — copia de recurso público.
+- `dist/icons.svg` — regenerado — copia de recurso público.
+- `dist/manifest.json` — regenerado — copia de manifiesto público.
+- `dist/assets/index-DYwLnl9H.css` — creado — CSS compilado con selector.
+- `dist/assets/index-pNtJc24m.js` — creado — aplicación compilada.
+- `dist/assets/rolldown-runtime-DAXXjFlN.js` — regenerado — runtime de build.
+- `dist/assets/src-BHyPwket.js` — regenerado — chunk existente de OCR.
+- `dist/assets/vendor-LbrMf0co.js` — regenerado — dependencias sin cambios.
+- `dist/assets/index-CH42tBQ0.css` — borrado por Vite — reemplazado por nuevo hash de CSS.
+- `dist/assets/index-Ci3FQ1X8.js` — borrado por Vite — reemplazado por nuevo hash de aplicación.
+
+### Hallazgos y decisiones
+- Selector por equipo, no por cliente; default 3, inicio desde entrega real. Sin nuevos cálculos por tecla, peticiones extra ni dependencias.
+- Meses calendario calculados en DB. Cambiar plazo de un entregado recalcula desde su entrega original. Edición sin cambios preserva vencimiento exacto; reactivar borra vencimiento y nueva entrega usa el plazo conservado.
+- Migración compatible con frontend anterior porque default 3 en DB; no modifica vencimientos históricos ni crea fechas para casos Sin dato.
+- Prueba navegador: POST del Dashboard con dos equipos registra 0 y 6; editar el primero recupera 0, luego PATCH registra 1; nuevo formulario vuelve a 3.
+- Cobertura revisada con sin garantía, 1/3/6 meses, histórico sin fecha y vencido hace un minuto.
+- iPhone emulado en Chromium: selector de 49 px, fuente de 16 px, etiqueta vinculada. Sin overflow a 393,375,320 px; no es prueba en hardware Safari/iOS.
+- Corrección relacionada: antes un vencimiento de hace menos de 24h seguía vigente por Math.ceil; ahora compara instantes.
+- La fixture usa datos falsos en memoria, no se agregaron clientes ni servicios de prueba a producción.
+- Revisión React: sin efectos nuevos, estado por equipo existente, JSX pequeño y select nativo. Aumento JS principal aproximado 1.65 kB sin comprimir frente a build inicial.
+- Se incluirán en la publicación los archivos de correos ya corregidos y probados en la ronda anterior, para sincronizar Git con funciones desplegadas v8/v10. No se alteraron nuevamente en esta ronda.
+- Avisos de seguridad preexistentes anotados arriba, pendientes de revisión separada; no se ampliaron permisos para esta función.
+
+### Estado final
+- Tests/build: 14/14 pruebas Node pasan, dos pruebas SQL PASS (antes/después), build y lint exitosos, diff --check sin errores. Navegador sin errores de aplicación y flujos móviles comprobados.
+- Git: cambios probados aún sin staged/commit al escribir esta entrada; HEAD y origin/main alineados. Próximo paso autorizado: commit y push. .claude/ permanece fuera.
+---
