@@ -1167,3 +1167,39 @@ Operaciones de herramientas adicionales, sin shell:
 - Tests/build: 14/14 pruebas Node pasan, dos pruebas SQL PASS (antes/después), build y lint exitosos, diff --check sin errores. Navegador sin errores de aplicación y flujos móviles comprobados.
 - Git: cambios probados aún sin staged/commit al escribir esta entrada; HEAD y origin/main alineados. Próximo paso autorizado: commit y push. .claude/ permanece fuera.
 ---
+---
+## [2026-09-22 10:10] Publicación verificada de garantías
+
+### Instrucción recibida
+Retomar el trabajo, terminarlo, probarlo y subirlo, priorizando iPhone.
+
+### Comandos ejecutados (todos, en orden)
+- `git add PROGRESS_LOG.md src/types.ts src/components/dashboard/Dashboard.tsx src/components/dashboard/GarantiasTab.tsx src/components/dashboard/components/BadgeGarantia.tsx src/components/dashboard/components/FormularioServicio.tsx src/lib/garantia.ts src/lib/validacion.ts supabase/migrations/20260922125047_garantia_meses_por_equipo.sql tests/README.md tests/garantia.test.mjs tests/garantia.sql tests/garantia-browser.html tests/garantia-browser.tsx supabase/functions/_shared/consultasCorreo.ts supabase/functions/_shared/consultasCorreo.test.mjs supabase/functions/weekly-report/index.ts supabase/functions/weekly-report/README.md supabase/functions/alertas-pendientes/index.ts supabase/functions/alertas-pendientes/README.md` → 20 archivos preparados.
+- `git diff --cached --stat` → 20 archivos, 1070 inserciones y 202 eliminaciones.
+- `git diff --cached --check` → sin errores.
+- `git commit -m "Agrega garantia por equipo optimizada para movil y recuperacion de correos"` → f67d07983547b35a56227b3ca7f9497eb35257f8.
+- `git push origin main` → publicado a3f4a9c..f67d079.
+- `git status --short` → únicamente .claude/ sin seguimiento, preexistente.
+- `git rev-parse HEAD` → f67d07983547b35a56227b3ca7f9497eb35257f8.
+- `git rev-list --left-right --count HEAD...origin/main` → 0 0.
+- `(Invoke-RestMethod -Uri 'https://api.github.com/repos/Belloxavier/mega-unlock-system/commits/f67d079/status').statuses | Select-Object state,context,target_url,description` → falló conexión dentro del sandbox.
+- `(Invoke-RestMethod -Uri 'https://api.github.com/repos/Belloxavier/mega-unlock-system/commits/f67d079/status').statuses | Select-Object state,context,target_url,description` → reintento autorizado fuera del sandbox: Vercel success.
+- `Get-Content PROGRESS_LOG.md -Tail 18` → revisado cierre anterior.
+- `Get-Date -Format 'yyyy-MM-dd HH:mm'` → 2026-09-22 10:10.
+- `git status --short` → únicamente .claude/; advertencias de lectura del ignore global por permisos.
+- `Get-Content PROGRESS_LOG.md -Tail 4` → detectado marcador accidental de edición; retirado antes de publicar.
+- Comandos de cierre de esta entrada: `git add PROGRESS_LOG.md`, `git commit -m "Documenta publicacion verificada de garantias"`, `git push origin main`, `git status --short` → se ejecutan a continuación; resultado comprobado en la respuesta final.
+
+### Archivos tocados (todos)
+- `PROGRESS_LOG.md` — modificado — agregado registro de commit, push y confirmación del despliegue; retirado marcador accidental.
+
+### Hallazgos y decisiones
+- GitHub informa Vercel success para f67d079. Despliegue: https://vercel.com/belloxaviers-projects/mega-unlock-system/J9Zxjw4vifdKDkmThdUB1iYLcoHt.
+- Implementación y migración ya publicadas. No se modificó código después de las pruebas documentadas en la entrada anterior.
+- .claude/ permanece fuera del commit.
+- Validación móvil mediante Chromium emulado; no se probó Safari en un iPhone físico.
+
+### Estado final
+- Tests/build: 14/14 pruebas Node, SQL antes/después, build y lint correctos según entrada anterior. Vercel success confirmado por GitHub.
+- Git: commit funcional f67d079 publicado en origin/main; esta entrada se publica en un commit documental de cierre.
+---
