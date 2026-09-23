@@ -1262,3 +1262,124 @@ Retomar el trabajo, terminarlo, probarlo y subirlo, priorizando iPhone.
 - Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso (dos rondas), `npm run lint` (oxlint) sin errores, `node --test tests/garantia.test.mjs` 5/5 en ambas rondas.
 - Git: sin staged, commit ni push — cambios solo en working tree local, pendientes de tu visto bueno para subir.
 ---
+
+---
+## [2026-09-23 01:10] Link de pago WhatsApp, diagnóstico de correos y revisión de migraciones/seguridad (fase local, esperando confirmación)
+
+### Instrucción recibida
+Tres tareas con la regla de siempre: primero local, nada a producción/GitHub/base de datos sin visto bueno. (1) Reintento de fetchCuentas + recarga en "online"/pestaña visible + aviso antes de mandar WhatsApp sin link de pago. (2) Registrar migraciones 0022/0023/0024 con `supabase migration repair`, mostrando el comando antes. (3) Revisar Security/Performance Advisor y proponer. Además: los correos automáticos no llegan desde el 9-sep.
+
+### Comandos ejecutados (todos, en orden)
+- `ToolSearch` (herramientas Supabase) → cargadas.
+- `grep` en Dashboard.tsx (linkPago/window.open/wa.me) + chequeo de variable SUPABASE_ACCESS_TOKEN (sin mostrar valor) → no hay token en el entorno.
+- `Read Dashboard.tsx` 640-840 → flujo de enviarAvisoEquiposListos / aplicarCambioEstado.
+- Supabase `get_advisors security` → 5 tablas con RLS sin políticas, unaccent en public, 3 funciones SECURITY DEFINER ejecutables por anon/authenticated, protección de contraseñas filtradas desactivada.
+- Supabase `get_advisors performance` → 2 FK sin índice (tabla jobs), 5 índices sin uso.
+- Supabase `execute_sql` sobre cron.job (comando con secretos enmascarados) → weekly-report (lunes 09 UTC) y alertas-pendientes (cada hora) activos.
+- Supabase `execute_sql` sobre cron.job_run_details, últimos 20 días → todos "succeeded" (solo significa que se encoló la llamada HTTP).
+- Supabase `execute_sql` sobre net._http_response → a las 22h Chile (01:00 UTC 23-sep) status 500, etapa smtp.
+- Supabase `query_logs` function_logs 00:30-01:30 UTC → error real: `Cannot read properties of undefined (reading 'catch')`.
+- `grep` catch/close en ambas edge functions → `await client.close().catch(...)`.
+- `curl` al código de denomailer 1.6.0 (client/mod.ts) → firma `close(): void | Promise<void>`: puede devolver void y entonces `.catch` revienta.
+- `sed`/`grep` Dashboard.tsx (otros envíos de WhatsApp, setConfirm) + `cat ConfirmSheet.tsx` → estructura de la hoja de confirmación.
+- `Write src/hooks/useCuentasBancarias.ts` → reintentos + listeners + estadoCuentasRef.
+- `python` (edición de ConfirmSheet.tsx) → prop onCancelAction.
+- `python` (edición de Dashboard.tsx) + `npx tsc --noEmit` → error por salto de línea literal dentro de un string; corregido con Edit.
+- `npx tsc --noEmit && npm run lint && npm run build` → limpio.
+- Edit de la sangría de un comentario en Dashboard.tsx.
+- `wc/grep/cat tests/garantia-browser.*` + `Read tests/garantia-browser.tsx` → técnica de fixture con API simulada.
+- Creación temporal de `tests/qa-cuentas.html` y `tests/qa-cuentas.tsx` (API simulada, sin tocar Supabase) + `curl` al dev server → 200.
+- `agent-browser` (PowerShell, sesión qa-cuentas) → falló por conflicto de daemon; `TaskStop`; `agent-browser close --all` y nueva sesión qa2.
+- `agent-browser eval qa.llamadasCuentas` → 14 y luego 24 llamadas; investigado.
+- `sed` sobre el fixture para agregar contadores por tabla → servicios 4, garantías 2, cuentas 14 (solo cuentas se repetía).
+- `Grep` en node_modules/@supabase/postgrest-js → el SDK reintenta solo (3 reintentos, 1/2/4s) en errores de red y 503/520; eso multiplicaba mis 3 intentos (12 llamadas en ~25s).
+- `sed` sobre el fixture para simular una falla de red real (`TypeError: Failed to fetch`).
+- `agent-browser` flujo Avisar → Enviar → aparece la hoja "FALTA EL LINK DE PAGO" con botones REINTENTAR / ENVIAR IGUAL. OK.
+- `agent-browser` con qa.fallar=false + REINTENTAR → hoja "Cuentas cargadas" → Enviar → URL de WhatsApp CON "Datos para transferencia". OK.
+- `agent-browser` ENVIAR IGUAL → URL de WhatsApp SIN link (esperado). OK.
+- Varios `agent-browser eval` con comillas dobles/paréntesis → fallaron por el quoting de npx.cmd en Windows ("C:\Program no se reconoce"); se agregaron atajos volverInternet()/volverPestana() al fixture.
+- Edit de useCuentasBancarias.ts → `.retry(false)` en la consulta (solo quedan mis 3 intentos).
+- `npx tsc --noEmit` + `agent-browser` → carga inicial de 6 llamadas (3 × doble montaje de StrictMode en dev) y luego se detiene; evento online → +1; pestaña visible → +1. OK.
+- `agent-browser` Avisar → Enviar tras la recarga → WhatsApp directo con link, sin aviso; `agent-browser errors` → sin errores. OK.
+- `agent-browser close --all`; `rm tests/qa-cuentas.html tests/qa-cuentas.tsx`; `tsc` OK; `npm run lint` OK; `npm run build` OK; `node --test` garantía + correos → 15/15.
+- `grep close` en consultasCorreo.test.mjs + `sed` weekly-report 210-240 → la prueba simulaba close() como async, por eso no detectaba el bug.
+- `python` → ambas edge functions pasan a usar try/catch alrededor de `await client.close()`.
+- `python` → la prueba usa close() síncrono, como denomailer real; `node --test` → 10/10.
+- `git stash push` (solo las 2 edge functions) + `node --test` → código ANTERIOR: 9 pass / 1 fail (bug reproducido); `git stash pop` → cambios restaurados.
+- `npx supabase --version` → 2.117.0; `npx supabase projects list` → sin sesión (LegacyPlatformAuthRequiredError); `supabase/.temp` existe (proyecto linkeado, carpeta ignorada por git).
+- Supabase `execute_sql` sobre las columnas de supabase_migrations.schema_migrations → version/statements/name/...
+- Supabase `execute_sql` con el conteo de las tablas sin políticas → folio_contadores 7 filas; imei_serie, jobs, services y technicians 0 filas.
+- Supabase `execute_sql` con la definición de asignar_folios / siguiente_folio / rls_auto_enable → las 3 ya tienen search_path fijo.
+- `Grep` en src/ y supabase/ → la app solo usa asignar_folios (RPC) y folio_contadores a través de las funciones; nunca imei_serie/jobs/services/technicians; unaccent solo aparece en la migración 0022.
+- Supabase `execute_sql` has_function_privilege para anon/authenticated → las 3 funciones son ejecutables por ambos roles.
+- Supabase `execute_sql` sobre las funciones de public (unaccent/search_path) → ninguna función usa unaccent; todas tienen search_path fijo.
+- Supabase `execute_sql` sobre pg_policies → servicios/clientes/garantias/cierres_caja solo para authenticated; cuentas_bancarias con SELECT para anon+authenticated (página pública /pago).
+- Supabase `execute_sql` buscando índices/columnas/vistas/funciones que usen unaccent → ninguno.
+- Supabase `get_project` / `search_docs` / `get_organization` → plan Free; la protección de contraseñas filtradas requiere plan Pro.
+- Supabase `execute_sql` con el proacl de las 3 funciones y pg_event_trigger → rls_auto_enable es el event trigger `ensure_rls` de Supabase (activa RLS en tablas nuevas); tiene grants explícitos a anon/authenticated y PUBLIC.
+- `date` → 2026-09-23 01:10.
+- `cat >> PROGRESS_LOG.md` con heredoc → falló por una comilla en el texto; entrada agregada con Edit.
+
+### Archivos tocados (todos)
+- `src/hooks/useCuentasBancarias.ts` — modificado — 3 intentos (esperas de 1s y 3s) con `.retry(false)` del SDK, recarga en el evento `online` y al volver a la pestaña (solo si hay internet); `fetchCuentas` devuelve true/false y el hook expone `estadoCuentasRef` (cargadas/cantidad).
+- `src/components/dashboard/components/ConfirmSheet.tsx` — modificado — prop opcional `onCancelAction` para el botón izquierdo (tocar fuera sigue solo cerrando).
+- `src/components/dashboard/Dashboard.tsx` — modificado — nuevo `confirmarSiFaltaLinkPago` (hoja "Falta el link de pago" con Reintentar / Enviar igual) en los dos caminos de "equipo(s) listo(s)"; linkPago se calcula desde el ref para no usar datos viejos después de reintentar; ConfirmState acepta onCancelAction.
+- `supabase/functions/alertas-pendientes/index.ts` — modificado — cierre SMTP con try/catch (antes, `.catch` sobre void rompía el envío).
+- `supabase/functions/weekly-report/index.ts` — modificado — mismo arreglo del cierre SMTP.
+- `supabase/functions/_shared/consultasCorreo.test.mjs` — modificado — la simulación de SMTP usa close() síncrono, como la librería real.
+- `tests/qa-cuentas.html`, `tests/qa-cuentas.tsx` — creados y borrados — fixture temporal de prueba.
+- `PROGRESS_LOG.md` — modificado — esta entrada.
+
+### Hallazgos y decisiones
+- CORREOS: dos fallas en cadena. Hasta el 21-sep fallaban antes de enviar (error de JWT/reloj de Supabase, corregido y desplegado el 22-sep por la otra IA). Desde ese deploy fallan en `client.close().catch(...)`: en denomailer 1.6.0 `close()` puede no devolver una promesa, entonces el `.catch` revienta y además TAPA el error real de `send()`, si lo hubo. La prueba automática no lo detectó porque simulaba close() como promesa. Arreglado en local; falta desplegar las 2 funciones (requiere visto bueno). Después del deploy sabremos si Gmail acepta el envío: si la clave de aplicación de Gmail fue revocada, ahora el log lo va a mostrar.
+- El SDK de Supabase ya reintenta solo (4 llamadas en ~7s por consulta). Se desactivó para esta consulta, para que el botón Reintentar responda en ~4s y no se hagan 12 llamadas.
+- "No hay cuentas configuradas" (la carga funciona pero la lista está vacía) NO muestra aviso: solo avisa si la carga falló.
+- Tarea 2 NO ejecutada: la CLI está linkeada pero sin sesión; hace falta que el usuario corra `npx supabase login`. Comandos propuestos: `npx supabase migration repair --status applied 0022 0023 0024` y luego `npx supabase migration list`.
+- Tarea 3 NO aplicada. Propuesta de bajo riesgo: una migración que quita EXECUTE a anon (y a PUBLIC) sobre asignar_folios, y a anon/authenticated/PUBLIC sobre siguiente_folio y rls_auto_enable. Borrar las tablas legado vacías (imei_serie, jobs, services, technicians) y mover unaccent quedan solo como propuesta. La protección de contraseñas filtradas no está disponible en el plan Free.
+
+### Estado final
+- Tests/build: `tsc` limpio, `npm run lint` sin errores, `npm run build` OK, `node --test` 15/15 (garantía 5 + correos 10). Flujos de WhatsApp probados en navegador con API simulada.
+- Git: 6 archivos modificados sin commit (+ este log). Nada subido, nada desplegado, ningún cambio en la base de datos.
+---
+
+---
+## [2026-09-23 01:23] Migraciones registradas, permisos de funciones de folio y deploy de correos (aprobado por el usuario)
+
+### Instrucción recibida
+El usuario hizo `npx supabase login` y aprobó: (1) registrar 0022/0023/0024, (2) crear y aplicar la "0025" que quita permisos a las funciones de folio, (3) desplegar las 2 funciones de correo. NO hacer push hasta que pruebe en localhost el link de pago. Las 4 tablas legado vacías se quedan por ahora (se ven en el refactor del fin de semana). Al terminar: bitácora para Claude del chat.
+
+### Comandos ejecutados (todos, en orden)
+- Supabase `list_edge_functions` → weekly-report v8 y alertas-pendientes v10, ambas con verify_jwt=false (hay que mantenerlo para que el cron funcione).
+- `npx supabase migration list` → 0022/0023/0024 solo en local; el resto coincide.
+- `npx supabase migration repair --status applied 0022 0023 0024` → "Repaired migration history: [0022 0023 0024] => applied" (no ejecuta SQL, solo anota en el historial).
+- `npx supabase migration list` → 0001…0024 y 20260922125047 coinciden en local y remoto.
+- `npx supabase migration new quita_permisos_publicos_funciones_folio` → creó `20260923042133_quita_permisos_publicos_funciones_folio.sql` (se usó nombre con fecha porque "0025" ordenaría antes de 20260922125047 y el push fallaría).
+- Write de la migración: revoke EXECUTE de asignar_folios a anon/public; de siguiente_folio y rls_auto_enable a anon/authenticated/public.
+- `npx supabase db push --dry-run` → solo esa migración pendiente.
+- `echo y | npx supabase db push` → "Applying migration 20260923042133_…" OK.
+- Supabase `execute_sql` has_function_privilege → anon: nada; authenticated: solo asignar_folios.
+- Supabase `execute_sql` en transacción con rollback, `set local role authenticated`, asignar_folios → devuelve folio (la app sigue funcionando); nada persistido.
+- Supabase `execute_sql` con rol anon → rechazado; contador de prueba ZZTEST = 0 filas (nada quedó guardado).
+- Supabase `execute_sql` en transacción con rollback: create table de prueba → RLS se activó automáticamente (el event trigger ensure_rls sigue funcionando).
+- `npx supabase functions deploy weekly-report alertas-pendientes --no-verify-jwt --use-api` → desplegadas (salida con ref del proyecto enmascarada).
+- Supabase `list_edge_functions` + `get_edge_function alertas-pendientes` → weekly-report v9 y alertas-pendientes v11, verify_jwt=false, código nuevo con try/catch en close().
+- `curl -X POST` a ambas funciones sin secreto (ref leído de supabase/.temp, sin imprimirlo) → HTTP 401 "No autorizado" en ambas (arrancan bien, no envían nada).
+- Supabase `get_advisors security` → desaparecieron los 5 avisos de funciones ejecutables sin login; queda solo asignar_folios para authenticated (intencional).
+- `curl` al dev server → 200; `date` → 2026-09-23 01:23; `git status --short`.
+
+### Archivos tocados (todos)
+- `supabase/migrations/20260923042133_quita_permisos_publicos_funciones_folio.sql` — creado y aplicado en producción — quita EXECUTE público a las funciones de folio y a rls_auto_enable.
+- `PROGRESS_LOG.md` — modificado — esta entrada.
+- (Producción) historial de migraciones: 0022/0023/0024 marcadas como aplicadas.
+- (Producción) edge functions weekly-report v9 y alertas-pendientes v11 desplegadas desde el working tree local (código aún sin commit).
+
+### Hallazgos y decisiones
+- Las funciones desplegadas vienen de archivos todavía sin commit en git: hay que commitearlos junto con la Tarea 1 cuando el usuario dé el visto bueno, para que GitHub y producción queden iguales.
+- No se mandó un correo de prueba (no fue pedido). La confirmación real es esta noche a las 22:00 (resumen diario, solo si hay pendientes) y el lunes 09:00 UTC (reporte semanal). Si falla, el log ahora mostrará el error real de Gmail en vez del error de close().
+- Tablas legado vacías (imei_serie, jobs, services, technicians) y unaccent sin tocar, por decisión del usuario.
+- Protección de contraseñas filtradas: no disponible en el plan Free.
+
+### Estado final
+- Tests/build: sin cambios de código en esta ronda (siguen 15/15, build y lint OK de la ronda anterior). Verificaciones en producción OK (permisos, folios, RLS automático, funciones 401).
+- Git: 6 archivos modificados + 1 migración nueva sin trackear + este log; nada commiteado ni pusheado (esperando la prueba del usuario en localhost).
+---

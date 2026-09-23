@@ -125,6 +125,7 @@ interface ConfirmState {
   confirmLabel?: string;
   cancelLabel?: string;
   onConfirm: () => void;
+  onCancelAction?: () => void;
 }
 
 export function Dashboard() {
@@ -140,7 +141,7 @@ export function Dashboard() {
   } = useServicios();
   const { error: errorClientes, buscarClientes, buscarClientePorNombreExacto } = useClientes();
   const { garantiasList, error: errorGarantias, fetchGarantias } = useGarantias();
-  const { cuentasList, error: errorCuentas, fetchCuentas } = useCuentasBancarias();
+  const { cuentasList, error: errorCuentas, fetchCuentas, estadoCuentasRef } = useCuentasBancarias();
   const { cierresList, error: errorCierres, fetchCierres } = useCierresCaja();
   const { toasts, toast, dismiss } = useToast();
 
@@ -665,6 +666,39 @@ export function Dashboard() {
     });
   };
 
+  // Si las cuentas bancarias no cargaron, el aviso saldría sin link de pago: se pregunta
+  // antes en vez de mandarlo así en silencio. `enviar` debe abrir la ventana de WhatsApp
+  // de forma sincrónica, así que siempre se llama directo desde el toque de un botón.
+  const confirmarSiFaltaLinkPago = (enviar: () => void) => {
+    if (estadoCuentasRef.current.cargadas) {
+      enviar();
+      return;
+    }
+    setConfirm({
+      titulo: 'Falta el link de pago',
+      mensaje:
+        'No se pudieron cargar las cuentas bancarias (¿sin internet?). El mensaje saldrá sin link de pago.\n\n¿Reintentar cargarlas o enviar igual?',
+      confirmLabel: 'Enviar igual',
+      cancelLabel: 'Reintentar',
+      onConfirm: enviar,
+      onCancelAction: async () => {
+        setConfirm(null);
+        toast('Reintentando cargar las cuentas bancarias…', 'info');
+        const ok = await fetchCuentas();
+        if (!ok) {
+          confirmarSiFaltaLinkPago(enviar);
+          return;
+        }
+        setConfirm({
+          titulo: 'Cuentas cargadas',
+          mensaje: 'Listo, el mensaje incluirá el link de pago. ¿Enviar WhatsApp ahora?',
+          confirmLabel: 'Enviar',
+          onConfirm: enviar,
+        });
+      },
+    });
+  };
+
   // Manda el WhatsApp de "equipo(s) listo(s)" y marca avisado_at en todos
   // los equipos incluidos — usado tanto justo después de completar (dentro
   // de aplicarCambioEstado) como manualmente desde el botón "Avisar
@@ -691,7 +725,7 @@ export function Dashboard() {
     }
 
     const numero = limpiarNumero(telefono);
-    const linkPago = cuentasList.length > 0 ? `\n\nDatos para transferencia: ${window.location.origin}/pago` : '';
+    const linkPago = estadoCuentasRef.current.cantidad > 0 ? `\n\nDatos para transferencia: ${window.location.origin}/pago` : '';
     let mensaje: string;
     if (equipos.length === 1 && revisionUnica) {
       mensaje = renderPlantilla('equipoListoRevision', {
@@ -791,14 +825,15 @@ export function Dashboard() {
       const equiposParaAvisar = [servicioActual, ...otrosCompletadosSinAvisar];
       const revisionUnica = diagnosticoFinal !== undefined ? { diagnostico: diagnosticoFinal, monto: montoFinal ?? 0 } : undefined;
 
-      const enviarAhora = () => {
-        setConfirm(null);
-        // Debe abrirse aquí, sincrónico con el clic del usuario en el botón
-        // del ConfirmSheet — si no, Safari/Chrome bloquean el popup por no
-        // venir de un gesto directo del usuario.
-        const ventanaWhatsApp = window.open('', '_blank');
-        void enviarAvisoEquiposListos(telefonoCliente, equiposParaAvisar, ventanaWhatsApp, revisionUnica);
-      };
+      const enviarAhora = () =>
+        confirmarSiFaltaLinkPago(() => {
+          setConfirm(null);
+          // Debe abrirse aquí, sincrónico con el clic del usuario en el botón
+          // del ConfirmSheet — si no, Safari/Chrome bloquean el popup por no
+          // venir de un gesto directo del usuario.
+          const ventanaWhatsApp = window.open('', '_blank');
+          void enviarAvisoEquiposListos(telefonoCliente, equiposParaAvisar, ventanaWhatsApp, revisionUnica);
+        });
 
       if (otrosPendientes > 0) {
         setConfirm({
@@ -1587,11 +1622,12 @@ export function Dashboard() {
           ? `¿Enviar WhatsApp avisando que los ${trabajos.length} equipos ya están listos?`
           : '¿Enviar WhatsApp avisando que el equipo está listo para retirar?',
       confirmLabel: 'Enviar',
-      onConfirm: () => {
-        setConfirm(null);
-        const ventanaWhatsApp = window.open('', '_blank');
-        void enviarAvisoEquiposListos(telefono, trabajos, ventanaWhatsApp);
-      },
+      onConfirm: () =>
+        confirmarSiFaltaLinkPago(() => {
+          setConfirm(null);
+          const ventanaWhatsApp = window.open('', '_blank');
+          void enviarAvisoEquiposListos(telefono, trabajos, ventanaWhatsApp);
+        }),
     });
   };
 
@@ -1862,6 +1898,7 @@ export function Dashboard() {
         cancelLabel={confirm?.cancelLabel}
         onConfirm={() => confirm?.onConfirm()}
         onCancel={() => setConfirm(null)}
+        onCancelAction={confirm?.onCancelAction}
       />
       <CierreCajaModal
         abierto={cierreAbierto}

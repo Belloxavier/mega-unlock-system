@@ -230,7 +230,12 @@ Deno.serve(async (req) => {
       });
     } finally {
       // Un fallo al cerrar no debe convertir un correo ya aceptado en error.
-      await client.close().catch(() => console.warn('weekly-report: fallo al cerrar SMTP'));
+      // close() de denomailer 1.6.0 puede devolver void (no una promesa): no encadenar .catch.
+      try {
+        await client.close();
+      } catch {
+        console.warn('weekly-report: fallo al cerrar SMTP');
+      }
     }
 
     console.info(JSON.stringify({ evento: 'correo_enviado', funcion: 'weekly-report', destinatarios: recipients.length }));

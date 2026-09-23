@@ -12,6 +12,8 @@ interface Props {
   peligro?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  /** Acción propia del botón izquierdo (ej. "Reintentar"); tocar fuera sigue siendo solo cerrar. */
+  onCancelAction?: () => void;
 }
 
 export function ConfirmSheet({
@@ -23,6 +25,7 @@ export function ConfirmSheet({
   peligro,
   onConfirm,
   onCancel,
+  onCancelAction,
 }: Props) {
   if (!abierto) return null;
 
@@ -42,7 +45,7 @@ export function ConfirmSheet({
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={onCancel}
+            onClick={onCancelAction ?? onCancel}
             className="flex-1 py-3 rounded-xl text-xs font-bold uppercase tracking-wider bg-slate-800 text-slate-300 border border-slate-700"
           >
             {cancelLabel}

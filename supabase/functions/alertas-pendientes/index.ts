@@ -193,7 +193,12 @@ Deno.serve(async (req) => {
         html,
       });
     } finally {
-      await client.close().catch(() => console.warn('alertas-pendientes: fallo al cerrar SMTP'));
+      // close() de denomailer 1.6.0 puede devolver void (no una promesa): no encadenar .catch.
+      try {
+        await client.close();
+      } catch {
+        console.warn('alertas-pendientes: fallo al cerrar SMTP');
+      }
     }
 
     console.info(JSON.stringify({ evento: 'correo_enviado', funcion: 'alertas-pendientes', destinatarios: recipients.length }));

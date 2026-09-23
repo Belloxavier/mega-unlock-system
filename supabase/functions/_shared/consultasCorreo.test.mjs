@@ -50,7 +50,8 @@ for (const nombre of ['weekly-report', 'alertas-pendientes']) {
     } };
     class SMTPClient {
       async send() { enviados++; if (falloSmtp) throw new Error('SMTP rechazado'); }
-      async close() { cerrados++; if (falloCierre) throw new Error('Cierre rechazado'); }
+      // Igual que denomailer 1.6.0 real: close() devuelve void, no una promesa.
+      close() { cerrados++; if (falloCierre) throw new Error('Cierre rechazado'); }
     }
     class Fecha extends Date { constructor(...args) { super(...(args.length ? args : ['2026-09-22T01:00:00Z'])); } }
     vm.runInNewContext(js, {
