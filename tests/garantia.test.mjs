@@ -12,7 +12,7 @@ function cargar(path, deps = {}) {
   vm.runInNewContext(code, { exports, Date, Intl, require: (n) => deps[n] });
   return exports;
 }
-const { calcularEstadoGarantia } = cargar('../src/lib/garantia.ts', { './date': { ZONA_HORARIA: 'America/Santiago' } });
+const { calcularEstadoGarantia, garantiaPorDefecto } = cargar('../src/lib/garantia.ts', { './date': { ZONA_HORARIA: 'America/Santiago' } });
 const { equipoVacio } = cargar('../src/types.ts');
 const { validarEquipo } = cargar('../src/lib/validacion.ts');
 
@@ -34,4 +34,11 @@ test('vencida hace un minuto no sigue vigente por redondeo', () => {
 test('sin fecha o fecha inválida no inventa vigencia', () => {
   assert.equal(calcularEstadoGarantia(null), null);
   assert.equal(calcularEstadoGarantia('incorrecta'), null);
+});
+test('FRP e instalación de repuesto de terceros sugieren sin garantía, el resto conserva tres meses', () => {
+  assert.equal(garantiaPorDefecto('FRP'), 0);
+  assert.equal(garantiaPorDefecto('Instalación de repuesto de terceros'), 0);
+  assert.equal(garantiaPorDefecto('Cuenta Mi'), 3);
+  assert.equal(garantiaPorDefecto('iCloud'), 3);
+  assert.equal(garantiaPorDefecto('Cambio de Pantalla'), 3);
 });

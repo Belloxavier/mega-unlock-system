@@ -59,6 +59,9 @@ export interface EquipoForm {
   /** Costo del repuesto/insumo — solo se usa/muestra para clientes normales. */
   costoRepuesto: string;
   garantiaMeses: 0 | 1 | 3 | 6;
+  /** true si el usuario ya eligió la garantía a mano para este equipo — evita que el
+   * autocompletado por tipo de servicio (ej. FRP) pise una elección explícita. */
+  garantiaMesesManual?: boolean;
 }
 
 export const equipoVacio = (): EquipoForm => ({

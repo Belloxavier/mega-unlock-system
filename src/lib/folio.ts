@@ -1,4 +1,18 @@
-export const TIPOS_ESTANDAR = ['Cuenta Mi', 'Reparación IMEI', 'FRP', 'Desbloqueo Red', 'iCloud', 'Software General'];
+export const TIPOS_ESTANDAR = [
+  'Cuenta Mi',
+  'Reparación IMEI',
+  'FRP',
+  'Desbloqueo Red',
+  'iCloud',
+  'Software General',
+  'Cambio de Pantalla',
+  'Logo Claro',
+  'Activación IMEI 2 Xiaomi',
+  'Virus',
+  'Batería',
+  'Mantenimiento',
+  'Instalación de repuesto de terceros',
+];
 
 const PREFIJOS_FOLIO: { [tipo: string]: string } = {
   'FRP': 'F',
@@ -7,6 +21,13 @@ const PREFIJOS_FOLIO: { [tipo: string]: string } = {
   'Desbloqueo Red': 'R',
   'iCloud': 'IC',
   'Software General': 'S',
+  'Cambio de Pantalla': 'P',
+  'Logo Claro': 'LC',
+  'Activación IMEI 2 Xiaomi': 'I2',
+  'Virus': 'V',
+  'Batería': 'B',
+  'Mantenimiento': 'MT',
+  'Instalación de repuesto de terceros': 'IT',
 };
 
 // El número correlativo de cada folio (F1, F2, I1...) lo asigna el servidor

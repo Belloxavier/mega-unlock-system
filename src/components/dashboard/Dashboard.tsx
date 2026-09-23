@@ -10,6 +10,7 @@ import { escapeHtml } from '../../lib/html';
 import { limpiarNumero, tieneTelefonoValido } from '../../lib/phone';
 import { getTema } from '../../lib/theme';
 import { formatearMonto } from '../../lib/moneda';
+import { garantiaPorDefecto } from '../../lib/garantia';
 import {
   estaEnRango,
   inicioSemana,
@@ -363,7 +364,18 @@ export function Dashboard() {
   const handleAgregarEquipo = () => setEquipos((prev) => [...prev, equipoVacio()]);
   const handleQuitarEquipo = (idx: number) => setEquipos((prev) => prev.filter((_, i) => i !== idx));
   const handleCambiarEquipo = <K extends keyof EquipoForm>(idx: number, campo: K, valor: EquipoForm[K]) => {
-    setEquipos((prev) => prev.map((eq, i) => (i === idx ? { ...eq, [campo]: valor } : eq)));
+    setEquipos((prev) =>
+      prev.map((eq, i) => {
+        if (i !== idx) return eq;
+        const actualizado = { ...eq, [campo]: valor };
+        if (campo === 'garantiaMeses') {
+          actualizado.garantiaMesesManual = true;
+        } else if (campo === 'tipoTrabajo' && !eq.garantiaMesesManual) {
+          actualizado.garantiaMeses = garantiaPorDefecto(valor as string);
+        }
+        return actualizado;
+      })
+    );
   };
 
   const handleEscanearImei = async (idx: number, file: File) => {
@@ -623,6 +635,7 @@ export function Dashboard() {
         nota: s.nota || '',
         costoRepuesto: s.costo_repuesto != null ? String(s.costo_repuesto) : '',
         garantiaMeses: s.garantia_meses ?? 3,
+        garantiaMesesManual: true,
       },
     ]);
     setVista('inicio');

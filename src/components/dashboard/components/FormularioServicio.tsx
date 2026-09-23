@@ -271,6 +271,13 @@ export function FormularioServicio({
                   <option value="Desbloqueo Red">Desbloqueo Red</option>
                   <option value="iCloud">iCloud</option>
                   <option value="Software General">Software General</option>
+                  <option value="Cambio de Pantalla">Cambio de Pantalla</option>
+                  <option value="Logo Claro">Logo Claro</option>
+                  <option value="Activación IMEI 2 Xiaomi">Activación IMEI 2 Xiaomi</option>
+                  <option value="Virus">Virus</option>
+                  <option value="Batería">Batería</option>
+                  <option value="Mantenimiento">Mantenimiento</option>
+                  <option value="Instalación de repuesto de terceros">Instalación de repuesto de terceros</option>
                   <option value="Otros">Otros</option>
                 </select>
                 {eq.tipoTrabajo === 'Otros' && (
@@ -383,7 +390,13 @@ export function FormularioServicio({
                   <option value={6}>6 meses</option>
                 </select>
                 <p id={`garantia-ayuda-${idx}`} className="text-xs text-slate-400 mt-1.5">
-                  {eq.garantiaMeses === 0 ? 'Este equipo se entrega sin garantía.' : 'Se cuenta desde la entrega del equipo.'}
+                  {eq.garantiaMeses === 0
+                    ? !eq.garantiaMesesManual && eq.tipoTrabajo === 'FRP'
+                      ? 'Sin garantía por defecto en FRP: depende de la cuenta Google que agregue el cliente. Puedes cambiarla.'
+                      : !eq.garantiaMesesManual && eq.tipoTrabajo === 'Instalación de repuesto de terceros'
+                        ? 'Sin garantía por defecto: el repuesto no lo vendió el taller, solo la instalación. Puedes cambiarla.'
+                        : 'Este equipo se entrega sin garantía.'
+                    : 'Se cuenta desde la entrega del equipo.'}
                 </p>
               </div>
               <div>

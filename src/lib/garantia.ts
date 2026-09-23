@@ -12,6 +12,15 @@ export interface EstadoGarantia {
   fechaFormateada: string;
 }
 
+/** Tipos de servicio que arrancan en "Sin garantía" hasta que el usuario elija otra cosa a mano.
+ * FRP: quitar la cuenta Google no obliga al taller si el cliente pierde luego su propia clave.
+ * Instalación de repuesto de terceros: el repuesto no lo vendió el taller, solo la mano de obra. */
+const SIN_GARANTIA_POR_DEFECTO = new Set(['FRP', 'Instalación de repuesto de terceros']);
+
+export function garantiaPorDefecto(tipoTrabajo: string): 0 | 1 | 3 | 6 {
+  return SIN_GARANTIA_POR_DEFECTO.has(tipoTrabajo) ? 0 : 3;
+}
+
 /** null = sin fecha calculable. El llamador distingue plazo 0 de fecha desconocida. */
 export function calcularEstadoGarantia(garantiaVenceAt: string | null | undefined): EstadoGarantia | null {
   if (!garantiaVenceAt) return null;

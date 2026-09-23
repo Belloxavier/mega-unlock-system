@@ -1203,3 +1203,62 @@ Retomar el trabajo, terminarlo, probarlo y subirlo, priorizando iPhone.
 - Tests/build: 14/14 pruebas Node, SQL antes/después, build y lint correctos según entrada anterior. Vercel success confirmado por GitHub.
 - Git: commit funcional f67d079 publicado en origin/main; esta entrada se publica en un commit documental de cierre.
 ---
+
+---
+## [2026-09-22 21:39] Garantía sin garantía por defecto en FRP + nuevos tipos de servicio
+
+### Instrucción recibida
+1. El usuario pidió que FRP arranque en "Sin garantía" por defecto (quitar la cuenta Google no es culpa del taller si el cliente luego olvida su propia clave nueva).
+2. Agregar tipos de servicio nuevos a la lista: Cambio de Pantalla, Logo Claro, Activación IMEI 2 Xiaomi, Virus, Batería, Mantenimiento, y un tipo para cuando el usuario solo cobra mano de obra por instalar un repuesto que trae el técnico/cliente (sin garantía porque el taller no vendió la pieza) — el usuario pidió sugerencia de nombre, eligió "Instalación de repuesto de terceros" de tres opciones ofrecidas.
+
+### Comandos ejecutados (todos, en orden)
+- `Read src/types.ts` (completo) → confirmó forma de `Servicio`/`EquipoForm`/`equipoVacio`, `garantiaMeses` ya existente (0|1|3|6, default 3).
+- `Grep "tipoTrabajo|TIPOS_TRABAJO|Cuenta Mi|FRP" src/components/dashboard/components/FormularioServicio.tsx` → ubicó el `<select>` de tipo de servicio (línea ~263-275).
+- `Read src/components/dashboard/components/FormularioServicio.tsx` (líneas 255-354 y 365-399) → confirmó estructura del select de tipo de servicio y del select de garantía con su texto de ayuda.
+- `Grep "onCambiarEquipo|cambiarEquipo|setEquipos|equipoVacio" src/components/dashboard/Dashboard.tsx` → ubicó `handleCambiarEquipo` (línea 365) como único punto que actualiza un equipo del formulario.
+- `Read src/components/dashboard/Dashboard.tsx` (líneas 360-405) → confirmó `handleCambiarEquipo` genérico sin lógica especial por campo.
+- `Read src/lib/garantia.ts` (completo) → confirmó `calcularEstadoGarantia`, sin helper de default aún.
+- `AskUserQuestion` (qué lista) → usuario aclaró que "agregar otros servicios" era sobre la lista de tipos de servicio del selector, no sobre la lista de tipos sin-garantía-por-defecto.
+- `AskUserQuestion` (nombre del tipo de instalación de terceros) → usuario eligió "Instalación de repuesto de terceros" entre 3 opciones.
+- Edit en `src/lib/garantia.ts` → nueva función `garantiaPorDefecto(tipoTrabajo)`, usa un `Set` (`SIN_GARANTIA_POR_DEFECTO`) con 'FRP' e 'Instalación de repuesto de terceros'; retorna 0 si el tipo está en el set, 3 en caso contrario.
+- Edit en `src/types.ts` → agregó `garantiaMesesManual?: boolean` a `EquipoForm` (campo interno, no se muestra en UI, no forma parte del payload a Supabase).
+- `Grep "^import.*garantia" src/components/dashboard/Dashboard.tsx` → confirmó que no existía import previo de `lib/garantia`.
+- `Read src/components/dashboard/Dashboard.tsx` (líneas 1-20) → ubicó bloque de imports para insertar el nuevo.
+- Edit en `src/components/dashboard/Dashboard.tsx` → agregó `import { garantiaPorDefecto } from '../../lib/garantia'`.
+- Edit en `src/components/dashboard/Dashboard.tsx` → `handleCambiarEquipo` ahora: si el campo cambiado es `garantiaMeses`, marca `garantiaMesesManual = true`; si el campo es `tipoTrabajo` y el equipo NO tiene `garantiaMesesManual`, recalcula `garantiaMeses` con `garantiaPorDefecto(valor)`.
+- `Read src/components/dashboard/Dashboard.tsx` (líneas 600-640) → ubicó `handleIniciarEdicion`, que carga un servicio existente al formulario de edición.
+- Edit en `src/components/dashboard/Dashboard.tsx` → `handleIniciarEdicion` ahora setea `garantiaMesesManual: true` al cargar un servicio para editar (para que corregir el tipo de servicio en edición no recalcule silenciosamente una garantía ya guardada).
+- `npx tsc --noEmit -p tsconfig.app.json && npm run build && npm run lint` (primera ronda, solo cambio de FRP) → limpio.
+- Edit en `src/components/dashboard/components/FormularioServicio.tsx` → texto de ayuda bajo el selector de garantía ahora distingue 3 casos: sin garantía auto por FRP, sin garantía elegida a mano, "se cuenta desde la entrega" para plazos >0.
+- Edit en `tests/garantia.test.mjs` → agregó import de `garantiaPorDefecto` y test "FRP sugiere sin garantía por defecto, el resto conserva tres meses".
+- `node --test tests/garantia.test.mjs` (primera ronda) → 5/5 pasan.
+- `Read src/lib/folio.ts` (completo) → confirmó `TIPOS_ESTANDAR` (array cerrado usado por `handleIniciarEdicion` para decidir select vs "Otros") y `PREFIJOS_FOLIO` (prefijo de folio por tipo, ej. F1, I1, M1).
+- Edit en `src/lib/folio.ts` → agregó 7 tipos nuevos a `TIPOS_ESTANDAR` y sus prefijos a `PREFIJOS_FOLIO`: Cambio de Pantalla→P, Logo Claro→LC, Activación IMEI 2 Xiaomi→I2, Virus→V, Batería→B, Mantenimiento→MT, Instalación de repuesto de terceros→IT (verificado sin colisión con F/I/M/R/IC/S existentes).
+- Edit en `src/components/dashboard/components/FormularioServicio.tsx` → agregó las 7 opciones nuevas al `<select>` de tipo de servicio, antes de "Otros".
+- `Grep "'Cuenta Mi'|\"Cuenta Mi\"|'Software General'|'iCloud'" src/ --include=*.ts --include=*.tsx` (excluyendo FormularioServicio/folio.ts) → único resultado: `types.ts` línea 70 (`equipoVacio` default), confirmando que no hay otra lista cerrada de tipos de trabajo que actualizar (precios sugeridos y estadísticas ya usan `tipo_trabajo` como texto libre).
+- Edit en `src/components/dashboard/components/FormularioServicio.tsx` → texto de ayuda de garantía ahora distingue también el caso "Instalación de repuesto de terceros" sin garantía por defecto.
+- `npx tsc --noEmit -p tsconfig.app.json && npm run build && npm run lint` (segunda ronda, tras tipos nuevos) → limpio.
+- Edit en `tests/garantia.test.mjs` → test renombrado y ampliado: cubre FRP, Instalación de repuesto de terceros, Cuenta Mi, iCloud y Cambio de Pantalla.
+- `node --test tests/garantia.test.mjs` (segunda ronda) → 5/5 pasan.
+- `Get-Date -Format 'yyyy-MM-dd HH:mm'` (vía `date`) → 2026-09-22 21:39.
+
+### Archivos tocados (todos)
+- `src/lib/garantia.ts` — modificado — nueva función `garantiaPorDefecto(tipoTrabajo)` y set `SIN_GARANTIA_POR_DEFECTO` ('FRP', 'Instalación de repuesto de terceros').
+- `src/types.ts` — modificado — agregó `garantiaMesesManual?: boolean` a `EquipoForm` (campo interno, no llega a Supabase).
+- `src/components/dashboard/Dashboard.tsx` — modificado — import de `garantiaPorDefecto`; `handleCambiarEquipo` autocompleta/recalcula garantía por tipo de servicio salvo elección manual; `handleIniciarEdicion` marca la garantía cargada como manual.
+- `src/components/dashboard/components/FormularioServicio.tsx` — modificado — 7 opciones nuevas en el select de tipo de servicio (Cambio de Pantalla, Logo Claro, Activación IMEI 2 Xiaomi, Virus, Batería, Mantenimiento, Instalación de repuesto de terceros); texto de ayuda de garantía distingue auto-FRP, auto-instalación-terceros, manual y con plazo.
+- `src/lib/folio.ts` — modificado — 7 tipos nuevos en `TIPOS_ESTANDAR` con sus prefijos de folio en `PREFIJOS_FOLIO`.
+- `tests/garantia.test.mjs` — modificado — test de `garantiaPorDefecto` con los dos tipos sin-garantía y tres tipos con garantía normal.
+- `PROGRESS_LOG.md` — modificado — esta entrada.
+
+### Hallazgos y decisiones
+- El autocompletado de garantía por tipo de servicio solo pisa el valor mientras el usuario no haya tocado el selector de garantía a mano en ese equipo (`garantiaMesesManual`); es un campo interno del formulario, no se guarda en Supabase ni se muestra en la UI como campo propio — cumple la regla de oro de CLAUDE.md (inferir en vez de pedir).
+- Al editar un trabajo existente se marca la garantía cargada como manual, para que corregir el tipo de servicio en edición no recalcule silenciosamente una garantía ya fijada y potencialmente distinta del default actual del tipo.
+- Solo FRP e "Instalación de repuesto de terceros" quedan en 0 meses por defecto; el resto de los tipos nuevos (Cambio de Pantalla, Logo Claro, Activación IMEI 2 Xiaomi, Virus, Batería, Mantenimiento) mantienen el default general de 3 meses — no se pidió lo contrario para esos.
+- Prefijos de folio nuevos verificados sin colisión con los 6 existentes (F, I, M, R, IC, S).
+- No se tocó `dificultad`/precios sugeridos ni estadísticas: ambos ya trabajan con `tipo_trabajo` como texto libre, no dependen de una lista cerrada.
+
+### Estado final
+- Tests/build: `tsc --noEmit` limpio, `npm run build` exitoso (dos rondas), `npm run lint` (oxlint) sin errores, `node --test tests/garantia.test.mjs` 5/5 en ambas rondas.
+- Git: sin staged, commit ni push — cambios solo en working tree local, pendientes de tu visto bueno para subir.
+---
