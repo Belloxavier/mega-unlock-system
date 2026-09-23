@@ -1383,3 +1383,33 @@ El usuario hizo `npx supabase login` y aprobó: (1) registrar 0022/0023/0024, (2
 - Tests/build: sin cambios de código en esta ronda (siguen 15/15, build y lint OK de la ronda anterior). Verificaciones en producción OK (permisos, folios, RLS automático, funciones 401).
 - Git: 6 archivos modificados + 1 migración nueva sin trackear + este log; nada commiteado ni pusheado (esperando la prueba del usuario en localhost).
 ---
+
+---
+## [2026-09-23 01:55] Publicación: link de pago, arreglo de correos y permisos de folio
+
+### Instrucción recibida
+El usuario probó en localhost el link de pago y los folios ("todo funciona"). Pidió commit y push a main, confirmar el deploy de Vercel y dejar git limpio y sincronizado con GitHub.
+
+### Comandos ejecutados (todos, en orden)
+- `git status --short` + `git diff --stat` → 7 archivos modificados + 1 migración sin trackear.
+- `npx tsc --noEmit -p tsconfig.app.json` → OK; `npm run lint` → sin errores; `npm run build` → OK; `node --test` garantía + correos → 15/15.
+- `git add -N` de la migración + `git diff | grep -cE "<ref del proyecto>|sbp_|service_role_key|eyJhbGci"` → 0 coincidencias (sin secretos ni ID del proyecto en el diff).
+- `git add` de los 8 archivos, uno por uno → staged; `git status --short` → solo esos 8.
+- `git commit` → `6656ad3` "Link de pago confiable en WhatsApp, arreglo de correos y permisos de folio".
+- `git push origin main` → `69d7b68..6656ad3`.
+- Espera con `curl` a la GitHub status API del commit 6656ad3 → Vercel "success" / "Deployment has completed".
+- `date` → 2026-09-23 01:55.
+- Edit de PROGRESS_LOG.md (esta entrada) → luego `git add PROGRESS_LOG.md`, `git commit`, `git push origin main`, `git fetch` + `git status` + `git rev-list --left-right --count HEAD...origin/main` (resultado en la respuesta final al usuario).
+
+### Archivos tocados (todos)
+- `PROGRESS_LOG.md` — modificado — esta entrada (en commit documental aparte).
+- Commit `6656ad3`: `PROGRESS_LOG.md`, `src/components/dashboard/Dashboard.tsx`, `src/components/dashboard/components/ConfirmSheet.tsx`, `src/hooks/useCuentasBancarias.ts`, `supabase/functions/_shared/consultasCorreo.test.mjs`, `supabase/functions/alertas-pendientes/index.ts`, `supabase/functions/weekly-report/index.ts`, `supabase/migrations/20260923042133_quita_permisos_publicos_funciones_folio.sql` (detalle en las 2 entradas anteriores).
+
+### Hallazgos y decisiones
+- GitHub quedó igual a producción: las edge functions (v9/v11) y la migración ya aplicada ahora están en git.
+- Queda pendiente confirmar que los correos llegan de verdad (22:00 Chile el resumen diario; lunes 06:00 Chile el semanal).
+
+### Estado final
+- Tests/build: tsc, lint y build OK; 15/15 tests. Vercel success para 6656ad3.
+- Git: commit funcional 6656ad3 en origin/main; esta entrada va en un commit documental de cierre.
+---
