@@ -1454,3 +1454,42 @@ El prefijo 'I2' (con dígito) choca con Reparación IMEI (I2+1 = I21, ya existe)
 - Tests/build: tsc OK, lint sin avisos, build OK, 8/8 tests (5 garantía + 3 folio).
 - Git: sin commit — src/lib/folio.ts modificado, tests/folio.test.mjs nuevo, PROGRESS_LOG.md modificado; esperando visto bueno del usuario para commit y push.
 ---
+
+---
+## [2026-09-23 23:28] Publicación del prefijo AX, corrección del trabajo I156 y verificación de contadores
+
+### Instrucción recibida
+Visto bueno para commit y push del cambio I2 → AX. Corregir en producción el trabajo I156 (creado hoy ~11:17 Chile) de "Reparación IMEI" a "Activación IMEI 2 Xiaomi" sin cambiar el folio, verificando antes que sea el correcto. Tras el deploy de Vercel, confirmar que la fila I2 no volvió a folio_contadores y registrar todo aquí.
+
+### Comandos ejecutados (todos, en orden)
+- `git status --short` → PROGRESS_LOG.md, src/lib/folio.ts modificados; tests/folio.test.mjs sin trackear.
+- `git diff | grep -cE "sbp_|service_role|eyJhbGci"` → 0 (sin secretos en el diff).
+- `git add src/lib/folio.ts tests/folio.test.mjs PROGRESS_LOG.md` + `git commit` → `95aa5b8` "Prefijo de folio de Activacion IMEI 2 Xiaomi pasa de I2 a AX".
+- `git push origin main` → `acc8a98..95aa5b8`.
+- `npx supabase db query --linked` select de servicios where folio='I156' (join clientes) → id 6a880ac8-164e-4c55-ae2f-fd26bc3d496e, creado 2026-09-23 11:17:42 (America/Santiago), Redmi note 14 5g, cliente "angel klk", $15.000, ENTREGADO, tipo "Reparación IMEI". Confirmado como el correcto.
+- `npx supabase db query --linked` triggers de servicios → solo trg_garantia_vence_at (se dispara con entregado_at/garantia_meses; cambiar el tipo no lo activa).
+- `npx supabase db query --linked "update servicios set tipo_trabajo = 'Activación IMEI 2 Xiaomi' where id = '6a880ac8-…' and folio = 'I156' and tipo_trabajo = 'Reparación IMEI' returning id"` → 1 fila actualizada.
+- `npx supabase db query --linked` select de la fila por id → folio I156, tipo "Activación IMEI 2 Xiaomi", el resto sin cambios (monto 15000, ENTREGADO, pagado, garantía 1 mes, misma fecha).
+- Bucle `curl` a la API de estado de GitHub con `repos/Belloxavier/mega-unlock-manager/...` → siempre `None []` (nombre de repo equivocado; se esperaron ~7,5 min sin respuesta útil).
+- `git remote get-url origin` → el repo real es `Belloxavier/mega-unlock-system`.
+- Bucle `curl` a `repos/Belloxavier/mega-unlock-system/commits/95aa5b8/status` → "success" / "Deployment has completed" en el primer intento.
+- `npx supabase db query --linked` folio_contadores where prefijo in (I2, AX) o con caracteres que no son letras → 0 filas (I2 no volvió; AX aún no existe porque no se ha registrado ninguna Activación IMEI 2 nueva).
+- `npx supabase db query --linked` count de servicios con folio '^I2' y tipo Activación IMEI 2 → 0.
+- `date` → 2026-09-23 23:28.
+- Edición de PROGRESS_LOG.md (esta entrada) → luego `git add PROGRESS_LOG.md`, `git commit`, `git push origin main`, `git status` (resultado en la respuesta final al usuario).
+
+### Archivos tocados (todos)
+- `PROGRESS_LOG.md` — modificado — esta entrada (va en un commit documental aparte).
+- Commit `95aa5b8`: `src/lib/folio.ts`, `tests/folio.test.mjs`, `PROGRESS_LOG.md` (detalle en la entrada anterior).
+- (Producción) `servicios` id 6a880ac8-164e-4c55-ae2f-fd26bc3d496e — tipo_trabajo "Reparación IMEI" → "Activación IMEI 2 Xiaomi"; folio I156 sin cambios.
+
+### Hallazgos y decisiones
+- I156 conserva su folio con prefijo "I" aunque ahora sea Activación IMEI 2: se mantiene a propósito porque el número puede estar en el ticket del cliente. Es el único trabajo de Activación IMEI 2 con folio que no empieza con AX.
+- Este trabajo ahora cuenta en el historial de precio/tiempo de Activación IMEI 2 y ya no en el de Reparación IMEI.
+- El contador "I" sigue en 158; no se tocó (I156 sigue siendo un folio "I" usado, así que no hay riesgo de repetirlo).
+- El repo de GitHub se llama `mega-unlock-system`, aunque la carpeta local se llame `mega-unlock-manager`.
+
+### Estado final
+- Tests/build: sin cambios de código en esta ronda (tsc, lint, build OK y 8/8 tests en la ronda anterior). Vercel success para 95aa5b8.
+- Git: commit funcional 95aa5b8 en origin/main; esta entrada va en un commit documental de cierre.
+---
