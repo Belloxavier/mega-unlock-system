@@ -1413,3 +1413,44 @@ El usuario probó en localhost el link de pago y los folios ("todo funciona"). P
 - Tests/build: tsc, lint y build OK; 15/15 tests. Vercel success para 6656ad3.
 - Git: commit funcional 6656ad3 en origin/main; esta entrada va en un commit documental de cierre.
 ---
+
+---
+## [2026-09-23 22:39] Prefijo de folio de Activación IMEI 2 Xiaomi: I2 → AX
+
+### Instrucción recibida
+El prefijo 'I2' (con dígito) choca con Reparación IMEI (I2+1 = I21, ya existe) → error UNIQUE servicios_folio_unique. Cambiarlo a 'AX', borrar la fila 'I2' de folio_contadores (quedó en 3 por intentos fallidos), dejar validación/comentario de "solo letras" en PREFIJOS_FOLIO y probar que sale AX1.
+
+### Comandos ejecutados (todos, en orden)
+- `cat src/lib/folio.ts` + `grep folio_contadores` → prefijo 'I2' confirmado; contadores definidos en 0011_folio_atomico.sql.
+- `cat supabase/migrations/0011_folio_atomico.sql`, `ls supabase/migrations`, `cat …20260923042133_…sql`, `tail PROGRESS_LOG.md` → la función arma el folio como prefijo||número.
+- `ToolSearch supabase execute_sql` → el MCP de Supabase no está disponible en esta sesión; se usó el CLI.
+- `grep createClient`, `ls supabase/.temp`, `npx supabase --version` (2.117.0), `npx supabase db --help` → existe `db query --linked`.
+- `cat src/supabase.ts`, `grep getPrefijo|asignar_folios` → el localhost apunta a la base de producción; getPrefijo solo se usa en Dashboard.tsx:576.
+- `ls tests`, `cat package.json` (scripts), `head tests/*`, `node --version` (v24.18.0), `head tests/garantia.test.mjs`.
+- `python` (edición de folio.ts) + creación de `tests/folio.test.mjs` + `node --test tests/folio.test.mjs` → 3/3 OK.
+- `npx supabase db query --linked` select de folio_contadores (I2, AX, I) → I2 = 3, I = 158, AX no existe.
+- `npx supabase db query --linked` conteos en servicios → 11 folios que empiezan con "I2" (I20–I29, I2xx, todos de Reparación IMEI), 0 con AX, 0 servicios de tipo 'Activación IMEI 2 Xiaomi'.
+- `npx supabase db query --linked "delete from folio_contadores where prefijo = 'I2' returning …"` → borrada 1 fila (I2, 3).
+- `npx supabase db query --linked` prefijos que no son solo letras → 0 filas.
+- `npx supabase db query --linked "begin; set local role authenticated; select asignar_folios(array['AX']); rollback;"` → devuelve ["AX1"].
+- `npx supabase db query --linked` count AX en folio_contadores → 0 (el rollback no dejó nada).
+- `npx tsc --noEmit -p tsconfig.app.json` → OK; `npm run lint` → sin avisos; `npm run build` → OK; `node --test tests/garantia.test.mjs tests/folio.test.mjs` → 8/8.
+- `npm run dev` (en segundo plano) → http://localhost:5173.
+- `date` → 2026-09-23 22:39; `npm run lint | grep warn|error` → nada.
+
+### Archivos tocados (todos)
+- `src/lib/folio.ts` — modificado — 'Activación IMEI 2 Xiaomi' pasa de 'I2' a 'AX'; PREFIJOS_FOLIO ahora se exporta y lleva un comentario que explica que los prefijos deben ser solo letras y por qué.
+- `tests/folio.test.mjs` — creado — verifica que todos los prefijos cumplen /^[A-Z]+$/, que no hay prefijos repetidos, que cada tipo estándar tiene prefijo propio y que Activación IMEI 2 = AX.
+- `PROGRESS_LOG.md` — modificado — esta entrada.
+- (Producción) `folio_contadores` — borrada la fila prefijo='I2' (valor 3).
+
+### Hallazgos y decisiones
+- La validación va como test (no como throw al cargar la app) para no romper la app en producción si alguien agrega un prefijo malo; el test lo detecta antes de publicar.
+- Revisados los demás prefijos: I, IC, IT, LC, MT, etc. no chocan entre sí porque después del prefijo siempre viene un número, y ningún prefijo es igual a otro seguido de letras sueltas.
+- La prueba de AX1 se hizo en el servidor con rollback, no registrando un trabajo real: el localhost usa la base de producción, así que registrar uno de prueba dejaría un trabajo falso AX1 en el taller. La prueba final en la app queda para el usuario (el próximo trabajo real de Activación IMEI 2 debería salir AX1).
+- Los clientes que ya tengan la app abierta con la versión anterior seguirán mandando 'I2' hasta que recarguen la versión publicada; la fila I2 se volvería a crear con ese intento. Tras el deploy conviene revisar que no reaparezca.
+
+### Estado final
+- Tests/build: tsc OK, lint sin avisos, build OK, 8/8 tests (5 garantía + 3 folio).
+- Git: sin commit — src/lib/folio.ts modificado, tests/folio.test.mjs nuevo, PROGRESS_LOG.md modificado; esperando visto bueno del usuario para commit y push.
+---

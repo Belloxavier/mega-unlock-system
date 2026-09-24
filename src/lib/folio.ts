@@ -14,7 +14,11 @@ export const TIPOS_ESTANDAR = [
   'Instalación de repuesto de terceros',
 ];
 
-const PREFIJOS_FOLIO: { [tipo: string]: string } = {
+// Los prefijos deben ser SOLO LETRAS (A-Z). El servidor arma el folio como
+// prefijo + número, así que un prefijo con dígito choca con otro: 'I2' + 1 = 'I21',
+// que ya es el folio 21 de Reparación IMEI ('I') → error servicios_folio_unique.
+// tests/folio.test.mjs lo verifica.
+export const PREFIJOS_FOLIO: { [tipo: string]: string } = {
   'FRP': 'F',
   'Reparación IMEI': 'I',
   'Cuenta Mi': 'M',
@@ -23,7 +27,7 @@ const PREFIJOS_FOLIO: { [tipo: string]: string } = {
   'Software General': 'S',
   'Cambio de Pantalla': 'P',
   'Logo Claro': 'LC',
-  'Activación IMEI 2 Xiaomi': 'I2',
+  'Activación IMEI 2 Xiaomi': 'AX',
   'Virus': 'V',
   'Batería': 'B',
   'Mantenimiento': 'MT',
