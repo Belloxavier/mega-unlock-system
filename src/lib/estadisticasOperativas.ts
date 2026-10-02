@@ -23,6 +23,7 @@ import {
   estaEnRango,
 } from './fechaFinanzas';
 import { ESTADOS_PROGRESO } from './estado';
+import { claveTipoTrabajo, tipoTrabajoCanonico } from './folio';
 import { fechaPagoIso, ganancia } from './cierreCaja';
 
 export interface ConteoItem {
@@ -87,14 +88,16 @@ export function calcularPorDiaSemana(servicios: Servicio[]): ConteoItem[] {
 
 /** Ranking histórico completo de tipos de trabajo por cantidad (no por dinero) — sin tope, la vista decide cuántos mostrar por defecto. */
 export function calcularPorTipoTrabajo(servicios: Servicio[]): ConteoItem[] {
-  const conteo: { [tipo: string]: number } = {};
+  // "logo claro" y "Logo Claro" son el mismo servicio: se cuentan juntos.
+  const conteo = new Map<string, ConteoItem>();
   servicios.forEach((s) => {
     const t = s.tipo_trabajo || 'General';
-    conteo[t] = (conteo[t] || 0) + 1;
+    const clave = claveTipoTrabajo(t);
+    const item = conteo.get(clave) || { nombre: tipoTrabajoCanonico(t), cantidad: 0 };
+    item.cantidad += 1;
+    conteo.set(clave, item);
   });
-  return Object.entries(conteo)
-    .map(([nombre, cantidad]) => ({ nombre, cantidad }))
-    .sort((a, b) => b.cantidad - a.cantidad);
+  return Array.from(conteo.values()).sort((a, b) => b.cantidad - a.cantidad);
 }
 
 /**

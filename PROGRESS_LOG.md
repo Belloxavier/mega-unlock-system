@@ -1493,3 +1493,77 @@ Visto bueno para commit y push del cambio I2 → AX. Corregir en producción el 
 - Tests/build: sin cambios de código en esta ronda (tsc, lint, build OK y 8/8 tests en la ronda anterior). Vercel success para 95aa5b8.
 - Git: commit funcional 95aa5b8 en origin/main; esta entrada va en un commit documental de cierre.
 ---
+
+---
+## [2026-10-01 22:10] Correos sin llegar (diagnóstico) y "Logo Claro" repetido en Finanzas
+
+### Instrucción recibida
+Los correos automáticos no llegan (el último fue el 9-sep). En Finanzas, en servicios más usados, "Logo Claro" aparece 2 veces.
+
+### Comandos ejecutados (todos, en orden)
+- `ls; git log --oneline -15; grep -rniE "resend|nodemailer|..."` → funciones de correo en supabase/functions (weekly-report, alertas-pendientes, _shared/consultasCorreo.ts).
+- `ls supabase ...; grep -n correo PROGRESS_LOG.md` → historial: fix de close() desplegado el 23-sep (weekly-report v9, alertas-pendientes v11), entrega pendiente de confirmar.
+- `sed -n 1340,1420p PROGRESS_LOG.md; tail -60 PROGRESS_LOG.md` → contexto de las últimas rondas.
+- `npx supabase db query --linked` cron.job_run_details últimos 12 días → los cron corren y "succeeded" (solo indica que se encoló el HTTP).
+- `npx supabase db query --linked` net._http_response → 2026-10-02 01:00 UTC (22:00 Chile): HTTP 500 `{"etapa":"smtp","error":"Fallo al enviar por SMTP; revisar logs"}`; el resto de horas 200 "No es la hora programada".
+- `grep` SMTP en alertas-pendientes/index.ts y consultasCorreo.ts; `ls ~/.supabase; ls supabase/.temp`.
+- `npx supabase --version` (2.119.0); `npx supabase functions --help` (no hay comando de logs); `npx supabase secrets list` → solo digests; GMAIL_APP_PASSWORD/GMAIL_USER sin cambios desde 2026-07-29.
+- `sed -n 170,215p alertas-pendientes/index.ts; grep smtp weekly-report/index.ts` → el mensaje real del error SMTP solo va a console.error (logs), no a la respuesta.
+- PowerShell: leer token del CLI desde el Administrador de credenciales para consultar los logs por la API → BLOQUEADO por el clasificador de permisos (no se ejecutó).
+- `deno --version; curl` código fuente de denomailer 1.6.0 → BLOQUEADO por el clasificador (no se ejecutó).
+- `grep -rn "usados|frecuentes|ranking"` y `grep -rn tipo_trabajo src` → rankings por tipo agrupan por texto exacto.
+- `npx supabase db query --linked` tipos con '%logo%' → "logo claro" 18, "Logo claro" 15, "Logo Claro" 7, "LOGO CLARO" 2, + "Logo" 1, "Logo claro de raíz" 1, "Bypass logo claro" 2. Solo lectura.
+- `cat normalizarTexto.ts; sed` de precioSugerido, reporteMensual, estadisticasOperativas, cierreCaja, Dashboard, folio.ts → precio/tiempo sugerido ya normalizaban (claveCombo); los rankings no.
+- `grep` FinanzasTab, `head tests/folio.test.mjs`, `cat tsconfig.app.json` (allowImportingTsExtensions: true).
+- `python` (ediciones) en folio.ts, reporteMensual.ts, cierreCaja.ts, estadisticasOperativas.ts, Dashboard.tsx; `sed -i` línea 6 de Dashboard.tsx (import).
+- `cat >> tests/folio.test.mjs` → nuevo test.
+- `npx tsc --noEmit -p tsconfig.app.json` → OK; `npm run lint` → sin avisos; `node --test tests/folio.test.mjs tests/garantia.test.mjs` → 9/9; `npm run build` → OK.
+- `date` → 2026-10-01 22:10.
+
+### Archivos tocados (todos)
+- `src/lib/folio.ts` — modificado — nuevo `tipoTrabajoCanonico` ("logo claro"/"LOGO CLARO" → "Logo Claro"; no estándar → tal cual) y `claveTipoTrabajo` (clave sin mayúsculas/tildes/espacios); importa normalizarTexto.ts.
+- `src/lib/cierreCaja.ts` — modificado — "Por tipo de trabajo (período)" de Finanzas agrupa por claveTipoTrabajo y muestra el nombre canónico.
+- `src/lib/reporteMensual.ts` — modificado — ranking por tipo del reporte mensual agrupa igual.
+- `src/lib/estadisticasOperativas.ts` — modificado — calcularPorTipoTrabajo (Estadísticas) agrupa igual.
+- `src/components/dashboard/Dashboard.tsx` — modificado — ranking por tipo de Clientes agrupa igual; al guardar (nuevo y edición) "Otros: logo claro" se guarda como "Logo Claro" (folio LC en altas nuevas); al editar un registro viejo "logo claro" el selector muestra Logo Claro.
+- `tests/folio.test.mjs` — modificado — test de canonización y clave de agrupación.
+- `PROGRESS_LOG.md` — modificado — esta entrada.
+
+### Hallazgos y decisiones
+- CORREOS: ya no es el error de JWT ni el de close(). Ahora la función llega a enviar y Gmail/SMTP falla (500, etapa smtp). Último intento: hoy 22:00 Chile. Causas probables: (a) la contraseña de aplicación de Gmail fue revocada (pasa al cambiar la clave de Google o por revisión de seguridad); (b) denomailer 1.6.0 incompatible con el runtime Deno 2 de Supabase. Para saberlo hace falta leer el log de la función (Dashboard de Supabase → Edge Functions → alertas-pendientes → Logs, buscar "correo_fallido") o desplegar un cambio que devuelva el mensaje SMTP en la respuesta (requiere visto bueno). No se tocó nada en producción.
+- FINANZAS: el problema venía de trabajos guardados como "Otros" con el texto "logo claro" escrito a mano. Arreglado en pantalla sin tocar datos; y desde ahora se guardan como el tipo estándar. Opcional (requiere visto bueno): unificar en la base los 35 registros "logo claro"/"Logo claro"/"LOGO CLARO" → "Logo Claro" (sin cambiar sus folios).
+- "Logo", "Logo claro de raíz" y "Bypass logo claro" se dejan como servicios distintos (no son el mismo texto).
+
+### Estado final
+- Tests/build: tsc OK, lint sin avisos, build OK, 9/9 tests (5 garantía + 4 folio).
+- Git: sin commit — 6 archivos modificados + este log; esperando visto bueno para commit/push.
+---
+
+---
+## [2026-10-01 22:24] Correos: nueva contraseña de aplicación de Gmail y prueba de envío
+
+### Instrucción recibida
+El usuario confirmó que cambió la clave de Google (eso revoca las contraseñas de aplicación). Entregó una contraseña de aplicación nueva y pidió que Cerebro la cargue y corrija los correos.
+
+### Comandos ejecutados (todos, en orden)
+- `npx supabase secrets set GMAIL_APP_PASSWORD=<nueva clave, no se registra>` → "Finished supabase secrets set."
+- `npx supabase secrets list` (filtrado, sin valor) → GMAIL_APP_PASSWORD updated_at 2026-10-02T01:21:31Z.
+- `npx supabase db query --linked "select jobname, schedule, command from cron.job"` (secreto oculto en la salida) → weekly-report lunes 09:00 UTC, alertas-pendientes cada hora.
+- `grep` hora/diagnóstico en ambas funciones → weekly-report no tiene restricción de hora; alertas-pendientes solo envía a las 22:00 Chile.
+- `npx supabase db query --linked "do $$ begin execute (select command from cron.job where jobname='weekly-report-mega-unlock'); end $$;"` → dispara el reporte semanal igual que el cron.
+- Bucle `npx supabase db query --linked` sobre net._http_response → HTTP 200 `{"ok":true,"enviados":[2 destinatarios],"trabajosSemana":106}` a las 2026-10-02 01:23:20 UTC.
+
+### Archivos tocados (todos)
+- `PROGRESS_LOG.md` — modificado — esta entrada.
+- (Producción) secreto GMAIL_APP_PASSWORD de Edge Functions — reemplazado por la contraseña de aplicación nueva.
+
+### Hallazgos y decisiones
+- Causa confirmada de que los correos no llegaran: el usuario cambió la clave de Google, y eso revoca las contraseñas de aplicación. No hizo falta tocar código.
+- Se mandó un reporte semanal de prueba (llega uno extra esta semana). El resumen diario de pendientes vuelve a salir mañana a las 22:00 Chile con la misma clave.
+- Si en el futuro se vuelve a cambiar la clave de Google, hay que repetir esto: crear una contraseña de aplicación nueva y hacer `npx supabase secrets set GMAIL_APP_PASSWORD=...`.
+- El arreglo de "Logo Claro" de la entrada anterior sigue sin commit.
+
+### Estado final
+- Tests/build: sin cambios de código en esta ronda.
+- Git: sin commit — los 6 archivos del arreglo de Logo Claro + este log siguen modificados en local.
+---

@@ -1,6 +1,7 @@
 import type { Servicio, Garantia } from '../types';
 import { getFechaLocal } from './date';
 import { formatearNumero } from './moneda';
+import { claveTipoTrabajo, tipoTrabajoCanonico } from './folio';
 import { estaEnRango, inicioSemana, finSemana, inicioSemanaPasada, finSemanaPasada } from './fechaFinanzas';
 
 export interface CobroDetalle {
@@ -227,7 +228,7 @@ function calcularDetalleFinancieroRango(servicios: Servicio[], ini: Date, fin: D
   const peorDia = [...candidatosPeor].sort((a, b) => a.monto - b.monto)[0] || null;
 
   const metodoMap = new Map<string, { monto: number; cantidad: number }>();
-  const tipoMap = new Map<string, { monto: number; cantidad: number }>();
+  const tipoMap = new Map<string, { nombre: string; monto: number; cantidad: number }>();
   pagadosRango.forEach((s) => {
     const m = (s.metodo_pago || 'Sin método').trim() || 'Sin método';
     const mEntry = metodoMap.get(m) || { monto: 0, cantidad: 0 };
@@ -235,18 +236,20 @@ function calcularDetalleFinancieroRango(servicios: Servicio[], ini: Date, fin: D
     mEntry.cantidad += 1;
     metodoMap.set(m, mEntry);
 
+    // "logo claro" y "Logo Claro" son el mismo servicio: se agrupan juntos.
     const t = s.tipo_trabajo || 'General';
-    const tEntry = tipoMap.get(t) || { monto: 0, cantidad: 0 };
+    const claveT = claveTipoTrabajo(t);
+    const tEntry = tipoMap.get(claveT) || { nombre: tipoTrabajoCanonico(t), monto: 0, cantidad: 0 };
     tEntry.monto += ganancia(s);
     tEntry.cantidad += 1;
-    tipoMap.set(t, tEntry);
+    tipoMap.set(claveT, tEntry);
   });
 
   const porMetodo = Array.from(metodoMap.entries())
     .map(([nombre, v]) => ({ nombre, monto: v.monto, cantidad: v.cantidad }))
     .sort((a, b) => b.monto - a.monto);
-  const porTipo = Array.from(tipoMap.entries())
-    .map(([nombre, v]) => ({ nombre, monto: v.monto, cantidad: v.cantidad }))
+  const porTipo = Array.from(tipoMap.values())
+    .map((v) => ({ nombre: v.nombre, monto: v.monto, cantidad: v.cantidad }))
     .sort((a, b) => b.monto - a.monto)
     .slice(0, 8);
 

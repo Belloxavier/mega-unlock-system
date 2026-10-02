@@ -1,3 +1,5 @@
+import { normalizarTexto } from './normalizarTexto.ts';
+
 export const TIPOS_ESTANDAR = [
   'Cuenta Mi',
   'Reparación IMEI',
@@ -13,6 +15,21 @@ export const TIPOS_ESTANDAR = [
   'Mantenimiento',
   'Instalación de repuesto de terceros',
 ];
+
+const TIPO_ESTANDAR_POR_CLAVE = new Map(TIPOS_ESTANDAR.map((t) => [normalizarTexto(t), t]));
+
+/**
+ * Si lo escrito es un tipo estándar con otras mayúsculas/tildes/espacios
+ * ("logo claro", "LOGO CLARO") devuelve el nombre estándar ("Logo Claro");
+ * si no, el texto tal cual sin espacios al borde. Se usa al guardar (para
+ * que "Otros: logo claro" quede como Logo Claro, con folio LC) y en los
+ * rankings, para no mostrar el mismo servicio dos veces.
+ */
+export const tipoTrabajoCanonico = (tipo: string) =>
+  TIPO_ESTANDAR_POR_CLAVE.get(normalizarTexto(tipo)) ?? tipo.trim();
+
+/** Clave para agrupar rankings por tipo: mismo servicio escrito distinto → misma clave. */
+export const claveTipoTrabajo = (tipo: string) => normalizarTexto(tipoTrabajoCanonico(tipo));
 
 // Los prefijos deben ser SOLO LETRAS (A-Z). El servidor arma el folio como
 // prefijo + número, así que un prefijo con dígito choca con otro: 'I2' + 1 = 'I21',

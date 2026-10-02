@@ -17,3 +17,14 @@ test('cada tipo estándar tiene prefijo propio y Activación IMEI 2 usa AX', () 
   for (const tipo of TIPOS_ESTANDAR) assert.notEqual(getPrefijo(tipo), 'O', tipo);
   assert.equal(getPrefijo('Activación IMEI 2 Xiaomi'), 'AX');
 });
+
+test('el mismo servicio escrito distinto se reconoce como el tipo estándar', async () => {
+  const { tipoTrabajoCanonico, claveTipoTrabajo } = await import('../src/lib/folio.ts');
+  for (const escrito of ['logo claro', 'LOGO CLARO', 'Logo claro', '  logo   claro ']) {
+    assert.equal(tipoTrabajoCanonico(escrito), 'Logo Claro', escrito);
+    assert.equal(getPrefijo(tipoTrabajoCanonico(escrito)), 'LC', escrito);
+  }
+  assert.equal(tipoTrabajoCanonico('reparacion imei'), 'Reparación IMEI');
+  assert.equal(tipoTrabajoCanonico('Bypass logo claro'), 'Bypass logo claro');
+  assert.equal(claveTipoTrabajo('bypass Logo Claro'), claveTipoTrabajo('Bypass logo claro'));
+});

@@ -3,7 +3,7 @@ import { supabase } from '../../supabase';
 import type { Cliente, Servicio, EquipoForm, Garantia, CuentaBancaria, TemaUI } from '../../types';
 import { equipoVacio, cuentaVacia } from '../../types';
 import { DIAS_SEMANA, getFechaLocal, getDiaSemana, getFechaCorta } from '../../lib/date';
-import { TIPOS_ESTANDAR, getPrefijo } from '../../lib/folio';
+import { TIPOS_ESTANDAR, getPrefijo, claveTipoTrabajo, tipoTrabajoCanonico } from '../../lib/folio';
 import { normalizarModelo, normalizarNombre } from '../../lib/normalizarTexto';
 import { pareceImei } from '../../lib/imei';
 import { escapeHtml } from '../../lib/html';
@@ -428,7 +428,7 @@ export function Dashboard() {
         toast(errEq, 'warning');
         return;
       }
-      const tipoTrabajoFinal = eq.tipoTrabajo === 'Otros' ? eq.tipoTrabajoOtro.trim() : eq.tipoTrabajo;
+      const tipoTrabajoFinal = eq.tipoTrabajo === 'Otros' ? tipoTrabajoCanonico(eq.tipoTrabajoOtro) : eq.tipoTrabajo;
       setGuardandoForm(true);
       try {
         // clienteIdAsociado se pone en null apenas se toca el campo Nombre
@@ -571,7 +571,7 @@ export function Dashboard() {
       }
 
       const tiposTrabajoFinal = equiposValidos.map((eq) =>
-        eq.tipoTrabajo === 'Otros' ? eq.tipoTrabajoOtro.trim() : eq.tipoTrabajo
+        eq.tipoTrabajo === 'Otros' ? tipoTrabajoCanonico(eq.tipoTrabajoOtro) : eq.tipoTrabajo
       );
       const prefijos = tiposTrabajoFinal.map((tipo) => getPrefijo(tipo));
 
@@ -628,8 +628,8 @@ export function Dashboard() {
       {
         modelo: s.modelo_equipo,
         imeiSerie: s.imei_serie || '',
-        tipoTrabajo: TIPOS_ESTANDAR.includes(s.tipo_trabajo) ? s.tipo_trabajo : 'Otros',
-        tipoTrabajoOtro: TIPOS_ESTANDAR.includes(s.tipo_trabajo) ? '' : s.tipo_trabajo,
+        tipoTrabajo: TIPOS_ESTANDAR.includes(tipoTrabajoCanonico(s.tipo_trabajo)) ? tipoTrabajoCanonico(s.tipo_trabajo) : 'Otros',
+        tipoTrabajoOtro: TIPOS_ESTANDAR.includes(tipoTrabajoCanonico(s.tipo_trabajo)) ? '' : s.tipo_trabajo,
         monto: s.monto.toString(),
         metodoPago: s.metodo_pago || 'Efectivo',
         esRevision: s.es_revision || false,
@@ -1691,12 +1691,14 @@ export function Dashboard() {
     const rankingTipoTrabajoObj = serviciosClientesTab.reduce(
       (
         acc: {
-          [key: string]: { dinero: number; trabajos: number; horasTotales: number; conTiempo: number };
+          [key: string]: { nombre: string; dinero: number; trabajos: number; horasTotales: number; conTiempo: number };
         },
         curr
       ) => {
-        const tipo = curr.tipo_trabajo || 'General';
-        if (!acc[tipo]) acc[tipo] = { dinero: 0, trabajos: 0, horasTotales: 0, conTiempo: 0 };
+        // "logo claro" y "Logo Claro" son el mismo servicio: se agrupan juntos.
+        const tipo = claveTipoTrabajo(curr.tipo_trabajo || 'General');
+        if (!acc[tipo])
+          acc[tipo] = { nombre: tipoTrabajoCanonico(curr.tipo_trabajo || 'General'), dinero: 0, trabajos: 0, horasTotales: 0, conTiempo: 0 };
         acc[tipo].dinero += curr.monto || 0;
         acc[tipo].trabajos += 1;
         const horas = horasReparacion(curr);
@@ -1708,10 +1710,10 @@ export function Dashboard() {
       },
       {}
     );
-    const rankingPorTipoTrabajo = Object.entries(rankingTipoTrabajoObj)
-      .sort((a, b) => b[1].trabajos - a[1].trabajos)
-      .map(([tipo, data]) => ({
-        tipo,
+    const rankingPorTipoTrabajo = Object.values(rankingTipoTrabajoObj)
+      .sort((a, b) => b.trabajos - a.trabajos)
+      .map((data) => ({
+        tipo: data.nombre,
         dinero: data.dinero,
         trabajos: data.trabajos,
         avgHoras: data.conTiempo > 0 ? data.horasTotales / data.conTiempo : null,

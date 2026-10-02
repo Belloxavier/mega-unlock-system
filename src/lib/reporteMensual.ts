@@ -2,6 +2,7 @@ import type { Servicio, Garantia } from '../types';
 import { getFechaLocal } from './date';
 import { formatearMonto } from './moneda';
 import { normalizarNombre } from './normalizarTexto';
+import { claveTipoTrabajo, tipoTrabajoCanonico } from './folio';
 
 export interface LineaCobro {
   fecha: string;
@@ -88,10 +89,12 @@ export function calcularReporteMensual(
     metodoMap[metodo].monto += monto;
     metodoMap[metodo].cantidad += 1;
 
+    // "logo claro" y "Logo Claro" son el mismo servicio: se agrupan juntos.
     const tipo = s.tipo_trabajo || 'General';
-    if (!tipoMap[tipo]) tipoMap[tipo] = { nombre: tipo, monto: 0, cantidad: 0 };
-    tipoMap[tipo].monto += monto;
-    tipoMap[tipo].cantidad += 1;
+    const claveTipo = claveTipoTrabajo(tipo);
+    if (!tipoMap[claveTipo]) tipoMap[claveTipo] = { nombre: tipoTrabajoCanonico(tipo), monto: 0, cantidad: 0 };
+    tipoMap[claveTipo].monto += monto;
+    tipoMap[claveTipo].cantidad += 1;
 
     const clienteOriginal = s.clientes?.nombre || 'General';
     // Agrupa por nombre normalizado (sin acentos) — "maria jose" y "María
