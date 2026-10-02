@@ -1567,3 +1567,29 @@ El usuario confirmó que cambió la clave de Google (eso revoca las contraseñas
 - Tests/build: sin cambios de código en esta ronda.
 - Git: sin commit — los 6 archivos del arreglo de Logo Claro + este log siguen modificados en local.
 ---
+
+---
+## [2026-10-01 22:35] Publicación del arreglo de servicios repetidos (Logo Claro)
+
+### Instrucción recibida
+El usuario dio visto bueno para subir el arreglo de Logo Claro repetido en los rankings.
+
+### Comandos ejecutados (todos, en orden)
+- `git status --short` → 6 archivos del arreglo + PROGRESS_LOG.md modificados.
+- `git diff | grep -ciE "<clave gmail>|sbp_|service_role|eyJhbGci"` → 0 (sin secretos en el diff).
+- `git add` de los 7 archivos + `git commit` → `aa52464` "Agrupa variantes de un mismo servicio en rankings y guarda Otros como tipo estandar".
+- `git push origin main` → `edbd294..aa52464`.
+- Bucle `curl` a la API de estado de GitHub (Belloxavier/mega-unlock-system, aa52464) → pending ×2, luego "success" / "Deployment has completed".
+
+### Archivos tocados (todos)
+- `PROGRESS_LOG.md` — modificado — esta entrada (commit documental aparte).
+- Commit `aa52464`: `src/lib/folio.ts`, `src/lib/cierreCaja.ts`, `src/lib/reporteMensual.ts`, `src/lib/estadisticasOperativas.ts`, `src/components/dashboard/Dashboard.tsx`, `tests/folio.test.mjs`, `PROGRESS_LOG.md` (detalle en la entrada 2026-10-01 22:10).
+
+### Hallazgos y decisiones
+- Los datos de la base no se tocaron: los 35 registros con "logo claro" en minúsculas/mayúsculas siguen igual, solo se agrupan al mostrarlos. Unificarlos en la base queda opcional.
+- Quien tenga la app abierta verá el cambio al recargar.
+
+### Estado final
+- Tests/build: tsc, lint, build OK y 9/9 tests (ronda 22:10). Vercel success para aa52464.
+- Git: commit funcional aa52464 en origin/main; esta entrada va en un commit documental de cierre.
+---
