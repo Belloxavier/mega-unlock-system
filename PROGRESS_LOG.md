@@ -1660,3 +1660,28 @@ El usuario entregó su login y pidió que yo mismo probara el arreglo en local (
 - Tests/build: sin cambios de código desde la entrada anterior (tsc/build/lint OK, 19/19).
 - Git: sin commit, esperando visto bueno para commit + push.
 ---
+
+---
+## [2026-10-05 22:58] Publicación del arreglo de bloques de 1.000
+
+### Instrucción recibida
+El usuario dio el visto bueno para subirlo y preguntó si con esto ya no tendrá el problema.
+
+### Comandos ejecutados (todos, en orden)
+- `grep -rn "\.from(" src supabase/functions ... | grep -v src/hooks/` → revisadas las demás consultas a Supabase: todas son inserts/updates por id o selects filtrados (pendientes, semana, sin resolver) muy por debajo de 1.000; ninguna otra tiene el tope.
+- `sed -n ... Dashboard.tsx / alertas-pendientes/index.ts / weekly-report/index.ts` → confirmado lo anterior.
+- `git add src/lib/traerTodo.ts src/hooks/useServicios.ts src/hooks/useGarantias.ts PROGRESS_LOG.md && git commit` → 7e414e6 "Trae servicios y garantias en bloques de 1.000 para no chocar con max_rows".
+- `git push origin main` → bbb5bc0..7e414e6.
+- Vercel MCP `list_deployments` (por sha: 0 resultados; `list_teams`: vacío; sin filtro) → deployment dpl_C6VkVcz21PJnftKqbPhgujJWRUjJ de 7e414e6 en estado READY, target production.
+
+### Archivos tocados (todos)
+- `PROGRESS_LOG.md` — modificado — esta entrada (va en un commit documental aparte).
+
+### Hallazgos y decisiones
+- El tope de 1.000 ya no puede volver a cortar datos: el loop sigue pidiendo bloques mientras lleguen llenos.
+- Lo que sí crecerá con el tiempo es el tiempo de carga (1 bloque más por cada 1.000 servicios). Solución de fondo pendiente y sin pedir: calcular Caja/Finanzas en el servidor.
+
+### Estado final
+- Tests/build: sin cambios desde la entrada anterior (tsc/build/lint OK, 19/19); Vercel READY.
+- Git: commit funcional 7e414e6 en origin/main; esta entrada en commit documental.
+---
