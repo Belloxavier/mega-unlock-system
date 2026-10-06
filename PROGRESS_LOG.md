@@ -1685,3 +1685,31 @@ El usuario dio el visto bueno para subirlo y preguntó si con esto ya no tendrá
 - Tests/build: sin cambios desde la entrada anterior (tsc/build/lint OK, 19/19); Vercel READY.
 - Git: commit funcional 7e414e6 en origin/main; esta entrada en commit documental.
 ---
+
+---
+## [2026-10-05 23:05] Plan anotado: mover cálculos de Caja/Finanzas al servidor
+
+### Instrucción recibida
+El usuario preguntó cómo se haría el cálculo en el servidor y pidió dejarlo anotado en el plan, junto con el refactor de Dashboard.tsx. No pidió ejecutarlo.
+
+### Comandos ejecutados (todos, en orden)
+- Supabase SQL (ritmo de crecimiento) → 1.202 servicios desde 2026-07-28, 17,2/día, 487 en los últimos 30 días, ~232 KB.
+- `cat >> PROGRESS_LOG.md` → esta entrada.
+- `git add PROGRESS_LOG.md && git commit && git push` → commit documental.
+
+### Archivos tocados (todos)
+- `PROGRESS_LOG.md` — modificado — esta entrada.
+- (memoria de Cerebro, fuera del repo) `project_agregados_servidor.md` — creado — plan completo; `project_dashboard_refactor.md` — modificado — enlace al siguiente paso; `MEMORY.md` — modificado — índice.
+
+### Hallazgos y decisiones
+- Plan aprobado, a ejecutar DESPUÉS del refactor de Dashboard.tsx (1-2 fines de semana):
+  1. Funciones RPC en Supabase con totales ya calculados: cierre_caja(fecha), resumen_finanzas(desde, hasta), por_cobrar(), reporte_mensual(mes), estadisticas(), y agregado de precio/tiempo por modelo+servicio.
+  2. La app llama a esas funciones; se elimina la descarga completa de `servicios`.
+  3. Una pantalla a la vez, empezando por Caja, con cálculo en paralelo (viejo vs nuevo) comparado día por día en todo el historial antes de apagar el viejo.
+- Reglas a replicar exacto en SQL: fecha de cobro = coalesce(pagado_at, entregado_at, created_at); día en America/Santiago; ganancia = monto − costo_repuesto; restar monto_devuelto de garantías.
+- No es urgente: ~6.000 servicios/año, margen de ~1 año antes de que la carga se note.
+
+### Estado final
+- Tests/build: sin cambios de código.
+- Git: commit documental de esta entrada en origin/main.
+---
