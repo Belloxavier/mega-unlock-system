@@ -3,6 +3,7 @@ import { supabase } from '../supabase';
 import type { Servicio } from '../types';
 import { finDiaChileISOExclusivo, finMesChileISOExclusivo, inicioDiaChileISO, inicioMesChileISO } from '../lib/date';
 import { envolverValorOr } from '../lib/postgrestFiltro';
+import { traerTodoEnBloques } from '../lib/traerTodo';
 
 const SELECT_SERVICIO = `*, clientes ( id, nombre, telefono, tipo_contacto )`;
 
@@ -20,7 +21,8 @@ export interface FiltrosServiciosPagina {
 // Centraliza el estado + fetch de `servicios`. Hay DOS fuentes de datos
 // intencionalmente separadas:
 //
-// 1. `servicios` / `fetchServicios()` — la tabla COMPLETA, sin paginar.
+// 1. `servicios` / `fetchServicios()` — la tabla COMPLETA (pedida en
+//    bloques de 1.000 por el tope max_rows de Supabase, ver lib/traerTodo).
 //    Sigue existiendo porque Finanzas, el aprendizaje de precio, los avisos
 //    de trabajos atascados/fiados y el reporte imprimible todavía calculan
 //    todo en el cliente — mover eso a agregados en el servidor es la fase
@@ -42,18 +44,27 @@ export function useServicios() {
     const miId = ++idFetchRef.current;
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('servicios')
-        .select(SELECT_SERVICIO)
-        .order('created_at', { ascending: false });
+      // En bloques de 1.000 (ver lib/traerTodo): sin esto Supabase cortaba
+      // en 1.000 filas y los servicios más antiguos desaparecían de Caja,
+      // Finanzas, Por Cobrar, etc. El `id` desempata created_at iguales.
+      const { data, error, cancelado } = await traerTodoEnBloques<Servicio>(
+        (desde, hasta) =>
+          supabase
+            .from('servicios')
+            .select(SELECT_SERVICIO)
+            .order('created_at', { ascending: false })
+            .order('id', { ascending: false })
+            .range(desde, hasta),
+        () => miId !== idFetchRef.current
+      );
 
-      if (miId !== idFetchRef.current) return; // ya hay una llamada más nueva en curso/resuelta
+      if (cancelado || miId !== idFetchRef.current) return; // ya hay una llamada más nueva en curso/resuelta
 
       if (error) {
-        setError(error.message);
+        setError(error);
       } else {
         setError(null);
-        setServicios(data || []);
+        setServicios(data);
       }
     } catch (err) {
       if (miId !== idFetchRef.current) return;

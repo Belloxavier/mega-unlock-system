@@ -1593,3 +1593,70 @@ El usuario dio visto bueno para subir el arreglo de Logo Claro repetido en los r
 - Tests/build: tsc, lint, build OK y 9/9 tests (ronda 22:10). Vercel success para aa52464.
 - Git: commit funcional aa52464 en origin/main; esta entrada va en un commit documental de cierre.
 ---
+
+---
+## [2026-10-05 22:42] Traer servicios y garantías en bloques de 1.000 (tope max_rows de Supabase)
+
+### Instrucción recibida
+fetchServicios() traía la tabla sin .range() y Supabase corta en 1.000 filas, dejando servicios antiguos fuera de Finanzas, Caja, Por Cobrar, Reporte Mensual y Estadísticas (ej. R2). Pedir en bloques de 1.000 con orden estable (created_at desc + id), conservar idFetchRef, revisar useClientes/useGarantias y probar que la caja incluya los $15.000 de R2.
+
+### Comandos ejecutados (todos, en orden)
+- `cat src/hooks/useServicios.ts; ls src/hooks; grep -n "from(" src/hooks/*.ts` → confirmado fetch sin range; hooks: useCierresCaja, useClientes, useCuentasBancarias, useGarantias, useServicios.
+- `cat src/hooks/useClientes.ts src/hooks/useGarantias.ts src/hooks/useCierresCaja.ts; ls src/lib` → useClientes solo hace búsquedas con .limit (sin problema); useGarantias trae todo sin range; useCierresCaja usa .limit(60) (sin problema).
+- `python` (script de edición de src/hooks/useGarantias.ts) → aplicado helper de bloques.
+- `npx tsc -b` → sin errores.
+- `npx vitest run` → "3 failed, no tests": los tests son node:test, no vitest; igual sin mis cambios (`git stash` / `npx vitest run` / `git stash pop`).
+- `node --test tests/ supabase/functions/_shared/` → patrón de directorio mal aplicado (2 "fallos" de carga, no de tests).
+- `npm run build` → OK (tsc -b + vite build).
+- `npx oxlint src/lib/traerTodo.ts src/hooks` → sin advertencias.
+- `node --test tests/*.test.mjs supabase/functions/_shared/*.test.mjs` → 19/19 pass.
+- `npx oxlint` → sin advertencias.
+- Supabase MCP `list_projects` → proyecto smjdwyddlsraqscizrzl.
+- Supabase SQL (1er intento con columna `precio`) → error, la columna se llama `monto`.
+- Supabase SQL conteos + R2 → 1.202 servicios, 3 garantías; R2 (Oppo A40, Desbloqueo Red, $15.000, Transferencia) pagado_at 2026-10-03 14:47 UTC, puesto 1.039 en created_at desc.
+- `cat > /tmp/x.mjs ...; node probar.mjs` → se quedó colgado (cat esperando stdin, error mío); detenido con TaskStop; el archivo no se había escrito.
+- `node probar.mjs` (escrito con Write en scratchpad, timeout 60) → 0 filas con llave anónima: RLS exige sesión iniciada, no sirve para probar sin credenciales.
+- Supabase SQL simulando los bloques → bloque 0: 1.000 filas, bloque 1: 202; 1.202 únicos (sin duplicados). Caja 03-10 completa: 12 cobros / $160.000, incluye R2. Caja 03-10 con solo las primeras 1.000: 11 / $145.000. Antes del arreglo quedaban fuera 195 servicios pagados ($2.475.000) y 7 por cobrar.
+- `npm run dev` (en segundo plano) → servidor local para prueba con sesión del usuario.
+- `tail -5 PROGRESS_LOG.md; date; git status --short` → 2 modificados + 1 nuevo.
+
+### Archivos tocados (todos)
+- `src/lib/traerTodo.ts` — creado — helper `traerTodoEnBloques` (bloques de 1.000 hasta que uno llegue incompleto, corta ante error, callback `cancelado` para abortar entre bloques).
+- `src/hooks/useServicios.ts` — modificado — fetchServicios usa el helper con orden created_at desc + id desc y .range(); idFetchRef se revisa antes de cada bloque y al final; comentario de cabecera actualizado.
+- `src/hooks/useGarantias.ts` — modificado — fetchGarantias usa el mismo helper con orden created_at desc + id desc (hoy solo 3 garantías, preventivo).
+- `PROGRESS_LOG.md` — modificado — esta entrada.
+
+### Hallazgos y decisiones
+- R2 no se pagó "hoy" (05-10) sino el 03-10 (el prompt era de hace unos días): por eso la caja a revisar es la del sábado 03-10, que debe mostrar $160.000 (antes $145.000).
+- El faltante no era solo R2: 195 servicios pagados por $2.475.000 y 7 por cobrar quedaban fuera de los cálculos del cliente.
+- useClientes no tiene el problema (búsquedas acotadas con .limit); useCierresCaja tampoco (.limit(60)).
+- Bloques secuenciales (no en paralelo) a propósito: con 2 bloques el costo es mínimo y así no hay que pedir un count previo.
+- Pendiente de fondo (ya anotado en el hook): mover Finanzas/Caja a agregados en el servidor para no descargar toda la tabla a medida que crezca.
+
+### Estado final
+- Tests/build: tsc OK, build OK, oxlint sin advertencias, 19/19 tests node:test.
+- Git: sin commit (working tree con cambios), esperando visto bueno tras probar en local.
+---
+
+---
+## [2026-10-05 22:50] Prueba autenticada del arreglo de bloques de 1.000
+
+### Instrucción recibida
+El usuario entregó su login y pidió que yo mismo probara el arreglo en local (no podía hacerlo él en ese momento).
+
+### Comandos ejecutados (todos, en orden)
+- `node probar-auth.mjs` (scratchpad, credenciales solo como variables de entorno PRUEBA_EMAIL/PRUEBA_PASS, nunca escritas en archivos) → login OK. Consulta como estaba antes: 1.000 filas, R2 ausente. Con `traerTodoEnBloques` (importado directamente de src/lib/traerTodo.ts): 1.202 filas en 2 bloques, 1.202 únicas, sin error. Caja 03-10 antes: 11 cobros / $145.000 sin R2; después: 12 cobros / $160.000 con R2 (Oppo A40, Desbloqueo Red, $15.000, Transferencia, cliente Byron). Garantías: 3, sin error. Se cerró sesión al final.
+- `cat >> PROGRESS_LOG.md` → esta entrada.
+
+### Archivos tocados (todos)
+- `PROGRESS_LOG.md` — modificado — esta entrada.
+- (scratchpad, fuera del repo) `probar-auth.mjs` — creado — script de prueba autenticada.
+
+### Hallazgos y decisiones
+- El arreglo queda verificado con datos reales y RLS activo, no solo con SQL directo.
+- La contraseña del usuario quedó escrita en el chat: se recomienda cambiarla.
+
+### Estado final
+- Tests/build: sin cambios de código desde la entrada anterior (tsc/build/lint OK, 19/19).
+- Git: sin commit, esperando visto bueno para commit + push.
+---
